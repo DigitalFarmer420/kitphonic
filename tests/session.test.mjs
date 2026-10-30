@@ -37,6 +37,7 @@ test('every plan: 5–10 minutes, untaught-sound check, targets on offer, review
     assert.ok(p.cost >= 5 * 60 && p.cost <= Math.max(5, minutes) * 60 + 35, `${tag}: cost ${p.cost}`);
     assert.equal(planCost(p.items), p.cost);
     for (const it of p.items) {
+      if (it.type === 'sentence') for (const t of it.sentence.tokens) if (t.kind === 'word') for (const g of parseIds(t.entry)) assert.ok(known.has(g), `${tag}: sentence ${it.sentence.id} uses untaught ${g}`);
       if (it.type === 'words') for (const w of it.words) for (const g of parseIds(w)) assert.ok(known.has(g), `${tag}: ${w.w} uses untaught ${g}`);
       if (it.type === 'letters') {
         assert.ok(it.pool.length >= 3 && it.pool.length <= 6, `${tag}: pool ${it.pool}`);
@@ -47,11 +48,16 @@ test('every plan: 5–10 minutes, untaught-sound check, targets on offer, review
     if (n < STOPS.length) assert.ok(p.items.some(i => i.why === 'new' || (STOPS[n].kind === 'words' && i.why === 'practice')), `${tag}: current stop served`);
   }
 });
-test('new sound: exploration intro first, then a hunt where the new sound is the main target', () => {
+test('new sound: letter intro first, then explore, find, trace — the new sound is the main hunt target', () => {
   const p = planSession(seedProgress(5, { now }), { now, rand: rng(3) }); // current = p
-  assert.equal(p.items[0].activity, 'soundTap'); assert.equal(p.items[0].newSound, 'p');
-  assert.deepEqual(p.items[1].targets.slice(0, 2), ['p', 'p']);
-  assert.equal(planSession(seedProgress(0, { now }), { now }).items[0].activity, 'float'); // very first lesson
+  assert.deepEqual(p.items.slice(0, 4).map(i => i.activity), ['intro', 'soundTap', 'hunt', 'trace']);
+  assert.equal(p.items[0].gpc, 'p'); assert.deepEqual(p.items[2].targets.slice(0, 2), ['p', 'p']);
+});
+test('first-ever session is varied (not only hunts): intro, float, find, trace, sound tap', () => {
+  const p = planSession([], { now, rand: rng(1) }), acts = p.items.map(i => i.activity);
+  for (const a of ['intro', 'float', 'hunt', 'trace', 'soundTap']) assert.ok(acts.includes(a), `${a} in ${acts}`);
+  assert.ok(new Set(acts).size >= 5);
+  assert.ok(acts.filter(a => a === 'hunt').length <= acts.length / 2, acts.join(' '));
 });
 test('letter pool: newest introduced sounds; untaught letters only pad below 3', () => {
   assert.deepEqual(letterPool(['m']), ['m', 's', 'a']);
@@ -71,4 +77,14 @@ test('word cards: printed minimal pairs (one letter different), taught GPCs only
   const k = new Set(['m', 's', 'a', 't']), ck = wordCards('at', { rand: rng(2), known: k });
   for (const x of ck) assert.ok([...x.w].every(ch => k.has(ch)), x.w);
   assert.equal(wordCards('zzz'), null);
+});
+
+test('star words are introduced (scored finds) before they appear in sentences', () => {
+  const r = seedProgress(STOPS.length, { now }), p = planSession(r, { now, rand: rng(1), minutes: 10 });
+  assert.ok(p.items.some(i => i.type === 'star'), 'a new star word is introduced');
+  assert.ok(!p.items.some(i => i.type === 'sentence'), 'no sentence before any star word was met');
+  const met = [...r, { skill: 'star:the', itemId: 'the', correct: true, firstAttempt: true, timestamp: now - 1000, sessionId: 'x' }];
+  const p2 = planSession(met, { now, rand: rng(1), minutes: 10 });
+  const sent = p2.items.find(i => i.type === 'sentence'); assert.ok(sent, 'sentence once "the" is introduced');
+  assert.ok(sent.sentence.stars.every(w => w === 'the'));
 });

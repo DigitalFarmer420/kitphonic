@@ -29,6 +29,12 @@ SCENES = [  # name, query, js to run after load
     ('letters-hunt', 'skipHello=1&activity=hunt&seed=1', None),
     ('letters-tap', 'skipHello=1&activity=soundTap&seed=1', None),
     ('letters-find', 'skipHello=1&activity=find&seed=1', None),
+    ('intro', 'skipHello=1&activity=intro&gpc=s&seed=1', None),
+    ('trace', 'skipHello=1&activity=trace&gpc=s&seed=1', None),
+    ('star', 'skipHello=1&activity=star&word=the&seed=1', "new Promise(r => setTimeout(r, 2500))"),
+    ('sentence', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 1500))"),
+    ('sentence-blend', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 3500)).then(() => document.querySelector('#sn-strip .chip').click()).then(() => new Promise(r => setTimeout(r, 1500)))"),
+    ('parent', 'skipHello=1&progress=5&parent=1', "new Promise(r => setTimeout(r, 800))"),
     ('letters-float', 'skipHello=1&activity=float&seed=1', None),
     ('letters-float-4s', 'skipHello=1&activity=float&seed=2', "new Promise(r => setTimeout(r, 4000))"),
 ]
@@ -40,12 +46,12 @@ MEASURE = r"""() => {
   const root = overlay || scr;
   const box = e => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
   const name = e => e.id ? '#' + e.id : (e.className.baseVal ?? e.className).split(' ')[0] + (e.getAttribute('aria-label') ? `[${e.getAttribute('aria-label')}]` : '');
-  const targets = [...root.querySelectorAll('button, #handle, .stop, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
+  const targets = [...root.querySelectorAll('button, #handle, #sn-handle, .stop, .ear, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
     .filter(vis).filter(e => !(e.classList.contains('marker'))) // a marker button's visible shape is its .dot/.bar
-    .map(e => ({ name: name(e), knob: e.id === 'handle', play: e.id === 'play', ...box(e) }));
-  const key = overlay ? [] : [...scr.querySelectorAll('.stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
+    .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body'), ...box(e) }));
+  const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, .chip, #sn-tiles .tile, #sn-handle, #sn-read, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
     .filter(vis).map(e => ({ name: name(e), ...box(e) }));
-  const ltr = [...root.querySelectorAll('.ltr .tile, .choice')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
+  const ltr = [...root.querySelectorAll('.ltr .tile, .choice, #sn-strip .chip, #st-cards .wcard2')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();
   const h = document.getElementById('handle');
   return { screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
@@ -59,7 +65,7 @@ def check(m, vp, scene):
     for t in m['targets']:
         short = min(t['w'], t['h']); need = KNOB if t['knob'] else MIN
         if short < need - 0.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < {need}")
-        if t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1:
+        if not t.get('scroll') and (t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
         if t['play'] and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     k = m['key']
@@ -82,7 +88,8 @@ def check(m, vp, scene):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
-    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA)); a = ap.parse_args()
+    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
+    only = set(filter(None, a.scenes.split(',')))
     os.makedirs(a.out, exist_ok=True); fails = 0; rows = []
     with sync_playwright() as p:
         exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium'] if os.path.exists(c)), None)
@@ -90,6 +97,7 @@ def main():
         for vp in a.viewports.split(','):
             w, h = map(int, vp.split('x'))
             for scene, q, js in SCENES:
+                if only and scene not in only: continue
                 pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True)
                 pg.goto(a.base + ('?' + q if q else ''), wait_until='networkidle'); pg.wait_for_timeout(500)
                 if js: pg.evaluate(js); pg.wait_for_timeout(700)

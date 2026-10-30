@@ -70,8 +70,57 @@
     <div class="mascot" id="l-mascot"><svg width="80" height="80"><use href="#kit"/></svg><div class="bubble" id="l-bubble"></div></div>
     <div id="l-arena"></div>
     <button id="l-next" class="next" hidden aria-label="Next">▶</button>
+    <div id="l-tray" hidden></div>
   </section>
 
+  <section id="lesson" class="screen" hidden aria-label="Letter">
+    <div class="top">
+      <button class="btn" id="ls-home" aria-label="Home">⌂</button>
+      <div class="path" id="ls-pebbles"></div>
+      <button class="btn coral" id="ls-again" aria-label="Say it again">↻</button>
+    </div>
+    <div class="mascot" id="ls-mascot"><svg width="72" height="72"><use href="#kit"/></svg><div class="bubble" id="ls-bubble"></div></div>
+    <div id="intro" hidden>
+      <button class="icard L" id="ic-letter" aria-label="Letter"></button>
+      <button class="ipic" id="ic-pic" aria-label="Picture"></button>
+      <div class="ibar"><button class="btn" id="ic-replay" aria-label="Hear it again">🔁</button><button id="ic-next" class="wide" aria-label="Next">➜</button></div>
+    </div>
+    <div id="trace" hidden>
+      <div class="tcard"><svg id="tr-svg" viewBox="-6 -6 112 192" aria-label="Trace the letter"></svg></div>
+      <div class="ibar"><button class="btn" id="tr-undo" aria-label="Undo">↩️</button><div class="tray" id="tr-tray"></div><button id="tr-next" class="wide" aria-label="Next" hidden>➜</button></div>
+    </div>
+  </section>
+
+  <section id="star" class="screen" hidden aria-label="Star word">
+    <div class="top">
+      <button class="btn" id="st-home" aria-label="Home">⌂</button>
+      <div class="path" id="st-pebbles"></div>
+      <button class="btn coral" id="st-again" aria-label="Say it again">↻</button>
+    </div>
+    <div class="mascot" id="st-mascot"><svg width="72" height="72"><use href="#kit"/></svg><div class="bubble" id="st-bubble"></div></div>
+    <button class="starbig L" id="st-word" aria-label="Star word"></button>
+    <div id="st-cards"></div>
+    <button id="st-next" class="next" hidden aria-label="Next">▶</button>
+  </section>
+
+  <section id="sentence" class="screen" hidden aria-label="Sentence">
+    <div class="top">
+      <button class="btn" id="sn-home" aria-label="Home">⌂</button>
+      <div class="path" id="sn-pebbles"></div>
+      <button class="btn coral" id="sn-again" aria-label="Say it again">↻</button>
+    </div>
+    <div class="mascot" id="sn-mascot"><svg width="72" height="72"><use href="#kit"/></svg><div class="bubble" id="sn-bubble"></div></div>
+    <div id="sn-card"><span class="q">?</span></div>
+    <div id="sn-strip"></div>
+    <div id="sn-tiles"></div>
+    <div id="sn-slider"><div id="sn-track"><div id="sn-fill"></div></div><div id="sn-handle" role="slider" aria-label="Blend slider">◀▶</div></div>
+    <button id="sn-read" disabled aria-label="Read it all">▶ <span class="emoji">📖</span></button>
+  </section>
+
+  <section id="parent" class="screen" hidden aria-label="Grown-ups">
+    <div class="pa-top"><h2>Grown-ups</h2><button class="btn" id="pa-close" aria-label="Close">✕</button></div>
+    <div id="pa-body"></div>
+  </section>
   <section id="map" class="screen" hidden aria-label="Map">
     <div class="top">
       <button class="btn" id="m-home" aria-label="Home">⌂</button>

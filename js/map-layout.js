@@ -14,14 +14,14 @@ export function mapWindow(stops, index, size = WINDOW) {
   return all.slice(start, start + size).map((s, k) => ({ ...s, idx: start + k, now: start + k === index && index < stops.length }));
 }
 export function mapLayout(win, { w, h, mode }) {
-  const n = win.length, top = 92 + NOW_R, bottom = h - GO.bottom - GO.h - 18 - NOW_R;
-  const P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [0.75, 0.25, 0.7, 0.28, 0.72, 0.3];
+  const n = win.length, top = 92 + NOW_R, bottom = h - GO.bottom - GO.h - 18 - NOW_R - (mode === 'portrait' ? 0 : 28); // + label room
+  const P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [1, 0, 1, 0, 1, 0]; // landscape zigzag uses the full height (room for Kit beside a stop)
   return win.map((s, i) => {
     const r = s.now ? NOW_R : STOP_R, t = n > 1 ? i / (n - 1) : 0;
     let x, y, side;
     if (mode === 'portrait') { y = bottom - t * (bottom - top); x = w * P[i % P.length]; side = x < w / 2 ? 'right' : 'left'; }
-    else { x = 90 + t * (w - 180); y = top + L[i % L.length] * (bottom - top); side = y > (top + bottom) / 2 ? 'below' : 'above'; } // labels on the outside of the zigzag
-    return { ...s, x, y, r, side };
+    else { x = 90 + t * (w - 180); y = top + L[i % L.length] * (bottom - top); side = 'below'; } // landscape: every label on the same side (below its stop)
+    return { ...s, x, y, r, side, low: mode !== 'portrait' && y > (top + bottom) / 2 };
   });
 }
 // Smooth path through the stop centres (quadratic through midpoints).

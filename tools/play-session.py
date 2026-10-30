@@ -41,6 +41,32 @@ def main():
                     for t in pg.locator('.ltr .tile').all()[:4]: t.click(force=True); pg.wait_for_timeout(250)
                     pg.wait_for_timeout(300)
                     if pg.locator('#l-next').is_visible(): pg.locator('#l-next').click()
+            elif scr == 'lesson':
+                if pg.locator('#intro').is_visible():
+                    pg.wait_for_timeout(600); pg.locator('#ic-letter').click(); pg.wait_for_timeout(400); pg.locator('#ic-pic').click(); pg.wait_for_timeout(400); pg.locator('#ic-next').click(); pg.wait_for_timeout(400)
+                elif pg.locator('#tr-next').is_visible(): pg.locator('#tr-next').click(); pg.wait_for_timeout(400)
+                else:
+                    pts = pg.evaluate("() => kitphonic.lesson.run?.debugPoints?.() ?? []")
+                    if not pts: pg.wait_for_timeout(300); continue
+                    pg.mouse.move(*pts[0]); pg.mouse.down()
+                    for x, y in pts[1:]: pg.mouse.move(x, y); pg.wait_for_timeout(12)
+                    pg.mouse.up(); pg.wait_for_timeout(250)
+            elif scr == 'star':
+                st = pg.evaluate("() => { const r = kitphonic.starScreen.run; return r && { busy: !!r.busy, w: r.star.w, cards: document.querySelectorAll('#st-cards .wcard2').length } }")
+                if not st or st['busy'] or not st['cards']: pg.wait_for_timeout(300); continue
+                pg.wait_for_timeout(800); pg.locator(f"#st-cards .wcard2[data-w='{st['w']}']").click(); pg.wait_for_timeout(1300)
+            elif scr == 'sentence':
+                st = pg.evaluate("() => { const r = kitphonic.sentenceScreen.run; return r && { i: r.i, kind: r.tokens[r.i]?.kind, blend: !!r.ms, read: !document.getElementById('sn-read').disabled, reading: !!r.reading } }")
+                if not st or st['reading']: pg.wait_for_timeout(400); continue
+                if st['read']: pg.locator('#sn-read').click(); pg.wait_for_timeout(800); continue
+                if st['kind'] == 'star': pg.wait_for_timeout(500); pg.locator('#sn-strip .chip').nth(st['i']).click(); pg.wait_for_timeout(900); continue
+                if st['blend'] and pg.locator('#sn-handle').is_visible():
+                    hb = pg.locator('#sn-handle').bounding_box(); tb = pg.locator('#sn-tiles .tile').last.bounding_box()
+                    y = hb['y'] + hb['height'] / 2; x0 = hb['x'] + hb['width'] / 2; x1 = tb['x'] + tb['width'] + 8
+                    pg.mouse.move(x0, y); pg.mouse.down()
+                    for k in range(1, 41): pg.mouse.move(x0 + (x1 - x0) * k / 40, y); pg.wait_for_timeout(45)
+                    pg.mouse.up(); pg.wait_for_timeout(900); continue
+                pg.wait_for_timeout(300)
             elif scr == 'word':
                 state = pg.evaluate("() => kitphonic.screen.state")
                 if state == 'slide':

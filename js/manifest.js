@@ -2,7 +2,7 @@
 // Entry: { id, kind, text (what the clip must say, for the voice actor), tts (placeholder speech text),
 //          take (path under audio/ once recorded, else null), placeholder ('tts' | file path), notes? }
 import { LETTERS, STRETCHY } from './core.js';
-import { LETTER_INFO, WORDS, STAR_WORDS, MASCOT, SFX } from './content.js';
+import { LETTER_INFO, WORDS, STAR_WORDS, MASCOT, SFX, LETTER_PICS, SENTENCES } from './content.js';
 import { requiredClips, protoRimes } from './word-logic.js';
 
 export const TAKE_EXTS = ['m4a', 'mp3', 'ogg', 'wav'];
@@ -19,6 +19,10 @@ export function buildManifest(takeFiles = []) {
     add(`snd-${l}`, 'letter-sound', `/${L.sound}/`, L.soundTts, { notes: STRETCHY.has(l) ? 'short, clean' : 'clipped: quick, no trailing "uh"' });
     if (STRETCHY.has(l)) add(`snd-${l}-held`, 'letter-sound-held', `/${L.sound}/ held ~1 s`, L.heldTts, { notes: 'played on a slow slide' });
   }
+  const picSeen = new Set();
+  for (const [g, pics] of Object.entries(LETTER_PICS)) for (const [w] of pics) {
+    if (picSeen.has(w)) continue; picSeen.add(w); add(`pic-${w}`, 'picture-word', w, w, { notes: `letter intro picture (${g})` });
+  }
   for (const r of protoRimes())
     add(`rime-${r}`, 'rime', r, r, { notes: r.endsWith('s') ? 'rime chunk; s may voice as /z/ (is, as)' : 'rime chunk, said as one unit' });
   const seen = new Set();
@@ -31,6 +35,7 @@ export function buildManifest(takeFiles = []) {
     add(`star-${s.w}`, 'star-word', s.w, s.w, { tricky: s.tricky });
     add(`star-${s.w}-sentence`, 'star-sentence', s.say, s.say);
   }
+  for (const s of SENTENCES) add(`sent-${s.id}`, 'sentence', s.text, s.text, { notes: 'read smoothly, karaoke pace' });
   for (const [id, text] of Object.entries(MASCOT)) add(id, 'mascot', text, text.replace('…', ''), { voice: id.endsWith('-upbeat') ? 'upbeat' : 'calm' });
   for (const [id, s] of Object.entries(SFX)) add(id, 'sfx', s.text, null, { placeholder: s.file });
 

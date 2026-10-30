@@ -18,6 +18,31 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     return { left: 20, right: s.w - 20, top, bottom }; };
   const cellW = n => { const s = stage.info, per = s.w < 700 ? 3 : 6; return Math.min(150, Math.floor((s.w - 40) / Math.min(per, n))); };
   const tileHalf = () => { const m = stage.info.mode, pt = m === 'portrait' && stage.info.w < 600; return m === 'short' || pt ? [55, 62] : [60, 68]; };
+  // --- design 1a: big ear (replays the sound only), 3 tiles below it, star tray, ghost hand ---
+  const soundClip = g => (audio.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
+  function earPos() { const s = stage.info; return s.mode === 'short' ? { x: Math.round(s.w * 0.22) + 40, y: 240 } : { x: s.w / 2, y: s.mode === 'portrait' ? Math.max(310, s.h * 0.36) : 250 }; }
+  function earLayout(letters) {
+    const s = stage.info, e = earPos(), n = letters.length;
+    if (s.mode === 'short') { const x0 = e.x + 130, cw = Math.min(140, (s.w - x0 - 30) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 })); }
+    const cw = Math.min(150, (s.w - 40) / n), y = e.y + (s.mode === 'portrait' ? 200 : 185);
+    return letters.map((l, i) => ({ l, x: s.w / 2 + (i - (n - 1) / 2) * cw, y }));
+  }
+  function addEar() {
+    const e = earPos(), b = el('button', 'ear emoji', '👂'); b.id = 'l-ear'; b.setAttribute('aria-label', 'Hear the sound again');
+    b.style.left = e.x + 'px'; b.style.top = e.y + 'px'; b.onpointerdown = ev => { ev.stopPropagation(); audio.stop(); audio.play(`snd-${run.target}`); idleHand(); };
+    arena.append(b);
+  }
+  function tray() { const t = $('l-tray'); t.hidden = false; t.replaceChildren(...run.targets.map((_, i) => el('span', 'emoji' + (i < (run.stars ?? 0) ? '' : ' off'), '⭐'))); }
+  let handT = 0;
+  const hideHand = () => $('l-hand')?.remove();
+  function showHand() { // ghost hand: taps the ear, then hovers the tiles (not the answer). First item + after 5 s idle.
+    if (!run || run.busy || !run.def.ear) return; hideHand();
+    const h = el('div', 'ghosthand emoji', '👆'); h.id = 'l-hand'; const e = earPos(); h.style.left = e.x + 'px'; h.style.top = e.y + 'px'; $('letters').append(h);
+    if (settings.reducedMotion()) { setTimeout(hideHand, 1500); return; }
+    run.items.forEach((it, i) => setTimeout(() => { if (h.isConnected) { h.style.left = it.x + 'px'; h.style.top = it.y + 40 + 'px'; } }, 1000 + i * 900));
+    setTimeout(hideHand, 1200 + run.items.length * 900);
+  }
+  function idleHand() { clearTimeout(handT); if (run && run.def.ear && run.round === 0 && !run.handShown) { run.handShown = true; showHand(); } handT = setTimeout(showHand, 5000); }
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('letters').append(c); setTimeout(() => c.remove(), 1300); };
 
   function renderPebbles() {
@@ -38,11 +63,13 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
 
   function setupRound() {
     const target = run.targets[run.round];
-    const letters = run.def.drift || run.activity === 'soundTap' ? run.pool.slice(0, 6) : roundLetters(target, run.pool, { n: run.n, rand });
+    const letters = run.def.drift || run.activity === 'soundTap' ? run.pool.slice(0, 6) : roundLetters(target, run.pool, { n: run.def.n ?? run.n, rand });
     const b = box();
-    if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() });
+    $('letters').classList.toggle('hunt', !!run.def.ear);
+    if (run.def.ear) run.items = earLayout(letters);
+    else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() });
     else { const pos = staticLayout(letters.length, { w: stage.info.w, top: b.top, cellW: cellW(letters.length), cellH: stage.info.mode === 'short' ? 220 : stage.info.mode === 'portrait' ? 232 : 210 }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
-    run.target = target; run.firstTry = true; run.promptEnd = 0; place(run.items); renderPebbles();
+    run.target = target; run.firstTry = true; run.misses = 0; run.promptEnd = 0; place(run.items); renderPebbles(); if (run.def.ear) { addEar(); tray(); }
     prompt();
   }
   function prompt() {
@@ -50,7 +77,9 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     if (run.activity === 'find') { // target shown lowercase in the tile font (Uiux r2: no caps, no l/I ambiguity)
       const p = say('', 'm-find-letter', `name-${t}`).then(() => (run.promptEnd = performance.now()));
       bubble.innerHTML = `Can you find <span class="L btile">${caseFor(t, run.case)}</span>?`; return p; }
-    if (run.activity === 'hunt') return say(`Find the letter that says “${LETTER_INFO[t].sound}”.`, 'm-hunt-sound', `snd-${t}`).then(() => (run.promptEnd = performance.now()));
+    if (run.activity === 'hunt') { // design 1a: "sss… find sss!" — the sound only, never the name
+      const p = say('', soundClip(t), 'm-find-sound', `snd-${t}`).then(() => { run && (run.promptEnd = performance.now()); idleHand(); });
+      bubble.innerHTML = `Find <b>“${LETTER_INFO[t]?.sound ?? t}”</b>!`; return p; }
     if (run.activity === 'float') return run.mode === 'name' ? say('Tap a letter to hear its name!', 'm-tap-names') : say('Tap a letter to hear its sound!', 'm-tap-sounds');
     return say(run.mode === 'nameDot' ? 'Tap a letter to hear its name. Tap a dot to hear its sound!' : 'Tap a letter or a dot to hear its sound!', run.mode === 'nameDot' ? 'm-tap-hint' : 'm-tap-hint-sound');
   }
@@ -70,11 +99,13 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     run.firstTry = false;
     audio.stop();
     if (right) {
-      run.busy = true; node.classList.add('right'); run.score++;
-      audio.play('sfx-chime'); say('Yes!', 'm-yes');
-      setTimeout(() => { run.busy = false; run.round++; run.round < run.targets.length ? setupRound() : finish(); }, 900);
+      run.busy = true; node.classList.add('right'); run.score++; run.stars = (run.stars ?? 0) + 1; hideHand(); if (run.def.ear) tray();
+      audio.play('sfx-chime'); say('Yes!', ...(run.def.ear ? [soundClip(run.target), 'm-yes'] : ['m-yes']));
+      setTimeout(() => { if (!run) return; run.busy = false; run.round++; run.round < run.targets.length ? setupRound() : finish(); }, run.def.ear ? 1200 : 900);
     } else { // never a fail state: the tapped letter says what it is, then the prompt repeats
       const c = run.activity === 'find' ? `name-${it.l}` : `snd-${it.l}`, what = run.activity === 'find' ? LETTER_INFO[it.l].name : `“${LETTER_INFO[it.l].sound}”`;
+      run.misses++; node.classList.remove('wob'); void node.offsetWidth; node.classList.add('wob'); // soft wobble, no red / buzzer
+      if (run.misses >= 2) run.items.find(i => i.l === run.target)?.node.classList.add('hint'); // after 2 misses the right tile glows
       run.busy = true; say(`That's ${what}.`, 'm-thats', c).then(() => { if (!run) return; run.busy = false; prompt(); });
     }
   }
@@ -83,8 +114,8 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), box(), now); last = now; move(); raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
-  function finish() { const r = run; stop(); r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length }); }
-  function stop() { cancelAnimationFrame(raf); run = null; audio.stop(); }
+  function finish() { const r = run; stop(); $('letters').classList.remove('hunt'); $('l-tray').hidden = true; r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length }); }
+  function stop() { cancelAnimationFrame(raf); clearTimeout(handT); hideHand(); run = null; audio.stop(); }
 
   $('l-next').onclick = () => run && finish();
   $('l-home').onclick = () => { stop(); onHome(); };

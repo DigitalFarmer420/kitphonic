@@ -34,6 +34,9 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `progress=N` | dev: start with N map stops passed (seeded **in-memory** log; real progress untouched) |
 | `due=1` | with `progress`: the passed stops' spaced review is due today |
 | `levelup=1` | with `progress`: show the level-up moment for the last passed stop |
+| `activity=star&word=the` | Star Word screen (meet the word, then 3 scored "find it" rounds) |
+| `activity=sentence&sentence=map-mat` | star word in a sentence: tap star chips, slide decodable words, then "Read it all" |
+| `parent=1` | open the Grown-ups area directly (in the app: press and hold the map gear for 2 s) |
 | `minutes=5..10` | session length target (default 7) |
 | `direct=1` | word screen only (implied by `level=` / `word=`) |
 | `cards=0` | no printed word-card check for words without a picture check |

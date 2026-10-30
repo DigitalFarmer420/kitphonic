@@ -15,6 +15,24 @@ export const LETTER_INFO = {
   o: { name: 'O', nameTts: 'oh',  sound: 'o (top)', soundTts: 'aw', heldTts: 'awwww' },
 };
 
+// Letter-intro pictures (design/letters-board 1b): words that START with the sound (x: ends), rotated per visit so a
+// sound is never tied to one picture. Placeholder emoji art; the word is shown with its letter in coral.
+export const LETTER_PICS = {
+  m: [['moon', '🌙'], ['mouse', '🐭'], ['map', '🗺️']], s: [['sun', '☀️'], ['sock', '🧦'], ['seal', '🦭']],
+  a: [['apple', '🍎'], ['ant', '🐜'], ['alligator', '🐊']], t: [['tiger', '🐯'], ['tent', '⛺'], ['teddy', '🧸']],
+  p: [['pig', '🐷'], ['penguin', '🐧'], ['pan', '🍳']], i: [['insect', '🐞'], ['ink', '🖋️']],
+  n: [['nest', '🪺'], ['nose', '👃'], ['net', '🥅']], o: [['octopus', '🐙'], ['ox', '🐂'], ['otter', '🦦']],
+  d: [['dog', '🐶'], ['duck', '🦆']], f: [['fish', '🐟'], ['fox', '🦊']], c: [['cat', '🐈'], ['cup', '☕']],
+  k: [['kite', '🪁'], ['key', '🔑']], e: [['egg', '🥚'], ['elephant', '🐘']], u: [['umbrella', '☂️'], ['up', '⬆️']],
+  g: [['goat', '🐐'], ['gift', '🎁']], r: [['rabbit', '🐇'], ['rocket', '🚀']], h: [['hat', '🎩'], ['horse', '🐴']],
+  b: [['bus', '🚌'], ['bed', '🛏️']], l: [['lion', '🦁'], ['leaf', '🍃']], j: [['jellyfish', '🪼'], ['jet', '✈️']],
+  v: [['van', '🚐'], ['violin', '🎻']], w: [['web', '🕸️'], ['worm', '🪱']], x: [['fox', '🦊'], ['box', '📦']],
+  y: [['yo-yo', '🪀'], ['yak', '🐃']], z: [['zebra', '🦓'], ['zip', '🤐']], qu: [['queen', '👸']],
+  sh: [['ship', '🚢'], ['sheep', '🐑']], ch: [['chick', '🐤'], ['cheese', '🧀']], th: [['thumb', '👍']],
+  ng: [['ring', '💍'], ['king', '🤴']], ck: [['duck', '🦆'], ['sock', '🧦']], ll: [['bell', '🔔'], ['doll', '🪆']],
+  ss: [['dress', '👗']], ff: [['cliff', '🏔️']], zz: [['buzz', '🐝']], nk: [['sink', '🚰']],
+};
+
 // Level ladder (§3.7) — review R5 data model. Each word: text, parse (GPC ids from js/sequence.js, space-separated),
 // level, optional pic (picturable + unambiguous), say (Kit's reveal line). `pattern`, `phonemes`, `w` are derived.
 // tests/content.test.mjs validates every entry (parse integrity, taught GPCs only, level pattern, audio coverage).
@@ -75,6 +93,20 @@ export const STAR_WORDS = [
 for (const s of STAR_WORDS) s.tricky = s.parse.filter(p => p.irregular).map(p => p.g).join('+');
 export const MAX_NEW_STAR_PER_LEVEL = 2;
 
+// Decodable sentences (design/words-board 4): every token is a star word or a word from WORDS (any level), so the
+// untaught-sound check applies word by word. pic: revealed after "read it all".
+export const SENTENCES = [
+  { id: 'man-sat', text: 'the man sat', pic: '👨' },
+  { id: 'sat-mat', text: 'I sat on the mat', pic: '#mat' },
+  { id: 'tap-pan', text: 'tap the pan', pic: '🍳' },
+  { id: 'map-mat', text: 'the map is on the mat', pic: '🗺️' },
+  { id: 'pin-tin', text: 'the pin is in the tin', pic: '📌' },
+  { id: 'mop-pot', text: 'the mop is in the pot', pic: '🧹' },
+  { id: 'not-pot', text: 'no, not the pot', pic: '🍲' },
+  { id: 'pop-pot', text: 'pop it into the pot', pic: '🍲' },
+  { id: 'stop-top', text: 'stop at the top', pic: '🛑' },
+];
+
 // Mascot lines. Two takes of "Let's slide it again": calm (default) and upbeat; neither sounds disappointed.
 export const MASCOT = {
   'm-hello': "Hi! I'm Kit. Let's read together!",
@@ -94,6 +126,15 @@ export const MASCOT = {
   'm-hunt-sound': 'Find the letter that says…',
   'm-tap-names': 'Tap a letter to hear its name!',
   'm-tap-sounds': 'Tap a letter to hear its sound!',
+  'm-letter-says': 'This letter says…',
+  'm-tap-it': 'Tap it!',
+  'm-trace-start': 'Start at the green dot and follow me!',
+  'm-back-on': 'Back on the dots!',
+  'm-find-sound': 'Find…',
+  'm-read-together': "Let's read it together!",
+  'm-star-word': 'This is a star word. We just know it!',
+  'm-star-tap': 'Star word! Tap it.',
+  'm-read-all': 'Now read it all!',
   'm-new-letter': 'Here is a new letter!',
   'm-yes': 'Yes!',
   'm-find-word': 'Can you find the word…',

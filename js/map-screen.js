@@ -35,8 +35,8 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       if (g && (g !== prevGroup || p.now)) { // parent-facing label (no reading needed by the child)
         const l = el('div', 'mlabel', p.now ? `${g}<br>(now)` : g), off = p.r + 10;
         if (p.side === 'right') { l.style.left = p.x + off + 'px'; l.style.top = p.y - 10 + 'px'; }
-        else if (p.side === 'left') { l.style.left = p.x - off - 104 + 'px'; l.style.top = p.y - 10 + 'px'; }
-        else { const lines = p.now ? 2 : 1; l.style.left = p.x - 52 + 'px'; l.style.top = (p.side === 'above' ? p.y - p.r - 6 - lines * 16 : p.y + p.r + 8) + 'px'; }
+        else if (p.side === 'left') { l.style.left = p.x - off - 120 + 'px'; l.style.top = p.y - 10 + 'px'; }
+        else { l.style.left = p.x - 60 + 'px'; l.style.top = p.y + p.r + 8 + 'px'; }
         box.append(l);
       }
       prevGroup = g;
@@ -44,7 +44,10 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
     const cur = pts[cut], from = animate ? pts[fromK] : cur;
     if (cur && !m.done) { // Kit sits next to the current stop (walks there when the path draws forward)
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
-      const kx = p => p.x + (info.mode === 'portrait' ? (p.side === 'right' ? -1 : 1) * (p.r + 30) : -p.r * 0.95), ky = p => info.mode === 'portrait' ? p.y - p.r + 6 : p.y - p.r * 0.75;
+      // beside the stop (portrait: opposite its label; landscape: to its right, at the same height)
+      // landscape: low-row stop -> Kit just above it; high-row stop -> beside it (right), raised away from the low row
+      const kx = p => info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36) : p.low ? p.x : p.x + p.r + 36;
+      const ky = p => info.mode === 'portrait' ? p.y - p.r + 10 : p.low ? p.y - p.r - 38 : p.y - 20;
       kit.style.left = kx(from) + 'px'; kit.style.top = ky(from) + 'px'; box.append(kit);
       if (animate) setTimeout(() => { kit.style.left = kx(cur) + 'px'; kit.style.top = ky(cur) + 'px'; }, 50);
     }

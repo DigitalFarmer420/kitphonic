@@ -6,7 +6,7 @@ export const ACTIVITIES = {
   float:    { phase: 1, scored: false, drift: true,  dots: false, title: 'Floating Letters' }, // free exploration
   find:     { phase: 1, scored: 'name',  drift: false, dots: false, title: 'Find the Letter' },
   soundTap: { phase: 2, scored: false, drift: false, dots: true,  title: 'Sound Tap' },
-  hunt:     { phase: 2, scored: 'sound', drift: false, dots: true,  title: 'Sound Hunt' },
+  hunt:     { phase: 2, scored: 'sound', drift: false, dots: false, ear: true, n: 3, title: 'Find the Letter (sound)' }, // design 1a
 }; // assessed tasks use a static layout (review R14); drift only in free exploration
 
 // Letter-tap clip for an activity. Phase 1 activities always use 'name' mode (no dots).

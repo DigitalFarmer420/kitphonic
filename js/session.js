@@ -9,12 +9,16 @@ import { GPC, GPCS } from './sequence.js';
 import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked } from './mastery.js';
 import { mapState, activeSounds, servableWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
 import { shuffle } from './word-logic.js';
+import { hasStrokes } from './trace.js';
+import { servableSentences } from './sentences.js';
 
-export const COST = { explore: 40, roundIntro: 10, round: 12, word: 35, star: 40 }; // seconds (estimates; tune in playtest)
+export const COST = { explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;
   if (it.type === 'star') return COST.star;
+  if (it.type === 'sentence') return COST.sentence;
+  if (it.type === 'lesson') return COST[it.activity] ?? 40;
   return it.targets ? COST.roundIntro + it.rounds * COST.round : COST.explore;
 }
 export const planCost = items => items.reduce((s, it) => s + itemCost(it), 0);
@@ -32,7 +36,7 @@ export function letterPool(active, { size = 6, min = 3 } = {}) {
   return pool;
 }
 
-export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = false } = {}) {
+export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = true } = {}) {
   const budget = Math.max(MIN_MIN, Math.min(MAX_MIN, minutes)) * 60, minBudget = MIN_MIN * 60;
   const map = mapState(responses, now), cur = map.current, active = activeSounds(responses, now);
   const known = knownGpcs(responses, now), items = [];
@@ -56,8 +60,19 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // 2. The current stop.
   if (cur?.kind === 'sound') {
     const g = cur.gpc, fresh = !responses.some(r => r.skill === `sound:${g}`);
-    if (fresh) push({ type: 'letters', activity: map.index === 0 ? 'float' : 'soundTap', pool, newSound: g, why: 'new' });
-    push({ type: 'letters', activity: 'hunt', pool, targets: [g, g, ...active.filter(x => x !== g && pool.includes(x) && !atLeast(st(`sound:${x}`), 'secure'))].slice(0, 4), rounds: 5, why: 'new' });
+    const hunt = rounds => ({ type: 'letters', activity: 'hunt', pool, targets: [g, g, ...active.filter(x => x !== g && pool.includes(x) && !atLeast(st(`sound:${x}`), 'secure'))].slice(0, 4), rounds, why: 'new' });
+    const canTrace = hasStrokes(GPC[g]?.grapheme);
+    if (fresh) { // a varied first meeting with a sound: see + hear it, explore, find it, trace it, find it again
+      push({ type: 'lesson', activity: 'intro', gpc: g, why: 'new' });
+      push({ type: 'letters', activity: map.index === 0 ? 'float' : 'soundTap', pool, newSound: g, why: 'new' });
+      push(hunt(3));
+      if (canTrace) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
+      if (map.index === 0) push({ type: 'letters', activity: 'soundTap', pool, newSound: g, why: 'new' });
+      push(hunt(4));
+    } else {
+      push(hunt(5));
+      if (canTrace && responses.filter(r => r.skill === `trace:${GPC[g].grapheme}`).length < 6) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
+    }
   } else if (cur?.kind === 'words') {
     let lv = cur.level, ws = wordsAt(lv, 5);
     if (!ws.length && passedLevels.length) { lv = passedLevels.at(-1); ws = wordsAt(lv, 5); }
@@ -66,6 +81,14 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   }
   if (stars) for (const s of availableStars(responses, now).filter(s => !atLeast(st(`star:${s.w}`), 'secure')).slice(0, 1))
     push({ type: 'star', word: s.w, why: 'new' });
+
+  // Sentences (design/words-board 4): one per session once a sentence decodes with known sounds + introduced stars.
+  if (stars) {
+    const introduced = new Set(responses.filter(r => r.skill?.startsWith('star:')).map(r => r.skill.slice(5)));
+    const read = id => responses.filter(r => r.skill === `sentence:${id}`).length;
+    const ss = servableSentences(known, introduced).sort((a, b) => read(a.id) - read(b.id) || rand() - .5);
+    if (ss.length) push({ type: 'sentence', sentence: ss[0], why: read(ss[0].id) ? 'mixed' : 'new' });
+  }
 
   // 3. Practice: introduced sounds that are not secure yet.
   const shaky = active.filter(g => pool.includes(g) && !atLeast(st(`sound:${g}`), 'secure') && g !== cur?.gpc);

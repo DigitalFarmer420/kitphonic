@@ -33,11 +33,13 @@ export function configFromUrl(search = '') {
   if (q.get('check') === '0') c.checkPictureWords = false;
   if (q.get('checkL1') === '1') c.checkAtL1 = true;
   if (q.get('cards') === '0') c.wordCardCheck = false;
-  if (q.get('minutes')) c.minutes = +q.get('minutes');
+  if (q.get('minutes')) { c.minutes = +q.get('minutes'); c.minutesSet = true; }
   if (q.get('progress')) c.progress = +q.get('progress');
   if (q.get('due') === '1') c.due = true;
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
-  if (q.get('direct') === '1' || q.get('word') || q.get('level')) c.direct = true; // dev: word screen only
+  c.sentence = q.get('sentence') || undefined;
+  if (q.get('parent') === '1') c.parent = true;
+  if (q.get('direct') === '1' || ((q.get('word') || q.get('level')) && !c.activity)) c.direct = true; // dev: word screen only
   if (q.get('choices')) for (const k in c.choiceStrategy) c.choiceStrategy[k] = q.get('choices');
   if (q.get('mode')) for (const k in c.tapMode) c.tapMode[k] = q.get('mode');
   if (q.get('l1')) c.markerOpts.l1 = q.get('l1');
@@ -46,7 +48,8 @@ export function configFromUrl(search = '') {
   c.seed = q.get('seed') ? +q.get('seed') : undefined;
   c.word = q.get('word') || undefined;
   c.activity = q.get('activity') || undefined;
-  if (q.get('floatMode')) c.floatTapMode = q.get('floatMode');
+  c.gpc = q.get('gpc') || undefined;
+  if (q.get('floatMode')) { c.floatTapMode = q.get('floatMode'); c.floatModeSet = true; }
   if (q.get('letterMode')) c.letterTapMode = q.get('letterMode');
   return c;
 }
