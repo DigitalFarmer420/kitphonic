@@ -31,7 +31,7 @@ export const starHtml = s => s.parse.map(p => typeof p === 'string' ? p : `<span
 export function createStarScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, known = () => null, seen = noSeen, reduced = () => false }) {
   let run = null;
   const hand = createGhostHand({ host: $('star'), reduced }); // hovers over ALL cards in turn — never just the answer
-  const say = (t, ...clips) => { $('st-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
+  const say = (t, ...clips) => { $('st-bubble').innerHTML = t; return audio.say(clips); }; // rc5: one phrase, cancelled by audio.stop()
   function round() {
     const s = run.star, choices = starChoices(s.w, { rand, known: known() });
     $('st-word').classList.add('away'); // find it by its sound, not by matching the shape on screen
@@ -46,7 +46,7 @@ export function createStarScreen({ audio, stage, rand = Math.random, record = ()
     const right = c === run.star.w, lat = run.shownAt ? performance.now() - run.shownAt : null;
     if (run.first) record({ skill: `star:${run.star.w}`, itemId: run.star.w, correct: right, firstAttempt: true, assisted: false, latencyMs: lat && Math.round(lat), fast: guessGuard({ pickLatencyMs: lat ?? 9999 }).fast });
     run.first = false;
-    if (!right) { b.classList.remove('wob'); void b.offsetWidth; b.classList.add('wob'); audio.play(`word-${c}`).then(() => run && audio.play(`star-${run.star.w}`)); return; }
+    if (!right) { b.classList.remove('wob'); void b.offsetWidth; b.classList.add('wob'); audio.play(`word-${c}`); audio.play(`star-${run.star.w}`); return; } // wrong: Kit names it (no sfx), then the target again
     run.busy = true; b.classList.add('right'); audio.play('sfx-chime'); $('st-word').classList.remove('away');
     setTimeout(() => { if (!run) return; run.busy = false; run.round++; run.round < STAR_ROUNDS ? round() : finish(); }, 1100);
   }
@@ -75,7 +75,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     if (t.kind === 'star') { const c = at(chips()[run.i]); return [c, [c[0], c[1] + 10]]; }
     if (!$('sn-next').hidden) { const c = at($('sn-next')); return [c, [c[0], c[1] + 10]]; }
     if (!run.ms) return null; const [x, y] = at($('sn-handle')); return [[x, y + 20], [run.layout.knobX(0.5), y + 20], [run.layout.knobX(1), y + 20]]; };
-  const say = (t, ...clips) => { $('sn-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
+  const say = (t, ...clips) => { $('sn-bubble').innerHTML = t; return audio.say(clips); }; // rc5: one phrase, cancelled by audio.stop()
   const chips = () => [...$('sn-strip').children];
   function paint() { chips().forEach((c, i) => { c.classList.toggle('cur', i === run.i); c.classList.toggle('done', i < run.i); }); }
   // Landscape keeps the sentence on one centred line: shrink the type (not the 72 px tap height) until it fits.
@@ -114,7 +114,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     const p = stage.toStage(e); run.t0 ??= performance.now();
     for (const ev of run.sweep.move(run.layout.fracFromX(p.x), e.timeStamp)) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
-        const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); if (run.tokSupport !== 2) audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs }); // S2: silent dots
+        const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); if (run.tokSupport !== 2) audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs, gapMs: 0 }); // S2: silent dots
         [...$('sn-tiles').children][ev.marker]?.classList.add('passed'); $('sn-track').querySelectorAll('.tdot')[ev.marker]?.classList.add('on');
       } else if (ev.kind === 'blend') {
         dragging = null; const t = run.tokens[run.i], ok = guessGuard({ sweepMs: performance.now() - run.t0, phonemes: run.ms.length }).scored;
@@ -189,13 +189,14 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   // tap, pointing the child back. Reduced motion: a still glow instead of the bounce.
   let nudgedAt = 0;
   $('sn-strip').addEventListener('click', e => {
-    if (!run || run.reading || e.target.closest?.('.wd.cur')) return;
-    const cur = $('sn-strip').querySelector('.wd.cur'); if (!cur) return;
-    const hit = chips().some(c => c !== cur && !c.classList.contains('done') && (r => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)(c.getBoundingClientRect()));
+    if (!run || run.reading || e.target.closest?.('.wd.cur:not(.done)')) return;
+    // rc5 (Uiux): between words (the old word still .cur + .done, or none current) the nudge targets the upcoming word
+    const cur = $('sn-strip').querySelector('.wd.cur:not(.done)') ?? chips().find(c => !c.classList.contains('done')); if (!cur) return;
+    const hit = chips().some(c => !c.classList.contains('done') && (r => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)(c.getBoundingClientRect()));
     if (!hit || performance.now() - nudgedAt < 450) return;
     nudgedAt = performance.now(); run.nudges = (run.nudges ?? 0) + 1;
     cur.classList.remove('nudge', 'nudge-still'); void cur.offsetWidth; cur.classList.add(reduced() ? 'nudge-still' : 'nudge');
-    setTimeout(() => cur.classList.remove('nudge', 'nudge-still'), 500); audio.play('sfx-tap');
+    setTimeout(() => cur.classList.remove('nudge', 'nudge-still'), 500); if (!audio.busy) audio.play('sfx-tap'); // one sound at a time: while Kit / a sound plays, the bounce alone
   });
   $('sn-read').onclick = readAll;
   $('sn-next').onclick = () => { if (!run || $('sn-next').hidden || run.reading) return; hand.poke(); audio.stop(); $('sn-next').hidden = true; run.i++; next(); };

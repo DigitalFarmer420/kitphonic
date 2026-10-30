@@ -3,7 +3,7 @@
 //   2. placeholder file (e.g. placeholder/sfx-chime.wav) -> Web Audio buffer
 //   3. browser speech  (speechSynthesis, manifest `tts` text) — placeholder voice only
 //   4. soft tone        (Web Audio) when no voice exists (e.g. headless test browsers)
-// Every play is logged to window.__kitAudioLog for tests/debugging.
+// Every play is logged to window.__kitAudioLog ({id, via, t, end} ms) for tests/debugging. rc5: one sound at a time (see play()).
 // speechRate(): the grown-ups 'Kit's talking speed' (0.85 / 1 / 1.15). It applies to spoken words and sentences
 // (Kit's lines, words, star words, sentences, picture words) but never to letter sounds or the slider's phonemes,
 // whose timing is part of the blending design.
@@ -42,6 +42,52 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     while (active < 4 && queue.length && ctx) { const id = queue.shift(); if (buffers.has(id)) continue; active++; load(id).finally(() => { active--; pump(); }); }
   }
   const wait = ms => new Promise(r => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); });
+  // --- rc5 serial queue ---
+  let tail = Promise.resolve(), pending = 0, lastEnd = -Infinity; // lastEnd: when the last clip finished (a cut = -Infinity)
+  const now = () => performance.now();
+  function edges(buf) { // [lead, tail] silence (s) below -50 dBFS, cached; phrases skip it so clips join without a gap
+    if (buf.__edges) return buf.__edges;
+    const d = buf.getChannelData(0), th = 0.003, n = d.length; let a = 0, b = n - 1;
+    while (a < n && Math.abs(d[a]) < th) a++; while (b > a && Math.abs(d[b]) < th) b--;
+    const sr = buf.sampleRate; return (buf.__edges = a >= n ? [0, 0] : [Math.max(0, a / sr - 0.01), Math.max(0, (n - 1 - b) / sr - 0.02)]);
+  }
+  function enqueue(ids, { rate, delayMs, gapMs }) {
+    const my = gen, called = now(); pending++;
+    const job = tail.then(async () => {
+      if (my !== gen) return;
+      const gap = Math.max(gapMs ?? 250 - (now() - lastEnd), delayMs - (now() - called)); // >= 250 ms after the previous clip unless gapMs says otherwise
+      if (gap > 0) await wait(gap);
+      if (my !== gen) return;
+      await run(ids, rate, my); if (my === gen) lastEnd = now();
+    }).finally(() => { if (my === gen) pending = Math.max(0, pending - 1); });
+    tail = job.catch(() => {});
+    return job;
+  }
+  async function run(ids, rate0, my) { // one phrase: clips scheduled back to back on the audio clock
+    const clips = ids.map(id => byId.get(id)).filter(c => c || (console.warn('unknown clip', ids), false));
+    const bufs = await Promise.all(clips.map(c => load(c.id)));
+    if (my !== gen) return;
+    let at = null; const ends = [];
+    for (const [k, c] of clips.entries()) {
+      const rate = SPOKEN.test(c.id) ? rate0 * speechRate() : rate0, buf = bufs[k];
+      const via = buf ? (c.take ? 'take' : 'file') : hasSpeech() && c.tts ? 'tts' : 'tone';
+      onClip(c, via);
+      if (buf) {
+        const [lead, trail] = clips.length > 1 ? edges(buf) : [0, 0], dur = (buf.duration - lead - (k < clips.length - 1 ? trail : 0)) / rate;
+        at ??= ctx.currentTime + (clips.length > 1 ? 0.025 : 0); // a phrase is scheduled 25 ms ahead so its 1st clip can't start late and run into the 2nd
+        const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.connect(ctx.destination); sources.add(s);
+        const e = { id: c.id, via, rate, t: Math.round(now() + (at - ctx.currentTime) * 1000) }; log.push(e);
+        s.start(at, lead, dur * rate); at += dur;
+        const sched = e.t + dur * 1000; s.__e = e; s.__end = sched; // log the exact scheduled end (onended fires a few ms late on the main thread)
+        ends.push(new Promise(r => (s.onended = () => { sources.delete(s); e.end ??= Math.round(sched); r(); })));
+      } else { // no buffer: speech / tone, strictly after whatever was scheduled before it
+        await Promise.all(ends.splice(0)); at = null; if (my !== gen) return;
+        const e = { id: c.id, via, rate, t: Math.round(now()) }; log.push(e);
+        await (via === 'tts' ? speak(c.tts, rate) : tone(c.id, rate)); e.end = Math.round(now());
+      }
+    }
+    await Promise.all(ends);
+  }
 
   function tone(id, rate) { // gentle sine blip; pitch varies by clip so sequences are distinguishable
     if (!ctx) return Promise.resolve();
@@ -81,23 +127,19 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     get loadedCount() { return buffers.size; },
     get earlyPending() { return raw.size; },
     get unlocked() { return ctx?.state === 'running'; },
-    async play(id, { rate = 1, delayMs = 0 } = {}) {
-      const my = gen; if (delayMs) await wait(delayMs); if (my !== gen) return;
-      const c = byId.get(id); if (!c) { console.warn('unknown clip', id); return; }
-      if (SPOKEN.test(id)) rate *= speechRate();
-      const buf = await load(id);
-      const via = buf ? (c.take ? 'take' : 'file') : hasSpeech() && c.tts ? 'tts' : 'tone';
-      log.push({ id, via, rate, t: Math.round(performance.now()) }); onClip(c, via);
-      if (buf) {
-        const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.connect(ctx.destination);
-        sources.add(s); s.start();
-        return new Promise(r => (s.onended = () => { sources.delete(s); r(); }));
-      }
-      return via === 'tts' ? speak(c.tts, rate) : tone(id, rate);
-    },
+    // rc5 — ONE SOUND AT A TIME (owner + Uiux): every clip (voice or sfx) goes through one serial queue. A clip never
+    // starts while another plays: it waits for the previous one to end, then `gapMs` (default 250 ms when it had to
+    // wait, 0 when the queue was idle) and at least `delayMs` from the call. A child's tap calls stop() first, which cuts
+    // Kit off and drops everything queued, so rapid taps cannot stack. say() = one phrase, clips joined end-to-start
+    // with their edge silence skipped (no gap, no overlap: "Find… t").
+    play(id, { rate = 1, delayMs = 0, gapMs } = {}) { return enqueue([id], { rate, delayMs, gapMs }); },
+    say(ids, { rate = 1, delayMs = 0, gapMs } = {}) { ids = ids.filter(Boolean); return ids.length ? enqueue(ids, { rate, delayMs, gapMs }) : Promise.resolve(); },
+    get busy() { return pending > 0; },
     stop() { // cancel queued + playing audio (new word, interrupting tap)
-      gen++; for (const [t, r] of timers) { clearTimeout(t); r(); } timers.clear();
-      for (const s of sources) { try { s.stop(); } catch {} } sources.clear();
+      gen++; pending = 0; tail = Promise.resolve();
+      for (const [t, r] of timers) { clearTimeout(t); r(); } timers.clear();
+      const cutAt = Math.round(now()); lastEnd = -Infinity; // a child's tap: the next sound may start at once
+      for (const s of sources) { if (s.__e) s.__e.end ??= Math.round(Math.min(cutAt, s.__end ?? cutAt)); /* cut before its start = never heard (end < t) */ try { s.stop(); } catch {} } sources.clear();
       if ('speechSynthesis' in window) speechSynthesis.cancel();
     },
   };

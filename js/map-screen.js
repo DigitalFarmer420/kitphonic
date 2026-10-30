@@ -1,5 +1,6 @@
 // Learning map (home, design/map-mockup) + level-up moment. The child never picks a level: one big ▶ (and the glowing
 // current stop) always starts the planned session. Gear = grown-ups (press-and-hold gate, 2 s).
+import { nextPraise } from './feedback.js';
 import { mapWindow, mapLayout, pathD, levelUpChips, groupOf } from './map-layout.js';
 
 const $ = id => document.getElementById(id);
@@ -86,7 +87,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       c.style.setProperty('--rot', ((k % 2 ? 1 : -1) * (90 + k * 20)) + 'deg'); c.style.animationDelay = (k * 70) + 'ms'; conf.append(c); }
     const next = $('lv-next'); next.disabled = true; setTimeout(() => (next.disabled = false), LEVELUP_LOCK_MS);
     next.onclick = () => { if (!next.disabled) { audio.stop(); onBack(); } };
-    audio.play('sfx-chime'); setTimeout(() => audio.play('m-level-up'), 500);
+    audio.play('sfx-chime'); audio.play(nextPraise('levelUp'), { gapMs: 300 }); // rc5: praise queued after the chime, varied
   }
   return { render, levelUp, get last() { return last; }, relayout: () => !$('map').hidden && render() };
 }

@@ -108,7 +108,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       if (ev.kind === 'play' || ev.kind === 'replay') {
         const clip = clipForMarker(ms[ev.marker], ev.stretch);
         if (ev.kind === 'replay') audio.stop(); // ev.connect: previous sound is not cut; next joins it (R3)
-        if (trial.support !== 2 || trial.assisted) { heardWord(ms[ev.marker]); audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs }); } // S2: the dots light silently
+        if (trial.support !== 2 || trial.assisted) { heardWord(ms[ev.marker]); audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs, gapMs: 0 }); } // S2: the dots light silently; rc5: phonemes join end-to-start, never overlap
         light(sweep.lit, ev.marker);
       } else if (ev.kind === 'blend') {
         state = 'blending'; dragging = null; hand.stop();
@@ -142,7 +142,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     }));
     // word cards: the word is not spoken again (the child just heard their own blend), so the pick is a reading check
     if (cards) audio.play('m-which-word');
-    else if (trial.support === 4) audio.play('m-which-picture').then(() => state === 'check' && audio.play(`word-${entry.w}`)); // S4 model (unscored)
+    else if (trial.support === 4) audio.say(['m-which-picture', `word-${entry.w}`]); // S4 model (unscored): one phrase
     else audio.play('m-which-pic'); // "Which picture?" — the word is printed, never spoken, before the pick
   }
   function pick(c, btn) {
@@ -154,7 +154,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       // v2 V2 telemetry: the level served, hints (replays / taps at S3), dot taps (S2), 🔊 help (S1), both latencies
       support: trial.served, pattern: supportPattern(entry), hints: trial.hints, dotTaps: trial.dotTaps, helpUsed: trial.helpUsed, ...(trial.wordHeard ? { wordHeard: true } : {}),
       latencyFromOnsetMs: Math.round(t - shownAt), latencyFromLastDotMs: blendEndAt ? Math.round(t - blendEndAt) : null, ...(trial.scored ? {} : { fling: true }) });
-    if (c.w === entry.w) { state = 'picked'; btn.classList.add('right'); audio.play('sfx-chime'); setTimeout(reveal, 650); return; }
+    if (c.w === entry.w) { state = 'picked'; btn.classList.add('right'); audio.play('sfx-chime'); setTimeout(() => reveal(true), 650); return; } // rc5: the chime only; reveal line queues after it
     // Wrong: gentle replay, reshuffle, never a fail screen.
     state = 'replay'; $('check').hidden = true; showSlider(true); const ct = choices.contrast; choices = reshuffle(choices, rand); choices.contrast = ct;
     say(SLIDE_AGAIN_TEXT[cfg.voice] ?? SLIDE_AGAIN_TEXT.upbeat, slideAgainClip(cfg.voice)).then(demoSweep);
@@ -165,7 +165,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     const t0 = performance.now(), dur = 1600;
     const step = now => {
       const f = Math.min(1, (now - t0) / dur);
-      for (const ev of demo.move(f, now)) if (ev.kind === 'play') { const cl = clipForMarker(ms[ev.marker], ev.stretch); audio.play(cl.id, cl); light(demo.lit, ev.marker); }
+      for (const ev of demo.move(f, now)) if (ev.kind === 'play') { const cl = clipForMarker(ms[ev.marker], ev.stretch); audio.play(cl.id, { ...cl, gapMs: 0 }); light(demo.lit, ev.marker); }
       setHandle(f);
       if (f < 1) requestAnimationFrame(step);
       else setTimeout(() => { handle.classList.remove('demo'); sweep.reset(); setHandle(0); light([]); state = 'slide'; say('Your turn! Slide your finger under the word.'); }, 500);
@@ -174,13 +174,13 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   }
 
   // --- Reveal ---
-  function reveal() {
+  function reveal(picked = false) {
     state = 'revealed'; $('check').hidden = true;
     const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
     card.querySelector('.pic').style.fontSize = '96px'; const svg = card.querySelector('svg'); if (svg) { svg.setAttribute('width', 150); svg.setAttribute('height', 125); }
     for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = (20 + k * 55) + 'px'; s.style.top = (20 + (k % 2) * 80) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
     stickers.push(entry.pic && !entry.pic.startsWith('#') ? entry.pic : '⭐');
-    if (!entry.pic) audio.play('sfx-chime');
+    if (!entry.pic && !picked) audio.play('sfx-chime'); // no check, no picture: the chime is the reward (never a 2nd chime)
     const c = clipForReveal(entry.w);
     say(entry.say, c).then(() => { if (state === 'revealed') $('next').hidden = false; });
     setTimeout(() => { if (state === 'revealed') $('next').hidden = false; }, 2500);
@@ -203,8 +203,8 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   // ↻ before the pick never says the target word unless Kit is modelling (S4); at S3 it replays the sounds (a hint)
   $('again').onclick = () => { audio.stop();
     if (state === 'revealed') return audio.play(`reveal-${entry.w}`);
-    if (trial?.support === 4) return state === 'check' ? audio.play('m-which-picture').then(() => audio.play(`word-${entry.w}`)) : audio.play('m-slide-intro');
-    if (state === 'check' && trial?.support === 3) { trial.hints++; return ms.reduce((p, m) => p.then(() => audio.play(clipForMarker(m, 'normal').id)), Promise.resolve()); }
+    if (trial?.support === 4) return state === 'check' ? audio.say(['m-which-picture', `word-${entry.w}`]) : audio.play('m-slide-intro');
+    if (state === 'check' && trial?.support === 3) { trial.hints++; return ms.reduce((p, m) => p.then(() => audio.play(clipForMarker(m, 'normal').id, { gapMs: 120 })), Promise.resolve()); }
     audio.play(trial?.support === 2 ? 'm-say-sounds' : trial?.support === 1 ? 'm-read-it' : 'm-slide-intro'); };
   // S1 🔊 help: the slider comes back at S2 (silent dots, tap a dot to hear it); counted as help
   $('check-help').onclick = () => { if (state !== 'check' || trial.support !== 1) return; audio.stop(); trial.helpUsed = true; trial.support = 2;

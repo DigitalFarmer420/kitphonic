@@ -470,3 +470,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .stop .cue{position:absolute;top:-10px;left:-10px;width:36px;height:36px;border-radius:50%;background:#fff;border:2px solid var(--line);display:grid;place-items:center;font-size:22px;pointer-events:none}
 .stop .cue.tr{left:auto;right:-10px}
 .stop .cue.ml{top:calc(50% - 18px);left:-26px}
+
+/* rc5: Kit nods on a correct pick (the praise is visual; the only sound is the chime) */
+.mascot.nod>svg{animation:kitnod .5s ease-out 1;transform-origin:50% 90%}
+@keyframes kitnod{0%,100%{transform:rotate(0) translateY(0)}30%{transform:rotate(-6deg) translateY(3px)}65%{transform:rotate(4deg) translateY(-2px)}}

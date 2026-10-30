@@ -71,3 +71,17 @@ test('rc4: Start registers on pointerdown; locked sentence words nudge the curre
   assert.match(css, /\.wd\.cur\.nudge\{animation:wdbounce/); assert.match(css, /\.wd\.cur\.nudge-still\{/);
   assert.match(sn, /reduced\(\) \? 'nudge-still' : 'nudge'/); assert.match(sn, /audio\.play\('sfx-tap'\)/);
 });
+
+test('rc5: no screen speaks praise on a correct tap; every screen phrase goes through audio.say (cancellable, one at a time)', () => {
+  const src = f => readFileSync(new URL(`../js/${f}`, import.meta.url), 'utf8');
+  const letters = src('letters-screen.js');
+  assert.ok(!/'m-yes'/.test(letters), 'letters: no spoken "Yes!" on a correct tap');
+  assert.match(letters, /audio\.say\(CORRECT\)\.then\(\(\) => new Promise\(r => setTimeout\(r, CHIME_QUIET_MS\)\)\)/);
+  for (const f of ['letters-screen.js', 'lesson-screen.js', 'family-screen.js', 'star-screen.js']) {
+    assert.ok(!/clips\.reduce\(\(p, c\) => p\.then/.test(src(f)), `${f}: no hand-rolled promise chains (they survive stop())`);
+  }
+  const word = src('word-screen.js'), map = src('map-screen.js'), lesson = src('lesson-screen.js');
+  assert.ok(!/setTimeout\(\(\) => audio\.play\('m-level-up'\), 500\)/.test(map), 'level-up praise is queued, not timed over the chime');
+  assert.match(lesson, /audio\.play\(soundClip\(g, audio\), \{ gapMs: 300 \}\)/); // trace: sound after the chime
+  assert.match(word, /if \(!entry\.pic && !picked\) audio\.play\('sfx-chime'\)/); // never a 2nd chime after a pick
+});

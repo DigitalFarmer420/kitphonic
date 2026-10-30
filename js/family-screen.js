@@ -14,7 +14,7 @@ import { noSeen } from './seen.js';
 export function createFamilyScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen }) {
   let run = null, drag = null;
   const host = $('family'), hand = createGhostHand({ host, reduced: () => settings.reducedMotion() });
-  const say = (t, ...clips) => { $('fm-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
+  const say = (t, ...clips) => { $('fm-bubble').innerHTML = t; return audio.say(clips); }; // rc5: one phrase, cancelled by audio.stop()
   const prompt = () => say(`Pick a letter and put it in front of <b>${run.fam.rime}</b>!`, 'm-family-pick', `rime-${run.fam.rime}`);
   const tiles = () => [...$('fm-tray').children];
   const handPath = () => { if (!run || run.busy || run.made.size) return null; const s = stage.scale, t = tiles()[0], a = centerIn(t, host, s), b = centerIn($('fm-slot'), host, s);
@@ -43,7 +43,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
   }
   async function familyDone() {
     hand.stop(); const chips = [...$('fm-made').children]; $('fm-tray').classList.add('done'); // all made: the letters step aside for the chant
-    say(`You made the whole <b>${run.fam.rime}</b> family! ⭐`, 'm-family-done');
+    await say(`You made the whole <b>${run.fam.rime}</b> family! ⭐`, 'm-family-done'); if (!run) return; // milestone praise, then the chant
     await new Promise(r => setTimeout(r, 300));
     const made = [...run.made];
     for (const [i, c] of chips.entries()) { if (!run) return; c.classList.add('lit'); await audio.play(`word-${made[i]}`); c.classList.remove('lit'); }

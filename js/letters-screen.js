@@ -2,6 +2,7 @@
 import { tileText, ACTIVITIES, letterClip, roundLetters, roundTargets, staticLayout, floatInit, floatStep, hitTest, FLOAT } from './letter-logic.js';
 import { caseFor } from './word-logic.js';
 import { LETTER_INFO } from './content.js';
+import { CORRECT, CHIME_QUIET_MS, nextPraise } from './feedback.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -14,7 +15,9 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   const arena = $('l-arena'), bubble = $('l-bubble');
   let run = null, raf = 0;
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
-  const say = (text, ...clips) => { bubble.textContent = text; return clips.reduce((p, c) => p.then(() => run && audio.play(c.id ?? c, c)), Promise.resolve()); };
+  const say = (text, ...clips) => { bubble.textContent = text; return audio.say(clips.map(c => c.id ?? c)); }; // rc5: one phrase, cancelled by audio.stop()
+  const nod = () => { const m = $('l-mascot'); m.classList.remove('nod'); void m.offsetWidth; m.classList.add('nod'); };
+  let finTok = 0;
   // Arena per stage mode (item = tile centred on (x,y), sound dot below it: y-68 .. y+152).
   const box = () => { const s = stage.info, m = s.mode;
     const top = m === 'short' ? 130 : m === 'portrait' ? 220 : 170, bottom = m === 'short' ? s.h - 16 : s.h - (m === 'portrait' ? 130 : 120);
@@ -84,7 +87,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       const p = say('', 'm-find-letter', `name-${t}`).then(() => (run.promptEnd = performance.now()));
       bubble.innerHTML = `Can you find <span class="L btile">${caseFor(tileText(t), run.case)}</span>?`; return p; }
     if (run.activity === 'hunt') { // design 1a: "sss… find sss!" — the sound only, never the name
-      const p = say('', soundClip(t), 'm-find-sound', `snd-${t}`).then(() => { run && (run.promptEnd = performance.now()); idleHand(); });
+      say('', soundClip(t)); const p = audio.say(['m-find-sound', `snd-${t}`]).then(() => { run && (run.promptEnd = performance.now()); idleHand(); });
       bubble.innerHTML = `Find <b>“${LETTER_INFO[t]?.sound ?? t}”</b>!`; return p; }
     if (run.activity === 'float') return run.mode === 'name' ? say('Tap a letter to hear its name!', 'm-tap-names') : say('Tap a letter to hear its sound!', 'm-tap-sounds');
     return say(run.mode === 'nameDot' ? 'Tap a letter to hear its name. Tap a dot to hear its sound!' : 'Tap a letter or a dot to hear its sound!', run.mode === 'nameDot' ? 'm-tap-hint' : 'm-tap-hint-sound');
@@ -106,8 +109,10 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     audio.stop();
     if (right) {
       run.busy = true; node.classList.add('right'); run.score++; run.stars = (run.stars ?? 0) + 1; hideHand(); if (run.def.ear) tray();
-      audio.play('sfx-chime'); say('Yes!', ...(run.def.ear ? [soundClip(run.target), 'm-yes'] : ['m-yes']));
-      setTimeout(() => { if (!run) return; run.busy = false; run.round++; run.round < run.targets.length ? setupRound() : finish(); }, run.def.ear ? 1200 : 900);
+      // rc5: the chime only (no "Yes!", no echo); glow + Kit's nod; ~400 ms of quiet, then the next prompt
+      bubble.textContent = ''; nod(); const r0 = run;
+      audio.say(CORRECT).then(() => new Promise(r => setTimeout(r, CHIME_QUIET_MS))).then(() => {
+        if (run !== r0) return; run.busy = false; run.round++; run.round < run.targets.length ? setupRound() : finish(); });
     } else { // never a fail state: the tapped letter says what it is, then the prompt repeats
       const c = run.activity === 'find' ? `name-${it.l}` : `snd-${it.l}`, what = run.activity === 'find' ? LETTER_INFO[it.l].name : `“${LETTER_INFO[it.l].sound}”`;
       run.misses++; node.classList.remove('wob'); void node.offsetWidth; node.classList.add('wob'); // soft wobble, no red / buzzer
@@ -120,8 +125,13 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), box(), now); last = now; move(); raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
-  function finish() { const r = run; seen.mark(r.activity); stop(); $('letters').classList.remove('hunt'); $('l-tray').hidden = true; r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length }); }
-  function stop() { cancelAnimationFrame(raf); clearTimeout(handT); hideHand(); hand.stop(); run = null; audio.stop(); }
+  function finish() { // a finished scored round is a milestone: varied spoken praise, then the next activity
+    const r = run; seen.mark(r.activity); stop(); $('letters').classList.remove('hunt'); $('l-tray').hidden = true;
+    const go = () => r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length });
+    if (!r.def.scored) return go();
+    const tok = ++finTok; bubble.textContent = '⭐'; nod(); audio.play(nextPraise('letters', rand)).then(() => tok === finTok && go());
+  }
+  function stop() { finTok++; cancelAnimationFrame(raf); clearTimeout(handT); hideHand(); hand.stop(); run = null; audio.stop(); }
 
   $('l-next').onclick = () => run && finish();
   $('l-home').onclick = () => { stop(); onHome(); };

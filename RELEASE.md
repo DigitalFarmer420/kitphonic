@@ -1,13 +1,13 @@
-# Kitphonic 1.0.0-rc4 — release readiness
+# Kitphonic 1.0.0-rc5 — release readiness
 
-Version: `1.0.0-rc4` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc5` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc4:** `npm test` 168/168 (rc3: 166) · `tools/check-sizes.py` 300/300 at rc3 (50 scenes × 6 phone / tablet viewports; ~14 min; rc4 changes no layout)
+**Gate status at rc5:** `npm test` 172/172 (rc4: 168) · `tools/check-sizes.py` 300/300 at rc3 (50 scenes × 6 phone / tablet viewports; ~14 min; rc4 and rc5 change no layout — rc5 only adds Kit's nod animation)
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
-re-reads logged separately) · `tools/play-session.py` end-to-end sessions.
+re-reads logged separately) · `tools/play-session.py --audio` end-to-end sessions with real takes, **0 overlapping sounds** (rc5).
 
 > ✅ **Recorded voice (rc3).** `audio/takes/` holds **828 recorded takes** (xAI TTS, voice *Eve*, speed 1.0, the
 > owner's **upbeat** style) for every spoken clip in `audio/manifest.json`; the 2 SFX stay synthesized. All takes are
@@ -96,6 +96,46 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Phase 1 / 2 overlap — floating letters say | sounds | grown-ups setting |
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
+
+## Fixed in rc5 (owner + Uiux: overlapping sounds)
+Owner: "on a correct tap play just the one b-bing chime… remove the 'yes' praise voice. One sound is enough." Uiux
+measured ~50 ms of overlap between the chime / praise and the next prompt.
+
+**Audit (rc4, before).** Letters Find It / Sound Hunt: chime + a spoken "Yes!" (hunt: the letter sound, then "Yes!")
+started together, and the next prompt was on a 900 / 1200 ms timer, so it ran into them. Word check: chime, then the
+reveal line at 650 ms (over the chime); no-picture cards chimed twice. Star word: chime, next round on a 1100 ms timer.
+Sentence: chime + bubble "Yes!" (no voice), karaoke at 500 ms. Story: chime + bubble "Yes! The end.". Family: sound →
+rime → word, chime, next prompt on a 1300 ms timer; "family done" praise and the chant overlapped. Trace: chime +
+letter sound at 300 ms (overlap). Map level-up: chime + "Level up!" at 500 ms (overlap). Every screen chained clips with
+its own `then()` chain that `audio.stop()` could not cancel, so rapid taps stacked voices.
+
+**Now.**
+1. **One voice at a time, app-wide** (`js/audio.js`). Every clip goes through one serial queue; the next sound waits
+   for the previous one to end + 250 ms (`gapMs` overrides it: 0 for slider phonemes, 300 after a trace chime).
+   `audio.say([...])` schedules a phrase gaplessly on the audio clock (edge silence skipped, 25 ms lookahead), so
+   "Find… t" is one phrase with no gap and no overlap. `audio.stop()` (a new tap) cuts Kit off and drops the queue.
+   Rapid taps can't stack (screens ignore taps while a round is resolving; any new tap stops the old audio first).
+2. **Correct tap = the chime only** (`js/feedback.js`: `CORRECT = ['sfx-chime']`). The green glow + a new **Kit nod**
+   carry the praise. Then ~400 ms of quiet (`CHIME_QUIET_MS`), then the next prompt as one phrase. Spec: §3.8.3
+   ("short warm chime"), Find It "celebration sound and sparkle"; no spoken "Yes!" and no echo of the letter after a
+   correct letter pick.
+3. **Kept, but sequenced (spec-required).** The §3.5.2 reveal word (word check: chime → word, one chime only); the v2 S3
+   word after the check; the v2 V1 sentence read after the picture pick; the §3.3 L1 trace sound (chime → 300 ms → sound);
+   the family "made word". Each now waits in the queue — none overlaps.
+4. **Spoken praise only at milestones, varied:** the end of a scored letters round and a map level-up use
+   `nextPraise()`, which never repeats the last line (sentence / story ends keep the chime + a "Yes!" bubble, no voice;
+   the sentence read-back is the reward). The variety is drawn from the existing takes (`m-yes`, `m-level-up`,
+   `m-you-read-it`); more lines would need new recordings.
+5. **Wrong tap unchanged:** Kit names what was tapped ("That's… b"), no sfx.
+6. **Sentence nudge in the gap (Uiux).** A locked-word tap between words (old word done, next not yet current) now
+   nudges the *upcoming* word instead of nothing / the finished one. While a sound plays, the bounce shows without the
+   tap sfx (one sound at a time).
+
+**Evidence.** `tests/audio-queue.test.mjs` (fake AudioContext, exact audio-clock intervals): chime → ≥ 240 ms → prompt,
+a gapless "Find… t" joint, stop + rapid replays never stacking, and a 60-step seeded random session with peak
+concurrency 1. Headless Chrome with the real takes: a letters round (wrong tap, correct tap, 3 rapid taps, correct tap)
+shows 0 overlaps > 5 ms; `tools/play-session.py --audio` sessions (letters, lesson + trace, family, star, word,
+level-up, sentence, story) report **0 overlapping sounds**.
 
 ## Fixed in rc4 (Uiux rc3 audio review)
 - **Hello latency (medium):** Kit's hello, both SFX and the first lesson prompt (`EARLY_CLIPS` in `js/audio.js`,

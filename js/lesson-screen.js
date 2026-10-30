@@ -29,7 +29,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
   const hand = createGhostHand({ host: $('lesson'), reduced: () => settings.reducedMotion?.() });
   const at = node => centerIn(node, $('lesson'), stage.scale);
   const reduced = () => settings.reducedMotion?.();
-  const say = (text, ...clips) => { $('ls-bubble').innerHTML = text; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
+  const say = (text, ...clips) => { $('ls-bubble').innerHTML = text; return audio.say(clips); }; // rc5: one phrase, cancelled by audio.stop()
   const pebbles = (n, at) => $('ls-pebbles').replaceChildren(...Array.from({ length: n }, (_, i) => { const d = document.createElement('div'); d.className = 'peb' + (i < at ? ' on' : i === at ? ' now' : ''); return d; }));
 
   // ---- 1b letter intro ----
@@ -44,10 +44,10 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     const P = $('ic-pic'), label = word && introLabel(word, g); P.hidden = !word || (!pic && !label);
     if (!P.hidden) { P.innerHTML = (pic ? `<span class="emoji">${pic}</span>` : '') + (label ? `<span class="pw">${picWordHtml(word, gr)}</span>` : ''); P.classList.toggle('wordonly', !pic); P.setAttribute('aria-label', word); }
     const snd = soundClip(g, audio);
-    const prompt = () => dg ? say(`Two letters, one sound: <b>${gr}</b>. Tap it!`, 'm-two-letters', snd, 'm-tap-it')
-      : say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd, 'm-tap-it');
+    const prompt = () => { (dg ? say(`Two letters, one sound: <b>${gr}</b>. Tap it!`, 'm-two-letters', snd) : say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd));
+      return audio.say(['m-tap-it']); }; // rc5: queued after the phrase (+250 ms)
     $('ic-letter').onclick = () => { audio.stop(); audio.play(snd); run.taps++; hand.hide(); hand.poke(); };
-    P.onclick = () => { audio.stop(); audio.play(snd).then(() => word && audio.play(`pic-${word}`)); run.taps++; };
+    P.onclick = () => { audio.stop(); audio.say([snd]); if (word) audio.play(`pic-${word}`); run.taps++; };
     $('ic-replay').onclick = () => { audio.stop(); prompt(); };
     $('ic-next').onclick = () => { seen.mark('intro'); record({ skill: `intro:${g}`, itemId: g, correct: true, firstAttempt: true, scored: false, taps: run.taps }); finish(); };
     $('ls-again').onclick = $('ic-replay').onclick;
@@ -100,7 +100,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     svg.onpointerup = svg.onpointercancel = () => { dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
     $('tr-undo').onclick = () => { tracer.undo(); drawInk(); drawMarks(); };
     function done() {
-      rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { delayMs: 300 });
+      rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { gapMs: 300 }); // rc5: sound after the chime ends (spec §3.3 L1: trace while its sound plays)
       record({ skill: `trace:${l}`, itemId: l, correct: true, firstAttempt: true, scored: false, rep });
       inkG.querySelectorAll('.ink').forEach(p => p.setAttribute('class', 'doneink'));
       setTimeout(() => {

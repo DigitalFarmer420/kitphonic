@@ -10,13 +10,15 @@ from playwright.sync_api import sync_playwright
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--q', default='progress=4&seed=1&minutes=5')
-    ap.add_argument('--vp', default='390x844'); ap.add_argument('--shots', default=None); ap.add_argument('--timeout', type=int, default=240); a = ap.parse_args()
+    ap.add_argument('--vp', default='390x844'); ap.add_argument('--shots', default=None); ap.add_argument('--timeout', type=int, default=240)
+    ap.add_argument('--audio', action='store_true', help='unlock Web Audio (real takes) and fail if two sounds ever overlap (rc5)'); a = ap.parse_args()
     w, h = map(int, a.vp.split('x'))
     with sync_playwright() as p:
         exe = os.environ.get('CHROME') or ('/usr/bin/google-chrome' if os.path.exists('/usr/bin/google-chrome') else None)
         b = p.chromium.launch(executable_path=exe, args=['--no-sandbox', '--autoplay-policy=no-user-gesture-required']) if exe else p.chromium.launch()
         pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=False)
         pg.goto(f"{a.base}?skipHello=1&{a.q}", wait_until='networkidle'); pg.wait_for_timeout(600)
+        if a.audio: pg.evaluate('kitphonic.audio.unlock()'); pg.wait_for_timeout(300)
         if pg.locator('#go').is_visible(): pg.locator('#go').click(); pg.wait_for_timeout(500)
         plan = pg.evaluate("() => kitphonic.session && kitphonic.session.plan.items.map(i => ({type: i.type, activity: i.activity, level: i.level, why: i.why, targets: i.targets, words: i.words && i.words.map(w => w.w)}))")
         print('plan:', json.dumps(plan))
@@ -102,7 +104,13 @@ def main():
         print('screens:', ' > '.join(seen + (['done'] if done else [])))
         print(f"responses ({len(log)}):", ' '.join(log))
         print(f"{'ALL DONE' if done else 'DID NOT FINISH'} in {time.time() - t0:.0f}s")
-        b.close(); sys.exit(0 if done else 1)
+        ovl = []
+        if a.audio:  # one sound at a time: no clip may start before the previous audible clip ended (5 ms tolerance)
+            heard = sorted([e for e in pg.evaluate('() => __kitAudioLog') if e.get('end') is None or e['end'] >= e['t']], key=lambda e: e['t'])
+            ovl = [(x['id'], y['id'], round(x['end'] - y['t'])) for x, y in zip(heard, heard[1:]) if x.get('end') is not None and y['t'] < x['end'] - 5]
+            print(f"audio: {len(heard)} clips heard, overlaps: {len(ovl)} {ovl[:10]}")
+            if ovl and os.environ.get('KP_DBG'): print([(e['id'], e['t'], e.get('end')) for e in heard[:12]])
+        b.close(); sys.exit(0 if done and not ovl else 1)
 
 if __name__ == '__main__':
     main()
