@@ -72,6 +72,27 @@
     <button id="l-next" class="next" hidden aria-label="Next">▶</button>
   </section>
 
+  <section id="map" class="screen" hidden aria-label="Map">
+    <div class="top">
+      <button class="btn" id="m-home" aria-label="Home">⌂</button>
+      <div class="starchip" id="m-stars" aria-label="Stars">⭐ 0</div>
+      <button class="btn" id="m-gear" aria-label="Grown-ups (press and hold)">⚙</button>
+    </div>
+    <svg id="m-path" class="mpath"></svg>
+    <div id="m-stops"></div>
+    <div id="m-gate" hidden>Keep holding…</div>
+    <button id="go" aria-label="Start"><svg width="40" height="40" viewBox="0 0 44 44"><path d="M12 6 L38 22 L12 38Z" fill="#fff" stroke="#fff" stroke-width="4" stroke-linejoin="round"/></svg></button>
+  </section>
+
+  <section id="levelup" class="screen" hidden aria-label="Level up">
+    <div id="lv-confetti"></div>
+    <div class="lv-badge" id="lv-badge"><span>⭐</span></div>
+    <div class="lv-kit"><svg width="96" height="96"><use href="#kit"/></svg></div>
+    <div class="lv-say">You did it!</div>
+    <div class="lv-chips" id="lv-chips"></div>
+    <button id="lv-next" aria-label="Back to the map" disabled>➜</button>
+  </section>
+
   <section id="done" class="screen" hidden aria-label="All done">
     <svg width="160" height="160"><use href="#kit"/></svg>
     <div class="bubble">All done for today. Great reading!</div>

@@ -1,41 +1,87 @@
-// Kitphonic boot: hello/audio-unlock screen -> word session -> all done.
+// Kitphonic boot: hello/audio-unlock -> planned session (session runner) -> all done.
+// Dev entries: ?activity= (one letter game), ?direct=1&level=&word= (word screen only), ?progress=N[&due=1] (seeded,
+// in-memory progress), ?minutes=5..10.
 import { configFromUrl } from './config.js';
 import { createStage } from './stage.js';
 import { createAudio } from './audio.js';
 import { createWordScreen } from './word-screen.js';
 import { sessionWords, rng } from './word-logic.js';
 import { WORDS } from './content.js';
-import { createStore, skillState, blendL1Mastered } from './mastery.js';
+import { createStore, skillState, blendL1Mastered, knownGpcs } from './mastery.js';
 import { createSettings } from './settings.js';
 import { createLettersScreen } from './letters-screen.js';
 import { letterTapMode } from './letter-logic.js';
 import { LETTERS } from './core.js';
+import { planSession } from './session.js';
+import { mapState } from './progress.js';
+import { seedProgress, memoryStorage } from './dev-seed.js';
+import { createMapScreen } from './map-screen.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
-const stage = createStage($('stage'), () => window.kitphonic?.screen?.relayout?.());
+const stage = createStage($('stage'), () => { window.kitphonic?.screen?.relayout?.(); window.kitphonic?.mapScreen?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
 const audio = await createAudio({ base: 'audio/' });
-const store = createStore(window.localStorage); // local only (spec §3.9)
+// Local only (spec §3.9). Dev ?progress=N uses a seeded in-memory log so real progress is never touched.
+const storage = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
+const store = createStore(storage);
 let sessionId = null;
 const settings = createSettings(window.localStorage);
 const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; };
+const log = r => store.log({ ...r, sessionId });
+const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mode: no taught-GPC filter on word cards
 
+let session = null; // { plan, i, started, stickers }
 const screen = createWordScreen({
-  audio, cfg, rand, stage,
-  record: r => store.log({ ...r, sessionId }),
-  onDone: stickers => { $('stickers').textContent = stickers.join(' '); show('done'); audio.play('m-all-done'); },
-  onHome: () => show('hello'),
+  known, audio, cfg, rand, stage, record: log,
+  onDone: stickers => allDone(stickers),
+  onHome: () => goHome(),
 });
-const letters = createLettersScreen({ audio, cfg, rand, stage, settings, record: r => store.log({ ...r, sessionId }), onHome: () => show('hello') });
-function startActivity(activity) { // dev/testing entry: ?activity=float|find|soundTap|hunt
-  sessionId ??= `s-${Date.now()}`; show('letters');
-  letters.start({ activity, pool: LETTERS.slice(0, 6), rounds: 4, mode: letterTapMode(activity, { blendL1Mastered: blendL1Mastered(store.all()), override: cfg.letterTapMode }),
-    onComplete: () => { show('done'); audio.play('m-all-done'); } });
+const letters = createLettersScreen({ audio, cfg, rand, stage, settings, record: log, onHome: () => goHome() });
+
+const mapScreen = createMapScreen({ audio, stage, settings, getMap: () => mapState(store.all()), getResponses: () => store.all(),
+  onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
+function showMap(opts) { show('map'); mapScreen.render(opts); }
+function openParent() { /* parent view (gate passed) — built in a later step */ $('m-gate').hidden = false; $('m-gate').textContent = 'Grown-ups area coming soon'; setTimeout(() => ($('m-gate').hidden = true), 1500); }
+function goHome() { audio.stop(); letters.stop(); session = null; showMap(); }
+function allDone(stickers = session?.stickers ?? []) {
+  const before = session?.mapBefore ?? null, after = mapState(store.all());
+  session = null;
+  if (before != null && after.index > before) { // a stop was passed: level-up moment, then the path draws forward
+    show('levelup'); mapScreen.levelUp(after.stops[after.index - 1], { onBack: () => showMap({ drawFrom: before }) }); return;
+  }
+  $('stickers').textContent = stickers.join(' '); show('done'); audio.play('m-all-done');
 }
-function startSession() {
+const tapModeFor = activity => letterTapMode(activity, { blendL1Mastered: blendL1Mastered(store.all()), override: cfg.letterTapMode, floatMode: cfg.floatTapMode });
+
+// --- Session runner ---
+export function startSession() {
   if (cfg.activity) return startActivity(cfg.activity);
+  if (cfg.direct) return startDirect();
+  sessionId = `s-${Date.now()}`;
+  const plan = planSession(store.all(), { minutes: cfg.minutes, rand });
+  session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index };
+  runNext();
+}
+function runNext() {
+  if (!session) return;
+  session.i++;
+  const it = session.plan.items[session.i], overTime = performance.now() - session.started > 10 * 60e3; // hard 10-min cap
+  if (!it || overTime) return allDone();
+  if (it.type === 'letters') {
+    show('letters');
+    letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound,
+      onComplete: r => { if (r?.score) session && session.stickers.push('⭐'); runNext(); } });
+  } else if (it.type === 'words') {
+    show('word'); screen.start(it.words, it.level, { onDone: st => { session?.stickers.push(...st); runNext(); } });
+  } else runNext(); // 'star' items wait for the Star Word screen
+}
+function startActivity(activity) { // dev: one letter game
+  sessionId ??= `s-${Date.now()}`; show('letters');
+  letters.start({ activity, pool: LETTERS.slice(0, 6), rounds: 4, mode: tapModeFor(activity), onComplete: () => allDone([]) });
+}
+function startDirect() { // dev: word screen at ?level (and ?word first)
   const lv = cfg.startLevel; sessionId = `s-${Date.now()}`;
   let list = sessionWords(lv, { rand });
   if (cfg.word) { const e = Object.values(WORDS).flat().find(x => x.w === cfg.word); if (e) list = [e, ...list.filter(x => x.w !== e.w)].slice(0, list.length); }
@@ -47,13 +93,16 @@ $('play').onclick = async () => {
   await audio.unlock();
   $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!";
   await audio.play(cfg.hello.greetingClip);
-  startSession();
+  cfg.activity || cfg.direct ? startSession() : showMap(); // the map is home
 };
 $('speaker').onclick = async () => { // sound check + silent-mode tip
   await audio.unlock(); audio.play('sfx-chime');
   const tip = $('tip'); tip.textContent = cfg.silentTip; tip.hidden = !tip.hidden;
 };
-$('done-home').onclick = () => show('hello');
+$('done-home').onclick = () => showMap();
 
-window.kitphonic = { cfg, audio, screen, letters, settings, startSession, startActivity, store, skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
-if (!cfg.hello.show) { show('word'); startSession(); } else show('hello');
+window.kitphonic = { cfg, audio, screen, letters, settings, mapScreen, showMap, startSession, startActivity, store, get session() { return session; },
+  map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
+if (cfg.levelup) { const m = mapState(store.all()); if (m.index > 0) { show('levelup'); mapScreen.levelUp(m.stops[m.index - 1], { onBack: () => showMap({ drawFrom: m.index - 1 }) }); } else showMap(); } // dev
+else if (!cfg.hello.show) cfg.activity || cfg.direct ? startSession() : showMap();
+else show('hello');

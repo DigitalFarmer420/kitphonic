@@ -8,7 +8,8 @@ export const CONFIG = {
   // Picture check (§3.5.2): only picturable words with a minimal-pair picture get one; others (sat, top…) get a
   // spoken sentence. Never at L1 unless checkAtL1 (review R8 / spec open question 1).
   checkPictureWords: true,      // false = never show the check                     (?check=0)
-  checkAtL1: false,             //                                                  (?checkL1=1)
+  checkAtL1: false,
+  wordCardCheck: true,          // no picture check -> printed minimal-pair word cards so the read is still scored (?cards=0)             //                                                  (?checkL1=1)
   choicesPerCheck: 3,           // 2–3 per spec
   // Distractors (review R8): 'minimal' = differ by exactly one phoneme, contrast position rotates onset/vowel/final.
   // Legacy: 'rhyme' = same rime, first sound differs (hat/mat/cat); 'vowel' = middle vowel first.  (?choices=)
@@ -18,6 +19,9 @@ export const CONFIG = {
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
   sweepGapMs: 180,
+  minutes: 7,                   // session length target, clamped 5–10 (?minutes=)
+  progress: undefined,          // dev: start with N map stops passed, in-memory log (?progress=N, ?due=1)
+  floatTapMode: 'sound',        // Floating Letters: 'sound' (default, spec: early taps = sound) | 'name'   (?floatMode=)
   letterTapMode: undefined,     // Phase 2 letter activities: undefined = automatic (sound -> nameDot after L1 mastery)  (?letterMode=)
 };
 
@@ -28,6 +32,12 @@ export function configFromUrl(search = '') {
   if (q.get('voice')) c.voice = q.get('voice');
   if (q.get('check') === '0') c.checkPictureWords = false;
   if (q.get('checkL1') === '1') c.checkAtL1 = true;
+  if (q.get('cards') === '0') c.wordCardCheck = false;
+  if (q.get('minutes')) c.minutes = +q.get('minutes');
+  if (q.get('progress')) c.progress = +q.get('progress');
+  if (q.get('due') === '1') c.due = true;
+  if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
+  if (q.get('direct') === '1' || q.get('word') || q.get('level')) c.direct = true; // dev: word screen only
   if (q.get('choices')) for (const k in c.choiceStrategy) c.choiceStrategy[k] = q.get('choices');
   if (q.get('mode')) for (const k in c.tapMode) c.tapMode[k] = q.get('mode');
   if (q.get('l1')) c.markerOpts.l1 = q.get('l1');
@@ -36,6 +46,7 @@ export function configFromUrl(search = '') {
   c.seed = q.get('seed') ? +q.get('seed') : undefined;
   c.word = q.get('word') || undefined;
   c.activity = q.get('activity') || undefined;
+  if (q.get('floatMode')) c.floatTapMode = q.get('floatMode');
   if (q.get('letterMode')) c.letterTapMode = q.get('letterMode');
   return c;
 }

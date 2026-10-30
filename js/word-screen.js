@@ -3,15 +3,15 @@ import { createSweep, attached } from './core.js';
 import { guessGuard } from './mastery.js';
 import { wordLayout, layoutFor } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip,
-  makeChoices, reshuffle, needsCheck, caseFor } from './word-logic.js';
+  makeChoices, wordCards, reshuffle, needsCheck, caseFor } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const picHtml = pic => pic?.startsWith('#') ? `<svg viewBox="0 0 120 100"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`;
 
-export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, record = () => {} }) {
+export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {} }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
-  let trial = null, sweepStart = null, blendEndAt = 0;
+  let runDone = null, trial = null, sweepStart = null, blendEndAt = 0;
   let checkTrial = 0, entry, level, ms, layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
@@ -40,7 +40,8 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
     $('next').hidden = true; $('check').hidden = true;
     sweep = createSweep(ms, { gapMs: cfg.sweepGapMs }); setHandle(0); light([]);
     trial = { picks: 0, assisted: false, scored: true }; sweepStart = null;
-    choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: cfg.choiceStrategy[level], trial: checkTrial++ }) : null;
+    choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: cfg.choiceStrategy[level], trial: checkTrial++ })
+      : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.() }) : null;
     state = 'slide'; renderPebbles();
     say('Slide your finger under the word.', { id: 'm-slide-intro' });
   }
@@ -107,12 +108,14 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
   function showCheck() {
     state = 'check'; $('check').hidden = false;
     $('check-word').textContent = caseFor(entry.w, cfg.tileCase);
-    $('check-bubble').innerHTML = `Which picture is <i>${entry.w}</i>?`;
+    const cards = !!choices.cards; $('check-word').hidden = cards;
+    $('check-bubble').innerHTML = cards ? 'Which word did you read?' : `Which picture is <i>${entry.w}</i>?`;
     $('choices').replaceChildren(...choices.map(c => {
-      const b = el('button', 'choice', picHtml(c.pic)); b.dataset.w = c.w; b.setAttribute('aria-label', c.w);
+      const b = el('button', 'choice' + (cards ? ' wcard L' : ''), cards ? caseFor(c.w, cfg.tileCase) : picHtml(c.pic)); b.dataset.w = c.w; b.setAttribute('aria-label', c.w);
       b.onclick = () => pick(c, b); return b;
     }));
-    audio.play('m-which-picture').then(() => state === 'check' && audio.play(`word-${entry.w}`));
+    // word cards: the word is not spoken again (the child just heard their own blend), so the pick is a reading check
+    if (cards) audio.play('m-which-word'); else audio.play('m-which-picture').then(() => state === 'check' && audio.play(`word-${entry.w}`));
   }
   function pick(c, btn) {
     if (state !== 'check') return; audio.stop();
@@ -153,7 +156,7 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
   }
   function next() {
     audio.stop(); idx++;
-    if (idx >= words.length) { state = 'done'; onDone(stickers); return; }
+    if (idx >= words.length) { state = 'done'; (runDone ?? onDone)(stickers); return; }
     entry = words[idx]; render();
   }
 
@@ -167,7 +170,7 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
 
   return {
     relayout() { if (entry && state === 'slide') render(); },
-    start(list, lv) { words = list; level = lv; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; words = list; level = lv; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

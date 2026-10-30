@@ -79,6 +79,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .choice{width:180px;height:150px;border-radius:24px;background:#fff;border:3px solid var(--line);box-shadow:0 5px 0 var(--line);
   display:flex;align-items:center;justify-content:center;font-size:88px;transition:transform .2s}
 .choice svg{width:130px;height:110px}
+.choice.wcard{font-size:64px;width:170px;height:120px}
+.short .choice.wcard{font-size:56px;width:150px;height:110px}
+.portrait .choice.wcard{font-size:48px;width:116px;height:104px}
+.ptab .choice.wcard{font-size:60px;width:170px;height:120px}
 .choice.right{border-color:var(--honey);box-shadow:0 0 0 8px rgba(242,185,80,.35),0 5px 0 var(--honey);transform:scale(1.05)}
 
 /* done */
@@ -89,11 +93,59 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* letter activities: item = tile centred on its point, sound dot below */
 #l-mascot{left:40px;top:96px}
 #l-mascot .bubble{max-width:520px}
+.bubble .btile{display:inline-flex;align-items:center;justify-content:center;min-width:1.6em;height:1.6em;padding:0 .2em;margin:0 .15em;border:2px solid var(--line);border-radius:10px;background:#fff;font-size:1.5em;vertical-align:middle;line-height:1}
 #l-arena{position:absolute;inset:0}
 .ltr{position:absolute;width:0;height:0}
 .ltr .tile{position:absolute;left:-60px;top:-68px;width:120px;height:136px}
 .ltr .ldot{position:absolute;left:-36px;top:80px;width:72px;height:72px;border-radius:50%;background:var(--sky);box-shadow:0 4px 0 var(--skyd);display:flex;align-items:center;justify-content:center}
 .ltr.right .tile{border-color:var(--honey);box-shadow:0 0 0 8px rgba(242,185,80,.35),0 5px 0 var(--honey)}
+
+/* ---- learning map (home) — design/map-mockup ---- */
+#map{background:var(--cream)}
+.starchip{font-family:'Fredoka';font-size:24px;background:#fff;border:2px solid var(--line);border-radius:28px;padding:10px 20px}
+.mpath{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none}
+.mpath .done{fill:none;stroke:var(--sage);stroke-width:18;stroke-linecap:round;stroke-linejoin:round}
+.mpath .ahead{fill:none;stroke:#EADBC4;stroke-width:16;stroke-linecap:round;stroke-dasharray:0 28}
+.mpath .draw{fill:none;stroke:var(--sage);stroke-width:18;stroke-linecap:round;animation:draw 1.2s ease-in-out forwards}
+@keyframes draw{from{stroke-dashoffset:var(--len)}to{stroke-dashoffset:0}}
+.stop{position:absolute;width:76px;height:76px;margin:-38px 0 0 -38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-family:'Andika';font-weight:700;font-size:30px;box-shadow:0 5px 0 rgba(0,0,0,.12);transition:transform .2s}
+.stop.passed{background:var(--sage);color:#fff}
+.stop.upcoming{background:#EADBC4;color:#b7a690}
+.stop.current{background:var(--honey);color:var(--ink);width:104px;height:104px;margin:-52px 0 0 -52px;font-size:36px;
+  box-shadow:0 0 0 12px rgba(242,185,80,.3),0 6px 0 #c9922f;animation:glow 2.4s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 20px rgba(242,185,80,.18),0 6px 0 #c9922f}}
+.stop .st{position:absolute;top:-12px;right:-8px;font-size:22px}
+.stop .emoji{font-size:34px}
+.mlabel{position:absolute;font-size:13px;font-weight:700;color:var(--muted);width:104px;text-align:center;pointer-events:none;line-height:1.2}
+.mkit{position:absolute;width:64px;height:64px;margin:-32px 0 0 -32px;pointer-events:none;transition:left 1.2s ease-in-out,top 1.2s ease-in-out}
+#go{position:absolute;left:50%;bottom:22px;width:200px;height:72px;margin-left:-100px;border-radius:36px;background:var(--coral);
+  box-shadow:0 6px 0 #c96a4f;display:flex;align-items:center;justify-content:center;z-index:6}
+#go:active{transform:translateY(3px);box-shadow:0 3px 0 #c96a4f}
+#m-gate{position:absolute;top:96px;right:18px;background:#5B4A40;color:#fff;font-size:14px;font-weight:700;padding:8px 12px;border-radius:12px;z-index:7}
+#m-gate[hidden]{display:none}
+
+/* ---- level-up moment ---- */
+#levelup{background:radial-gradient(circle at 50% 34%,#FFE7A8 0,var(--cream) 62%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding-bottom:110px}
+#levelup[hidden]{display:none}
+.lv-badge{width:180px;height:180px;border-radius:50%;background:var(--honey);display:flex;align-items:center;justify-content:center;font-size:96px;
+  box-shadow:0 0 0 16px rgba(242,185,80,.35),0 8px 0 #c9922f;animation:fly .9s cubic-bezier(.2,1.3,.4,1) both}
+@keyframes fly{0%{transform:translateY(160px) scale(.35);opacity:.2}100%{transform:none;opacity:1}}
+.lv-kit{animation:bounce 1s ease-in-out .6s 2}
+@keyframes bounce{50%{transform:translateY(-14px)}}
+.lv-say{font-family:'Fredoka';font-size:32px}
+.lv-chips{display:flex;gap:12px}
+.lv-chip{min-width:96px;height:72px;padding:0 16px;border-radius:18px;background:#fff;border:3px solid var(--line);box-shadow:0 4px 0 var(--line);font-size:40px}
+#lv-next{position:absolute;left:50%;bottom:22px;width:220px;height:80px;margin-left:-110px;border-radius:40px;background:var(--sage);color:#fff;font-size:44px;
+  box-shadow:0 6px 0 var(--saged);display:flex;align-items:center;justify-content:center;transition:opacity .3s}
+#lv-next:disabled{opacity:.45}
+.conf{position:absolute;font-size:28px;animation:conf 2.6s ease-out forwards;pointer-events:none}
+@keyframes conf{0%{transform:translateY(-40px) rotate(0);opacity:0}15%{opacity:1}100%{transform:translateY(var(--fall)) rotate(var(--rot));opacity:0}}
+.short #levelup{flex-direction:row;flex-wrap:wrap;gap:12px 28px;padding:0 0 100px;align-content:center}
+.short .lv-badge{width:130px;height:130px;font-size:70px}
+.short .lv-kit svg{width:72px;height:72px}
+.short .lv-say{width:100%;text-align:center;order:-1;font-size:28px}
+.short #levelup .lv-chips{width:auto}
 
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 .reduced *{animation:none!important;transition:none!important}
@@ -115,9 +167,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .portrait #next,.portrait .next{right:auto;left:50%;margin-left:-48px;bottom:10px}
 .portrait #check{padding-top:clamp(100px, calc(var(--h) * .15), 200px)}
 .portrait #check .cword{font-size:72px}
-.portrait #choices{flex-wrap:wrap;justify-content:center;gap:14px;max-width:380px}
-.portrait .choice{width:150px;height:130px;font-size:76px}
-.portrait .choice svg{width:110px;height:92px}
+.portrait #choices{justify-content:center;gap:12px;max-width:380px}
+.portrait .choice{width:116px;height:124px;font-size:64px}
+.portrait .choice svg{width:96px;height:80px}
 .portrait #l-mascot{left:14px;top:96px}
 .portrait #l-mascot .bubble{max-width:290px;font-size:17px}
 .portrait .ltr .tile{left:-55px;top:-62px;width:110px;height:124px;font-size:80px}

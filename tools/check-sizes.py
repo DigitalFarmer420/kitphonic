@@ -19,10 +19,18 @@ SCENES = [  # name, query, js to run after load
     ('word-map', 'skipHello=1&level=2&word=map&seed=1', None),
     ('word-stop', 'skipHello=1&level=4&word=stop&seed=1', None),
     ('check', 'skipHello=1&level=2&word=mat&seed=1', "kitphonic.screen.debugShow('check')"),
+    ('cards', 'skipHello=1&level=1&word=at&seed=1', "kitphonic.screen.debugShow('check')"),
+    ('map', 'skipHello=1&progress=5&seed=1', None),
+    ('map-start', 'skipHello=1&progress=0&seed=1', None),
+    ('map-end', 'skipHello=1&progress=12&seed=1', None),
+    ('levelup', 'skipHello=1&progress=5&levelup=1&seed=1', "new Promise(r => setTimeout(r, 1800))"),
+    ('session', 'skipHello=1&progress=5&seed=1', "document.getElementById('go').click()"),
     ('reveal', 'skipHello=1&level=2&word=mat&seed=1', "kitphonic.screen.debugShow('revealed')"),
     ('letters-hunt', 'skipHello=1&activity=hunt&seed=1', None),
     ('letters-tap', 'skipHello=1&activity=soundTap&seed=1', None),
     ('letters-find', 'skipHello=1&activity=find&seed=1', None),
+    ('letters-float', 'skipHello=1&activity=float&seed=1', None),
+    ('letters-float-4s', 'skipHello=1&activity=float&seed=2', "new Promise(r => setTimeout(r, 4000))"),
 ]
 MEASURE = r"""() => {
   const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
@@ -32,14 +40,15 @@ MEASURE = r"""() => {
   const root = overlay || scr;
   const box = e => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
   const name = e => e.id ? '#' + e.id : (e.className.baseVal ?? e.className).split(' ')[0] + (e.getAttribute('aria-label') ? `[${e.getAttribute('aria-label')}]` : '');
-  const targets = [...root.querySelectorAll('button, #handle, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
+  const targets = [...root.querySelectorAll('button, #handle, .stop, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
     .filter(vis).filter(e => !(e.classList.contains('marker'))) // a marker button's visible shape is its .dot/.bar
     .map(e => ({ name: name(e), knob: e.id === 'handle', play: e.id === 'play', ...box(e) }));
-  const key = overlay ? [] : [...scr.querySelectorAll('#card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
+  const key = overlay ? [] : [...scr.querySelectorAll('.stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
     .filter(vis).map(e => ({ name: name(e), ...box(e) }));
+  const ltr = [...root.querySelectorAll('.ltr .tile, .choice')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();
   const h = document.getElementById('handle');
-  return { screen: scr.id, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  return { screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 def overlaps(a, b, pad=2):
@@ -59,6 +68,11 @@ def check(m, vp, scene):
             a, b = k[i], k[j]
             if a['name'] == b['name'] == 'tile' and False: continue
             if overlaps(a, b): errs.append(f"overlap {a['name']} / {b['name']}")
+    if m['ltr'] and 'float' not in scene:  # balanced grid: rows differ by <= 1, never a lone tile (Uiux r2)
+        rows = {}
+        for y in m['ltr']: rows[y] = rows.get(y, 0) + 1
+        c = list(rows.values())
+        if len(c) > 1 and (min(c) == 1 or max(c) - min(c) > 1): errs.append(f"unbalanced grid {c}")
     if m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
     if m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")
     if m['handle'] and m['vh'] > m['vw']:

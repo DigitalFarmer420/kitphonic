@@ -93,6 +93,16 @@ export function makeChoices(word, { n = 3, rand = Math.random, strategy = 'minim
 // config.checkAtL1 (review R8 / open question 1). Others get Kit's spoken sentence instead.
 export const needsCheck = (entry, cfg = {}, level = entry.level) =>
   !!entry.pic && cfg.checkPictureWords !== false && (level > 1 || !!cfg.checkAtL1) && minimalPairs(entry.w).length > 0;
+// Printed word-card check for words without a picture check (L1 VC words, sat, top…): the child picks the word they
+// just read from minimal-pair printed words (one letter different). opts.known: only words with taught GPCs.
+export function wordCards(word, { n = 3, rand = Math.random, known = null } = {}) {
+  const all = [...new Map(Object.values(WORDS).flat().map(e => [e.w, e])).values()];
+  const ok = e => !known || e.parse.split(' ').every(g => known.has(g));
+  const diff1 = w => w.length === word.length && [...w].filter((c, i) => c !== word[i]).length === 1;
+  const others = shuffle(all.filter(e => e.w !== word && diff1(e.w) && ok(e)), rand).slice(0, n - 1).map(e => ({ w: e.w, card: true }));
+  if (!others.length) return null;
+  const res = shuffle([{ w: word, card: true }, ...others], rand); res.cards = true; res.contrast = null; return res;
+}
 export const caseFor = (text, tileCase = 'lower') => tileCase === 'upper' ? text.toUpperCase() : text.toLowerCase();
 
 // Session: SESSION_WORDS words from a level, shuffled, no immediate repeats across a wrap.

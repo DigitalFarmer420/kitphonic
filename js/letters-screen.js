@@ -17,6 +17,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const top = m === 'short' ? 130 : m === 'portrait' ? 220 : 170, bottom = m === 'short' ? s.h - 16 : s.h - (m === 'portrait' ? 130 : 120);
     return { left: 20, right: s.w - 20, top, bottom }; };
   const cellW = n => { const s = stage.info, per = s.w < 700 ? 3 : 6; return Math.min(150, Math.floor((s.w - 40) / Math.min(per, n))); };
+  const tileHalf = () => { const m = stage.info.mode, pt = m === 'portrait' && stage.info.w < 600; return m === 'short' || pt ? [55, 62] : [60, 68]; };
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('letters').append(c); setTimeout(() => c.remove(), 1300); };
 
   function renderPebbles() {
@@ -39,16 +40,18 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const target = run.targets[run.round];
     const letters = run.def.drift || run.activity === 'soundTap' ? run.pool.slice(0, 6) : roundLetters(target, run.pool, { n: run.n, rand });
     const b = box();
-    if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand });
+    if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() });
     else { const pos = staticLayout(letters.length, { w: stage.info.w, top: b.top, cellW: cellW(letters.length), cellH: stage.info.mode === 'short' ? 220 : stage.info.mode === 'portrait' ? 232 : 210 }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
     run.target = target; run.firstTry = true; run.promptEnd = 0; place(run.items); renderPebbles();
     prompt();
   }
   function prompt() {
     const t = run.target;
-    if (run.activity === 'find') return say(`Can you find ${LETTER_INFO[t].name}?`, 'm-find-letter', `name-${t}`).then(() => (run.promptEnd = performance.now()));
+    if (run.activity === 'find') { // target shown lowercase in the tile font (Uiux r2: no caps, no l/I ambiguity)
+      const p = say('', 'm-find-letter', `name-${t}`).then(() => (run.promptEnd = performance.now()));
+      bubble.innerHTML = `Can you find <span class="L btile">${caseFor(t, run.case)}</span>?`; return p; }
     if (run.activity === 'hunt') return say(`Find the letter that says “${LETTER_INFO[t].sound}”.`, 'm-hunt-sound', `snd-${t}`).then(() => (run.promptEnd = performance.now()));
-    if (run.activity === 'float') return say('Tap a letter to hear its name!', 'm-tap-names');
+    if (run.activity === 'float') return run.mode === 'name' ? say('Tap a letter to hear its name!', 'm-tap-names') : say('Tap a letter to hear its sound!', 'm-tap-sounds');
     return say(run.mode === 'nameDot' ? 'Tap a letter to hear its name. Tap a dot to hear its sound!' : 'Tap a letter or a dot to hear its sound!', run.mode === 'nameDot' ? 'm-tap-hint' : 'm-tap-hint-sound');
   }
   function tap(it, target, node) {
