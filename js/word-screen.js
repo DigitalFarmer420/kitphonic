@@ -9,7 +9,9 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const picHtml = pic => pic?.startsWith('#') ? `<svg viewBox="0 0 120 100"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`;
 
-export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {} }) {
+import { createGhostHand, centerIn } from './ghost-hand.js';
+import { noSeen } from './seen.js';
+export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
   let runDone = null, trial = null, sweepStart = null, blendEndAt = 0;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
@@ -45,7 +47,10 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: cfg.choiceStrategy[level], trial: checkTrial++ })
       : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.() }) : null;
     state = 'slide'; renderPebbles();
-    say('Slide your finger under the word.', { id: 'm-slide-intro' });
+    say('Slide your finger under the word.', { id: 'm-slide-intro' }).then(() => {
+      if (state !== 'slide') return; // ghost hand drags the knob along the track: first words ever + after 5 s idle
+      hand.start(handPath, { now: idx === 0 && seen.demo('slide') });
+    });
   }
   function light(lit, glowIdx) {
     const litLetters = new Set(lit.flatMap(i => range(ms[i].start, ms[i].end)));
@@ -68,6 +73,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   const toStage = e => stage.toStage(e);
   const sliderY = () => $('slider').offsetTop + $('slider').offsetHeight / 2; // handle centre, whatever the orientation
   function onDown(e) {
+    hand.hide(); hand.poke();
     if (state !== 'slide') return;
     const p = toStage(e), hx = layout.knobX(sweep.position);
     if (Math.abs(p.x - hx) > 70 || !attached(p.y - sliderY(), 70)) return; // must grab the handle (64pt + padding)
@@ -90,7 +96,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
         audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs });
         light(sweep.lit, ev.marker);
       } else if (ev.kind === 'blend') {
-        state = 'blending'; dragging = null;
+        state = 'blending'; dragging = null; hand.stop();
         const sweepMs = performance.now() - (sweepStart ?? performance.now());
         if (trial.picks === 0) Object.assign(trial, { sweepMs, scored: guessGuard({ sweepMs, phonemes: ms.length }).scored });
         if (!guessGuard({ sweepMs, phonemes: ms.length }).scored) audio.play('m-slide-slowly'); // gentle prompt; not scored
@@ -158,16 +164,19 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   }
   function next() {
     audio.stop(); idx++;
-    if (idx >= words.length) { state = 'done'; (runDone ?? onDone)(stickers); return; }
+    if (idx >= words.length) { state = 'done'; hand.stop(); seen.mark('slide'); (runDone ?? onDone)(stickers); return; }
     entry = words[idx]; render();
   }
 
+  const hand = createGhostHand({ host: $('word'), reduced });
+  const handPath = () => { if (state !== 'slide' || dragging) return null; const s = stage.scale, [x, y] = centerIn(handle, $('word'), s);
+    return [[x, y + 20], [layout.knobX(0.5), y + 20], [layout.knobX(1), y + 20]]; };
   handle.addEventListener('pointerdown', onDown);
   $('slider').addEventListener('pointerdown', onDown);
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
   $('next').onclick = next;
-  $('home').onclick = () => { audio.stop(); onHome(); };
+  $('home').onclick = () => { audio.stop(); hand.stop(); onHome(); };
   $('again').onclick = () => { audio.stop(); state === 'check' ? audio.play('m-which-picture').then(() => audio.play(`word-${entry.w}`)) : audio.play(state === 'revealed' ? `reveal-${entry.w}` : 'm-slide-intro'); };
 
   return {

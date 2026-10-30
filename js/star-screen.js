@@ -8,6 +8,8 @@ import { markers, markerPositions, createSweep, graphemeUnits } from './core.js'
 import { wordLayout, layoutFor } from './layout.js';
 import { clipForMarker, clipForBlend, shuffle, caseFor } from './word-logic.js';
 import { guessGuard } from './mastery.js';
+import { createGhostHand, centerIn } from './ghost-hand.js';
+import { noSeen } from './seen.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -23,8 +25,9 @@ export function starChoices(w, { n = 3, rand = Math.random, known = null } = {})
 }
 export const starHtml = s => s.parse.map(p => typeof p === 'string' ? p : `<span class="irr">${p.g}</span>`).join('');
 
-export function createStarScreen({ audio, rand = Math.random, record = () => {}, onHome, cfg = {}, known = () => null }) {
+export function createStarScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, known = () => null, seen = noSeen, reduced = () => false }) {
   let run = null;
+  const hand = createGhostHand({ host: $('star'), reduced }); // hovers over ALL cards in turn — never just the answer
   const say = (t, ...clips) => { $('st-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
   function round() {
     const s = run.star, choices = starChoices(s.w, { rand, known: known() });
@@ -32,10 +35,11 @@ export function createStarScreen({ audio, rand = Math.random, record = () => {},
     run.first = true; run.shownAt = 0;
     $('st-pebbles').replaceChildren(...Array.from({ length: STAR_ROUNDS }, (_, i) => el('div', 'peb' + (i < run.round ? ' on' : i === run.round ? ' now' : ''))));
     $('st-cards').replaceChildren(...choices.map(c => { const b = el('button', 'wcard2 L', c === 'I' ? 'I' : caseFor(c, cfg.tileCase)); b.dataset.w = c; b.setAttribute('aria-label', c); b.onclick = () => pick(c, b); return b; }));
-    say(`Find <b>${s.w}</b>!`, 'm-find-word', `star-${s.w}`).then(() => run && (run.shownAt = performance.now()));
+    say(`Find <b>${s.w}</b>!`, 'm-find-word', `star-${s.w}`).then(() => { if (!run) return; run.shownAt = performance.now();
+      hand.start(() => run && !run.busy ? [...$('st-cards').children].map(c => { const [x, y] = centerIn(c, $('star'), stage?.scale ?? 1); return [x, y + 30]; }) : null, { now: run.round === 0 && seen.demo('star') }); });
   }
   function pick(c, b) {
-    if (!run || run.busy) return; audio.stop();
+    if (!run || run.busy) return; audio.stop(); hand.hide(); hand.poke();
     const right = c === run.star.w, lat = run.shownAt ? performance.now() - run.shownAt : null;
     if (run.first) record({ skill: `star:${run.star.w}`, itemId: run.star.w, correct: right, firstAttempt: true, assisted: false, latencyMs: lat && Math.round(lat), fast: guessGuard({ pickLatencyMs: lat ?? 9999 }).fast });
     run.first = false;
@@ -43,8 +47,8 @@ export function createStarScreen({ audio, rand = Math.random, record = () => {},
     run.busy = true; b.classList.add('right'); audio.play('sfx-chime'); $('st-word').classList.remove('away');
     setTimeout(() => { if (!run) return; run.busy = false; run.round++; run.round < STAR_ROUNDS ? round() : finish(); }, 1100);
   }
-  function finish() { const r = run; run = null; audio.stop(); r?.onComplete?.({}); }
-  $('st-home').onclick = () => { run = null; audio.stop(); onHome(); };
+  function finish() { const r = run; run = null; hand.stop(); seen.mark('star'); audio.stop(); r?.onComplete?.({}); }
+  $('st-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
   $('st-again').onclick = () => run && (audio.stop(), audio.play(`star-${run.star.w}`));
   return {
     start({ word, onComplete }) {
@@ -58,8 +62,13 @@ export function createStarScreen({ audio, rand = Math.random, record = () => {},
   };
 }
 
-export function createSentenceScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {} }) {
+export function createSentenceScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen, reduced = () => false }) {
   let run = null, dragging = null;
+  const hand = createGhostHand({ host: $('sentence'), reduced });
+  const handPath = () => { if (!run || run.reading || dragging) return null; const at = n => centerIn(n, $('sentence'), stage.scale), t = run.tokens[run.i];
+    if (!t) return $('sn-read').disabled ? null : [at($('sn-read')), at($('sn-read'))];
+    if (t.kind === 'star') { const c = at(chips()[run.i]); return [c, [c[0], c[1] + 10]]; }
+    if (!run.ms) return null; const [x, y] = at($('sn-handle')); return [[x, y + 20], [run.layout.knobX(0.5), y + 20], [run.layout.knobX(1), y + 20]]; };
   const say = (t, ...clips) => { $('sn-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
   const chips = () => [...$('sn-strip').children];
   function paint() { chips().forEach((c, i) => { c.classList.toggle('cur', i === run.i); c.classList.toggle('done', i < run.i); }); }
@@ -70,7 +79,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   }
   const blending = on => $('sentence').classList.toggle('blending', on);
   function next() {
-    paint(); const t = run.tokens[run.i];
+    paint(); const t = run.tokens[run.i]; hand.hide(); hand.poke();
     if (!t) return allRead();
     if (t.kind === 'star') { // gold, tap to hear, no slider
       blending(false); $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
@@ -114,12 +123,12 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     $('sn-card').className = 'revealed'; $('sn-card').innerHTML = picHtml(run.sent.pic); audio.play('sfx-chime');
     record({ skill: `sentence:${run.sent.id}`, itemId: run.sent.id, correct: true, firstAttempt: true, scored: false });
     await audio.play(`sent-${run.sent.id}`);
-    setTimeout(() => { const r = run; run = null; r?.onComplete?.({}); }, 900);
+    setTimeout(() => { const r = run; run = null; hand.stop(); seen.mark('sentence'); r?.onComplete?.({}); }, 900);
   }
-  $('sn-handle').addEventListener('pointerdown', e => { if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
+  $('sn-handle').addEventListener('pointerdown', e => { hand.hide(); hand.poke(); if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
   addEventListener('pointermove', onMove); addEventListener('pointerup', () => { dragging = null; run?.sweep?.lift?.(); });
   $('sn-read').onclick = readAll;
-  $('sn-home').onclick = () => { run = null; audio.stop(); onHome(); };
+  $('sn-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
   $('sn-again').onclick = () => run && (audio.stop(), audio.play(run.tokens[run.i]?.clip ?? `sent-${run.sent.id}`));
   return {
     start({ sentence, onComplete }) {
@@ -133,7 +142,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
         return c;
       }));
       blending(false); fitLine();
-      say("Let's read it together!", 'm-read-together').then(() => run && next());
+      say("Let's read it together!", 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
     },
     get run() { return run; },
     relayout() { if (!run) return; fitLine(); if (run.ms) blendWord(run.tokens[run.i]); },

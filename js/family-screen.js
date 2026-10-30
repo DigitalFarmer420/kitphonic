@@ -10,7 +10,8 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const picOf = e => !e.pic ? null : e.pic.startsWith('#') ? `<svg width="140" height="100"><use href="${e.pic}"/></svg>` : `<span class="emoji">${e.pic}</span>`;
 
-export function createFamilyScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, cfg = {} }) {
+import { noSeen } from './seen.js';
+export function createFamilyScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen }) {
   let run = null, drag = null;
   const host = $('family'), hand = createGhostHand({ host, reduced: () => settings.reducedMotion() });
   const say = (t, ...clips) => { $('fm-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
@@ -48,7 +49,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     for (const [i, c] of chips.entries()) { if (!run) return; c.classList.add('lit'); await audio.play(`word-${made[i]}`); c.classList.remove('lit'); }
     if (!run) return; const st = el('div', 'fchip star', '⭐ ' + run.fam.rime); $('fm-made').append(st); audio.play('sfx-chime');
     record({ skill: `family:${run.fam.rime}`, itemId: run.fam.rime, correct: true, firstAttempt: true, scored: false, made: run.made.size });
-    setTimeout(() => { const r = run; run = null; hand.stop(); r?.onComplete?.({}); }, 1200);
+    setTimeout(() => { const r = run; run = null; hand.stop(); seen.mark('family'); r?.onComplete?.({}); }, 1200);
   }
   const pebbles = () => $('fm-pebbles').replaceChildren(...run.fam.words.map((_, i) => el('div', 'peb' + (i < run.made.size ? ' on' : i === run.made.size ? ' now' : ''))));
   // drag: pointer moves a floating copy; dropping near the slot places it. A press without movement = tap-to-select.
@@ -84,7 +85,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
       $('fm-tray').replaceChildren(...shuffle(family.words.map(x => x.onset), rand).map(g => { const t = el('button', 'ftile L', caseFor(GPC[g].grapheme, cfg.tileCase)); t.dataset.g = g;
         t.setAttribute('aria-label', GPC[g].grapheme); t.onpointerdown = e => down(e, t); return t; }));
       pebbles();
-      prompt().then(() => { if (!run) return; run.busy = false; hand.start(handPath); });
+      prompt().then(() => { if (!run) return; run.busy = false; hand.start(handPath, { now: seen.demo('family') }); });
     },
     stop() { run = null; hand.stop(); },
     get run() { return run; },

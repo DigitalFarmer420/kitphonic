@@ -2,7 +2,7 @@
 // Points are stage px inside `host`. Reduced motion: the hand appears at the first point only, then fades.
 export const centerIn = (node, host, scale) => { const a = node.getBoundingClientRect(), b = host.getBoundingClientRect(); return [(a.left + a.width / 2 - b.left) / scale, (a.top + a.height / 2 - b.top) / scale]; };
 export function createGhostHand({ host, reduced = () => false, idleMs = 5000 }) {
-  let h = null, timers = [], idleT = 0, pathFn = null;
+  let h = null, timers = [], idleT = 0, pathFn = null, opts = {};
   const place = ([x, y]) => { h.style.left = x + 'px'; h.style.top = y + 'px'; };
   const hide = () => { timers.forEach(clearTimeout); timers = []; h?.remove(); h = null; };
   function play(points, { stepMs = 900 } = {}) {
@@ -16,8 +16,8 @@ export function createGhostHand({ host, reduced = () => false, idleMs = 5000 }) 
   const api = {
     play, hide,
     // first: show now; then every interaction calls poke() to restart the idle timer
-    start(fn, { now = true } = {}) { pathFn = fn; if (now) play(fn()); api.poke(); },
-    poke() { clearTimeout(idleT); if (pathFn) idleT = setTimeout(() => { const p = pathFn?.(); if (p) play(p); api.poke(); }, idleMs); },
+    start(fn, { now = true, stepMs } = {}) { pathFn = fn; opts = stepMs ? { stepMs } : {}; if (now) play(fn(), opts); api.poke(); },
+    poke() { clearTimeout(idleT); if (pathFn) idleT = setTimeout(() => { const p = pathFn?.(); if (p) play(p, opts); api.poke(); }, idleMs); },
     stop() { clearTimeout(idleT); pathFn = null; hide(); },
   };
   return api;

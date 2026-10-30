@@ -22,3 +22,12 @@ test('settings: defaults keep current behaviour (7 min, sound-first float, norma
   st.set('audioSpeed', 'slow'); assert.equal(st.audioRate(), 0.85);
   assert.throws(() => st.set('nope', 1));
 });
+
+test('parent mockup data: current + next stop, tiles for every map sound (not-yet = new), a try-at-home tip', () => {
+  const s = parentSummary(seedProgress(2, { now, due: true }), now);
+  assert.equal(s.current.kind, 'sound'); assert.ok(s.current.learning.includes(s.current.label));
+  assert.ok(s.next); assert.equal(s.soundTiles.length, STOPS.filter(x => x.kind === 'sound').length);
+  assert.ok(s.soundTiles.some(t => t.state === 'new')); assert.ok(s.starTiles.length >= 3);
+  assert.ok(s.tryAtHome?.text.includes('Kit will review'), JSON.stringify(s.tryAtHome));
+  assert.equal(s.tryAtHome.id, 'm'); // the due review sound comes first
+});

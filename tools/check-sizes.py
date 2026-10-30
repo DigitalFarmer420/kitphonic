@@ -52,8 +52,8 @@ MEASURE = r"""() => {
   const name = e => e.id ? '#' + e.id : (e.className.baseVal ?? e.className).split(' ')[0] + (e.getAttribute('aria-label') ? `[${e.getAttribute('aria-label')}]` : '');
   const targets = [...root.querySelectorAll('button, #handle, #sn-handle, .stop, .ear, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
     .filter(vis).filter(e => !(e.classList.contains('marker'))) // a marker button's visible shape is its .dot/.bar
-    .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body'), ...box(e) }));
-  const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, #sn-strip .wd, #fm-card, #fm-slot, #fm-rime, .fchip, .ftile, #sn-tiles .tile, #sn-handle, #sn-read, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
+    .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body'), adult: !!e.closest('#parent'), ...box(e) }));
+  const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, #sn-strip .wd, .top .path .peb, #fm-card, #fm-slot, #fm-rime, .fchip, .ftile, #sn-tiles .tile, #sn-handle, #sn-read, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
     .filter(vis).map(e => ({ name: name(e), ...box(e) }));
   const ltr = [...root.querySelectorAll('.ltr .tile, .choice, #st-cards .wcard2')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();
@@ -61,13 +61,15 @@ MEASURE = r"""() => {
   return { screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
+ADULT = 44  # grown-ups area: adult targets (Apple HIG 44pt); the mockup uses 48px segmented controls
+
 def overlaps(a, b, pad=2):
     return a['x'] + pad < b['x'] + b['w'] and b['x'] + pad < a['x'] + a['w'] and a['y'] + pad < b['y'] + b['h'] and b['y'] + pad < a['y'] + a['h']
 
 def check(m, vp, scene):
     errs = []
     for t in m['targets']:
-        short = min(t['w'], t['h']); need = KNOB if t['knob'] else MIN
+        short = min(t['w'], t['h']); need = KNOB if t['knob'] else (ADULT if t.get('adult') else MIN)
         if short < need - 0.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < {need}")
         if not t.get('scroll') and (t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")

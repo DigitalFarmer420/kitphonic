@@ -19,13 +19,14 @@ import { createMapScreen } from './map-screen.js';
 import { createLessonScreen } from './lesson-screen.js';
 import { createStarScreen, createSentenceScreen } from './star-screen.js';
 import { createParentScreen } from './parent-screen.js';
+import { createSeen } from './seen.js';
 import { createFamilyScreen } from './family-screen.js';
 import { allFamilies } from './families.js';
 import { allSentences } from './sentences.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
-const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); });
+const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
@@ -39,6 +40,7 @@ globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('
 // Local only (spec §3.9). Dev ?progress=N uses a seeded in-memory log so real progress is never touched.
 const storage = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
 const store = createStore(storage);
+const seen = createSeen(storage); // ghost-hand demos: first meetings per activity (in-memory in dev ?progress mode)
 let sessionId = null;
 const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; };
 const log = r => store.log({ ...r, sessionId });
@@ -46,21 +48,21 @@ const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mod
 
 let session = null; // { plan, i, started, stickers }
 const screen = createWordScreen({
-  known, audio, cfg, rand, stage, record: log,
+  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(),
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });
-const letters = createLettersScreen({ audio, cfg, rand, stage, settings, record: log, onHome: () => goHome() });
-const lesson = createLessonScreen({ audio, stage, settings, rand, record: log, onHome: () => goHome() });
-const starScreen = createStarScreen({ audio, rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
-const familyScreen = createFamilyScreen({ audio, stage, settings, rand, cfg, record: log, onHome: () => goHome() });
-const sentenceScreen = createSentenceScreen({ audio, stage, rand, cfg, record: log, onHome: () => goHome() });
+const letters = createLettersScreen({ audio, cfg, rand, stage, settings, seen, record: log, onHome: () => goHome() });
+const lesson = createLessonScreen({ audio, stage, settings, seen, rand, record: log, onHome: () => goHome() });
+const starScreen = createStarScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
+const familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
+const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome() });
 
-const mapScreen = createMapScreen({ audio, stage, settings, getMap: () => mapState(store.all()), getResponses: () => store.all(),
+const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
   onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
 function showMap(opts) { show('map'); mapScreen.render(opts); }
 const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(),
-  onClose: () => showMap(), onReset: () => store.clear() });
+  onClose: () => showMap(), onReset: () => { store.clear(); seen.reset(); } });
 function openParent() { audio.stop(); show('parent'); parent.open(); }
 function goHome() { audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {

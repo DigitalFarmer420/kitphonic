@@ -9,7 +9,10 @@ const svgEl = (tag, attrs) => { const e = document.createElementNS(NS, tag); for
 const isEmoji = t => /\p{Extended_Pictographic}/u.test(t);
 export const GATE_MS = 2000, LEVELUP_LOCK_MS = 1500;
 
-export function createMapScreen({ audio, stage, settings, getMap, getResponses, onGo, onParent = () => {}, onHome }) {
+import { createGhostHand, centerIn } from './ghost-hand.js';
+import { noSeen } from './seen.js';
+export function createMapScreen({ audio, stage, settings, getMap, getResponses, onGo, onParent = () => {}, onHome, seen = noSeen }) {
+  const hand = createGhostHand({ host: document.getElementById('map'), reduced: () => settings.reducedMotion?.() });
   let last = null, gateTimer = 0;
   const reduced = () => settings.reducedMotion?.(); // 'auto' follows the device; On/Off from the grown-ups area win
 
@@ -52,9 +55,11 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       if (animate) setTimeout(() => { kit.style.left = kx(cur) + 'px'; kit.style.top = ky(cur) + 'px'; }, 50);
     }
     last = { m, pts };
+    // first visit: the ghost hand taps ▶ (then again after 5 s idle until the first session starts)
+    if (seen.count('go') === 0) hand.start(() => $('map').hidden ? null : [centerIn($('go'), $('map'), stage.scale), centerIn($('go'), $('map'), stage.scale)], { now: true }); else hand.stop();
   }
   function tapStop(p) {
-    if (p.now) return onGo();
+    if (p.now) { hand.stop(); seen.mark('go'); return onGo(); }
     if (p.status === 'passed') { audio.stop(); audio.play(p.kind === 'sound' ? `snd-${p.gpc}` : 'sfx-chime'); } // a passed stop says its sound
   }
   // press-and-hold gate for grown-ups
@@ -62,7 +67,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
   const hold = e => { e.preventDefault(); $('m-gate').hidden = false; gateTimer = setTimeout(() => { $('m-gate').hidden = true; onParent(); }, GATE_MS); };
   const release = () => { clearTimeout(gateTimer); $('m-gate').hidden = true; };
   gear.addEventListener('pointerdown', hold); for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) gear.addEventListener(ev, release);
-  $('go').onclick = () => onGo();
+  $('go').onclick = () => { hand.stop(); seen.mark('go'); onGo(); };
   $('m-home').onclick = () => onHome();
 
   // --- level-up moment: badge flies in, confetti, chime, Kit "You did it!", 3 chips, ➜ locked for 1.5 s ---

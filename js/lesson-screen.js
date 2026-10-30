@@ -1,5 +1,7 @@
 // Letter intro + tracing (design/letters-board 1b, 1c). Exposure / motor activities: they log `intro:` / `trace:`
 // responses for the parent view but never gate mastery (sound mastery comes from Sound Hunt).
+import { createGhostHand, centerIn } from './ghost-hand.js';
+import { noSeen } from './seen.js';
 import { LETTER_PICS } from './content.js';
 import { GPC } from './sequence.js';
 import { STROKES, createTracer, resample, pathD, letterBox } from './trace.js';
@@ -16,8 +18,10 @@ export function picWordHtml(word, grapheme) {
 }
 export const soundClip = (g, audio) => (audio?.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
 
-export function createLessonScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome }) {
+export function createLessonScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, seen = noSeen }) {
   let run = null;
+  const hand = createGhostHand({ host: $('lesson'), reduced: () => settings.reducedMotion?.() });
+  const at = node => centerIn(node, $('lesson'), stage.scale);
   const reduced = () => settings.reducedMotion?.();
   const say = (text, ...clips) => { $('ls-bubble').innerHTML = text; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
   const pebbles = (n, at) => $('ls-pebbles').replaceChildren(...Array.from({ length: n }, (_, i) => { const d = document.createElement('div'); d.className = 'peb' + (i < at ? ' on' : i === at ? ' now' : ''); return d; }));
@@ -25,7 +29,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
   // ---- 1b letter intro ----
   function intro(g) {
     const pics = LETTER_PICS[g] ?? [], [word, pic] = shuffle(pics, rand)[0] ?? [null, null], gr = GPC[g]?.grapheme ?? g;
-    $('intro').hidden = false; $('trace').hidden = true;
+    $('intro').hidden = false; $('trace').hidden = true; $('lesson').classList.remove('tracing');
     const dg = gr.length > 1; // digraph fusion intro (words-board 3, note 23): s + h slide together into one sky tile
     $('ic-letter').classList.toggle('dg', dg); $('ic-letter').classList.remove('fused');
     if (dg) { $('ic-letter').innerHTML = [...gr].map(c => `<span class="fl">${c}</span>`).join(''); if (reduced()) $('ic-letter').classList.add('fused'); }
@@ -36,20 +40,22 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     const snd = soundClip(g, audio);
     const prompt = () => dg ? say(`Two letters, one sound: <b>${gr}</b>. Tap it!`, 'm-two-letters', snd, 'm-tap-it')
       : say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd, 'm-tap-it');
-    $('ic-letter').onclick = () => { audio.stop(); audio.play(snd); run.taps++; };
+    $('ic-letter').onclick = () => { audio.stop(); audio.play(snd); run.taps++; hand.hide(); hand.poke(); };
     P.onclick = () => { audio.stop(); audio.play(snd).then(() => word && audio.play(`pic-${word}`)); run.taps++; };
     $('ic-replay').onclick = () => { audio.stop(); prompt(); };
-    $('ic-next').onclick = () => { record({ skill: `intro:${g}`, itemId: g, correct: true, firstAttempt: true, scored: false, taps: run.taps }); finish(); };
+    $('ic-next').onclick = () => { seen.mark('intro'); record({ skill: `intro:${g}`, itemId: g, correct: true, firstAttempt: true, scored: false, taps: run.taps }); finish(); };
     $('ls-again').onclick = $('ic-replay').onclick;
     pebbles(1, 0);
-    if (dg && !reduced()) { $('ls-bubble').innerHTML = 'Watch!'; setTimeout(() => { if (!run) return; $('ic-letter').classList.add('fused'); setTimeout(() => run && prompt(), 700); }, 700); }
-    else prompt();
+    // ghost hand: taps the letter card, then points at ➜ (first meetings + 5 s idle)
+    const showHand = () => run && hand.start(() => run && run.activity === 'intro' ? [at($('ic-letter')), at($('ic-letter')), run.taps ? at($('ic-next')) : at($('ic-letter'))] : null, { now: seen.demo('intro') });
+    if (dg && !reduced()) { $('ls-bubble').innerHTML = 'Watch!'; setTimeout(() => { if (!run) return; $('ic-letter').classList.add('fused'); setTimeout(() => run && prompt().then(showHand), 700); }, 700); }
+    else prompt().then(showHand);
   }
 
   // ---- 1c tracing ----
   function trace(g) {
     const l = GPC[g]?.grapheme ?? g;
-    $('intro').hidden = true; $('trace').hidden = false;
+    $('intro').hidden = true; $('trace').hidden = false; $('lesson').classList.add('tracing');
     const svg = $('tr-svg'); svg.replaceChildren();
     const bb = letterBox(l); svg.setAttribute('viewBox', `${bb.x} ${bb.y} ${bb.w} ${bb.h}`); svg.parentElement.style.aspectRatio = `${bb.w} / ${bb.h}`;
     let rep = 0, tracer = createTracer(l, { tol: 17 }), inks = [], dragging = false;
@@ -76,7 +82,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     // Finger guide (Uiux r4): the soft blue dot appears only once a finger is down, riding the ink head — it never
     // sits on top of the green start dot before the child has touched.
     const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
-    svg.onpointerdown = e => { if (!run || run.busy) return; const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { svg.setPointerCapture?.(e.pointerId); guide(true); } e.preventDefault(); };
+    svg.onpointerdown = e => { hand.hide(); hand.poke(); if (!run || run.busy) return; const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { svg.setPointerCapture?.(e.pointerId); guide(true); } e.preventDefault(); };
     svg.onpointermove = e => {
       if (!dragging || !run) return; const [x, y] = toLetter(e), st = tracer.move(x, y);
       lanes.forEach((ln, i) => ln.classList.toggle('off', i === st.stroke && !st.onPath));
@@ -99,14 +105,24 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     }
     run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); // automated play-through only
       return strokes[st.stroke].filter((_, i) => i % 3 === 0 || i === strokes[st.stroke].length - 1).map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]); };
-    $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => finish();
+    $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => { seen.mark('trace'); finish(); };
     $('ls-again').onclick = () => { audio.stop(); say('Start at the green dot and follow the arrows!', 'm-trace-start'); };
-    tray(); drawMarks(); drawInk(); pebbles(TRACE_REPS, 0);
-    say('Start at the green dot and follow the arrows!', 'm-trace-start');
+    tray(); drawMarks(); drawInk(); pebbles(TRACE_REPS, 0); placeBar();
+    say('Start at the green dot and follow the arrows!', 'm-trace-start').then(() => { // ghost hand traces the current stroke
+      if (!run) return;
+      hand.start(() => { if (!run || dragging) return null; const host = $('lesson').getBoundingClientRect(), s = stage.scale, pts = run.debugPoints?.() ?? [];
+        return pts.filter((_, i) => i % 2 === 0 || i === pts.length - 1).map(([x, y]) => [(x - host.left) / s, (y - host.top) / s + 30]); },
+        { now: seen.demo('trace'), stepMs: 260 }); });
   }
 
+  // landscape: the undo + stars column sits right next to the (full-height) letter card
+  function placeBar() {
+    const bar = $('trace').querySelector('.ibar'); bar.style.left = '';
+    if (stage.info.mode !== 'short') return;
+    requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16, c.offsetLeft + c.offsetWidth / 2 + 20) + 'px'; });
+  }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }
-  function stop() { run = null; audio.stop(); }
+  function stop() { run = null; hand.stop(); audio.stop(); }
   $('ls-home').onclick = () => { stop(); onHome(); };
   return {
     // opts: { activity: 'intro' | 'trace', gpc, onComplete }
@@ -114,6 +130,6 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       stop(); run = { ...opts, taps: 0 }; $('lesson').hidden = false;
       if (opts.activity === 'trace' && STROKES[GPC[opts.gpc]?.grapheme ?? opts.gpc]) trace(opts.gpc); else intro(opts.gpc);
     },
-    stop, get run() { return run; },
+    stop, get run() { return run; }, relayout() { if (run?.activity === 'trace') placeBar(); },
   };
 }

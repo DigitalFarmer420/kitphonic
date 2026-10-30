@@ -7,7 +7,10 @@ const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 const WAVE = '<svg width="30" height="30"><use href="#wave"/></svg>';
 
-export function createLettersScreen({ audio, cfg, rand, stage, settings, record = () => {}, onHome }) {
+import { createGhostHand } from './ghost-hand.js';
+import { noSeen } from './seen.js';
+export function createLettersScreen({ audio, cfg, rand, stage, settings, record = () => {}, onHome, seen = noSeen }) {
+  const hand = createGhostHand({ host: document.getElementById('letters'), reduced: () => settings.reducedMotion() });
   const arena = $('l-arena'), bubble = $('l-bubble');
   let run = null, raf = 0;
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
@@ -42,7 +45,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     run.items.forEach((it, i) => setTimeout(() => { if (h.isConnected) { h.style.left = it.x + 'px'; h.style.top = it.y + 40 + 'px'; } }, 1000 + i * 900));
     setTimeout(hideHand, 1200 + run.items.length * 900);
   }
-  function idleHand() { clearTimeout(handT); if (run && run.def.ear && run.round === 0 && !run.handShown) { run.handShown = true; showHand(); } handT = setTimeout(showHand, 5000); }
+  function idleHand() { clearTimeout(handT); if (run && run.def.ear && run.round === 0 && !run.handShown && seen.demo('hunt')) { run.handShown = true; showHand(); } handT = setTimeout(showHand, 5000); }
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('letters').append(c); setTimeout(() => c.remove(), 1300); };
 
   function renderPebbles() {
@@ -70,7 +73,10 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() });
     else { const pos = staticLayout(letters.length, { w: stage.info.w, top: b.top, cellW: cellW(letters.length), cellH: stage.info.mode === 'short' ? 220 : stage.info.mode === 'portrait' ? 232 : 210 }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
     run.target = target; run.firstTry = true; run.misses = 0; run.promptEnd = 0; place(run.items); renderPebbles(); if (run.def.ear) { addEar(); tray(); }
-    prompt();
+    const p = prompt();
+    if (!run.def.ear) p?.then(() => run && hand.start(() => { // explore: taps two tiles; find: hovers every tile (never just the answer)
+      if (!run || run.busy || !run.items?.length) return null; const its = run.def.scored ? run.items : run.items.slice(0, 2);
+      return its.map(it => [it.x, it.y + 40]); }, { now: run.round === 0 && seen.demo(run.activity) }));
   }
   function prompt() {
     const t = run.target;
@@ -84,7 +90,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     return say(run.mode === 'nameDot' ? 'Tap a letter to hear its name. Tap a dot to hear its sound!' : 'Tap a letter or a dot to hear its sound!', run.mode === 'nameDot' ? 'm-tap-hint' : 'm-tap-hint-sound');
   }
   function tap(it, target, node) {
-    if (!run || run.busy) return;
+    if (!run || run.busy) return; hand.hide(); hand.poke();
     if (run.def.drift) it.pausedUntil = performance.now() + FLOAT.pauseMs;
     pulse(node.querySelector(target === 'dot' ? '.ldot' : '.tile'));
     if (!run.def.scored) { // exploration
@@ -114,8 +120,8 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), box(), now); last = now; move(); raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
-  function finish() { const r = run; stop(); $('letters').classList.remove('hunt'); $('l-tray').hidden = true; r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length }); }
-  function stop() { cancelAnimationFrame(raf); clearTimeout(handT); hideHand(); run = null; audio.stop(); }
+  function finish() { const r = run; seen.mark(r.activity); stop(); $('letters').classList.remove('hunt'); $('l-tray').hidden = true; r.onComplete?.({ activity: r.activity, score: r.score, rounds: r.targets.length }); }
+  function stop() { cancelAnimationFrame(raf); clearTimeout(handT); hideHand(); hand.stop(); run = null; audio.stop(); }
 
   $('l-next').onclick = () => run && finish();
   $('l-home').onclick = () => { stop(); onHome(); };

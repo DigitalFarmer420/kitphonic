@@ -297,32 +297,6 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .starbig { transition: opacity .3s, visibility .3s; }
 .starbig.away { opacity: 0; visibility: hidden; pointer-events: none; }
 /* Grown-ups area: plain, readable, scrollable; adult text sizes, still ≥64px targets */
-#parent{background:#FBF6EC;flex-direction:column}
-#parent:not([hidden]){display:flex}
-.pa-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 6px}
-.pa-top h2{margin:0;font-size:26px;color:var(--ink)}
-#pa-body{flex:1;overflow-y:auto;padding:4px 16px 24px;-webkit-overflow-scrolling:touch}
-.pcard{background:#fff;border:2px solid var(--line);border-radius:18px;padding:12px 16px;margin:0 0 12px}
-.pcard h3{margin:2px 0 8px;font-size:19px}
-.pcard p{margin:6px 0;font-size:16px;line-height:1.4;color:#5B4A40}
-.plabel{font-size:14px;font-weight:800;color:#7a6650;margin:10px 0 6px}
-.pchips{display:flex;flex-wrap:wrap;gap:6px}
-.pchip{display:inline-flex;align-items:center;justify-content:center;min-width:34px;height:34px;padding:0 10px;border-radius:10px;font-size:17px;font-weight:800;background:#EFE6D6;color:#5B4A40}
-.pchip.practicing{background:#FFE7A8}.pchip.secure{background:#CFE8C9}.pchip.mastered{background:var(--sage);color:#fff}.pchip.review-due{background:#F6C9BB}
-.legend{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.legend .pchip{font-size:13px;height:26px;min-width:0}
-.pnote{font-style:italic}
-.prow{margin:4px 0 12px}
-.seg{display:flex;gap:6px}
-.seg button{flex:1;min-height:72px;border-radius:14px;border:2px solid var(--line);background:#FBF6EC;font:inherit;font-size:15px;font-weight:800;color:#5B4A40}
-.seg button.on{background:var(--sage);border-color:var(--saged);color:#fff}
-.seg button:disabled{opacity:.55}
-.pbtn{min-height:72px;width:100%;border-radius:14px;border:2px solid var(--line);background:#FBF6EC;font:inherit;font-size:16px;font-weight:800;color:#5B4A40}
-.pbtn.warn{color:#B4513A;border-color:#E9B4A6;background:linear-gradient(90deg,#F6C9BB 0 0,#FBF6EC 0) no-repeat}
-.pbtn.warn.holding{background-size:100% 100%;background-image:linear-gradient(90deg,#F6C9BB 100%,#FBF6EC 0);transition:background-image 2s}
-.pfoot{font-size:13px;color:#8a7660;text-align:center}
-.short #pa-body,.tall #pa-body{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start}
-.short .pcard,.tall .pcard{margin:0}
-.short .pa-top{padding:8px 16px 4px}
 
 /* Sentence (Uiux r4): one line of words that wraps like text; tiles only for blending */
 #sn-card{position:absolute;left:50%;top:170px;width:200px;height:120px;margin-left:-100px;border-radius:22px;border:2px dashed var(--line);background:linear-gradient(135deg,var(--cream2),#fff,var(--cream2));display:flex;align-items:center;justify-content:center}
@@ -361,7 +335,6 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #sn-tiles{bottom:128px;height:100px}.short #sn-tiles .tile{height:100px}
 .short #sn-slider{bottom:8px}
 .tall #sn-tiles{bottom:150px}.tall #sn-slider{bottom:24px}
-.psum{grid-column:1/-1;margin:0 0 10px;font-size:17px;font-weight:800;color:#5B4A40}
 /* Reduced motion (grown-ups setting or device): no animation or movement; feedback stays as colour + sound */
 .rm *,.rm *::before,.rm *::after{animation:none!important;transition:none!important}
 .rm .wob{box-shadow:0 0 0 5px rgba(239,139,110,.55)!important}
@@ -408,3 +381,54 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #ic-letter.dg.fused{background:#EAF4FB;border-color:var(--sky);box-shadow:0 6px 0 var(--skyd)}
 #ic-letter.dg.fused .fl{margin:0 -2px;padding:0;border-color:transparent}
 #ic-letter.dg.fused::after{content:'';position:absolute;left:26%;right:26%;bottom:16px;height:8px;border-radius:4px;background:var(--skyd)}
+/* Uiux r5 */
+/* 1) landscape screens with Kit in the top bar: progress dots move right, clear of Kit's bubble */
+.short #fm-pebbles,.tall #fm-pebbles,.short #sn-pebbles,.tall #sn-pebbles{position:absolute;right:96px;top:25px}
+.short #fm-mascot .bubble,.tall #fm-mascot .bubble{max-width:330px}
+/* 2) landscape trace: card as tall as the screen allows; undo + stars in a column right beside it (JS places it) */
+.short #lesson.tracing .tcard{top:12px;bottom:12px}
+.short #lesson.tracing .top .path{visibility:hidden}
+.short #trace .ibar{right:auto;bottom:auto;top:50%;transform:translateY(-50%);gap:14px}
+/* 3) sentence: ~8px clear around the glowing star word; its ⭐ sits inside the glow, never on a neighbour */
+.wd.star{margin:0 12px 4px}
+.wd.star.cur::after{top:-12px;right:-6px;font-size:24px}
+/* Grown-ups area (design/parent-mockup.html): adult UI — 48px segmented controls, Andika status tiles */
+#parent{background:#fdf6ea;flex-direction:column;font-size:15px;line-height:1.4;color:#3b2f28}
+#parent:not([hidden]){display:flex}
+.pa-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px 8px}
+.pa-top h1{margin:0;font-size:24px;font-weight:800}
+.pa-x{width:56px;height:56px;border-radius:16px;border:2px solid #eadfcd;background:#fff;font-size:28px;color:#6b5a4d}
+#pa-body{flex:1;overflow-y:auto;padding:4px 16px 24px;-webkit-overflow-scrolling:touch;display:grid;gap:14px;align-content:start}
+.pcol{display:grid;gap:14px;align-content:start}
+.short #pa-body,.tall #pa-body{grid-template-columns:1.1fr 1fr}
+.pcard{background:#fff;border:2px solid #efe4d3;border-radius:20px;padding:16px}
+.pcard h2{font-size:17px;margin:0 0 10px;font-weight:800}
+.pcard h3{font-size:13px;margin:14px 0 6px;color:#7a6a5c;text-transform:uppercase;letter-spacing:.04em}
+.psum{display:flex;align-items:center;gap:14px;background:#fff7e6;border-color:#f3d99a}
+.pstop{width:64px;height:64px;border-radius:50%;background:#f2b84b;display:grid;place-items:center;font-size:28px;font-weight:700;flex:none;box-shadow:0 4px 0 #d79a2a}
+.pbig{font-size:18px;font-weight:800}.pmuted{color:#7a6a5c;font-size:14px}
+.pstats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.pstat{background:#fdf6ea;border-radius:14px;padding:4px;text-align:center}.pstat b{display:block;font-size:22px}.pstat span{font-size:12px;color:#7a6a5c}
+.ptiles{display:flex;flex-wrap:wrap;gap:8px}
+.ptile{min-width:46px;height:46px;padding:0 10px;border-radius:12px;display:grid;place-items:center;font-size:22px;font-weight:700;border:2px solid transparent}
+.ptile.practicing,.plegend i.practicing{background:#fdf0c4}
+.ptile.secure,.plegend i.secure{background:#dcefd9}
+.ptile.mastered,.plegend i.mastered{background:#9cc79a;color:#21401f}
+.ptile.review-due,.plegend i.review-due{background:#f6d2c6;border-color:#e59a83}
+.ptile.new,.plegend i.new{background:#f4ede2;color:#b9ab9b}
+.plegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:12px;color:#5d4e42}
+.plegend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px;border:2px solid transparent}
+.pnote{margin-top:12px;font-size:14px;background:#fdf6ea;border-radius:12px;padding:10px}
+.ptip{color:#5d4e42}.plink{border:0;background:none;color:#4b7fa3;font:inherit;font-weight:700;text-decoration:underline;padding:12px 4px;min-height:44px}
+.prow{margin-bottom:14px}.plabel{font-size:14px;font-weight:700;margin-bottom:6px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:#f4ede2;border-radius:14px;padding:4px;gap:4px}
+.seg button{height:48px;border:0;border-radius:11px;background:transparent;font:inherit;font-weight:700;font-size:14px;color:#6b5a4d}
+.seg button.on{background:#fff;color:#2f5a2c;box-shadow:0 0 0 2px #8fbf8c inset}
+.seg button:disabled{opacity:.55}
+.phint{font-size:12px;color:#9a8a7c;margin-top:6px}
+.preset{margin-top:6px;width:100%;height:48px;border-radius:14px;border:2px solid #e59a83;color:#b4533a;background:#fff;font:inherit;font-weight:700;font-size:14px}
+.pconfirm{margin-top:6px;border:2px solid #e59a83;border-radius:14px;padding:12px;background:#fff8f5}.pconfirm p{margin:0 0 10px;font-size:14px}
+.pconfirm-row{display:flex;gap:8px}.pconfirm-row button{flex:1;height:48px;border-radius:12px;font:inherit;font-weight:700;font-size:14px}
+.pcancel{border:2px solid #eadfcd;background:#fff;color:#5d4e42}.perase{border:0;background:#c9573c;color:#fff}
+/* the mockup is in real screen px: counter-zoom the stage scale so 48px controls are 48 screen px on every device */
+#parent{zoom:calc(1 / var(--scale, 1))}
