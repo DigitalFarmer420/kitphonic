@@ -11,9 +11,11 @@ import { CONFIG, configFromUrl } from '../js/config.js';
 import { buildManifest } from '../js/manifest.js';
 
 const all = Object.values(WORDS).flat();
-test('every target word decodes: its GPC parse spells the word; L1-L4 use only the prototype letters', () => {
+test('every target word decodes: its GPC parse spells the word; L2 uses only the prototype letters; L1, L3-L5 stay before set 8; L6 uses a set-8 digraph', () => {
   for (const e of all) { const ids = e.parse.split(' '); assert.equal(ids.map(id => GPC[id].grapheme).join(''), e.w);
-    if (e.level <= 4) assert.ok([...e.w].every(c => LETTERS.includes(c)), e.w); }
+    if (e.level === 2) assert.ok([...e.w].every(c => LETTERS.includes(c)), e.w);
+    if (e.level !== 6) assert.ok(ids.every(id => GPC[id].set < 8), `${e.w}: set-8 sound below L6`);
+    else assert.ok(ids.some(id => GPC[id].set === 8), `${e.w}: L6 word without a set-8 digraph`); }
 });
 test('digraph words (words-board 3): sh is one joined unit and ONE slider stop per sound', () => {
   assert.deepEqual(markers('ship', 6, { ids: ['sh', 'i', 'p'] }).map(m => m.text), ['sh', 'i', 'p']);
@@ -94,7 +96,7 @@ test('layout: letter centres map exactly to core marker trigger positions', () =
 });
 test('config defaults + URL overrides', () => {
   assert.equal(CONFIG.tileCase, 'lower'); assert.equal(CONFIG.mascot.name, 'Kit');
-  assert.deepEqual(CONFIG.choiceStrategy, { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 6: 'minimal' }); assert.equal(CONFIG.checkAtL1, false);
+  assert.deepEqual(CONFIG.choiceStrategy, { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 5: 'minimal', 6: 'minimal' }); assert.equal(CONFIG.checkAtL1, false);
   const c = configFromUrl('?level=9&case=upper&voice=upbeat&choices=vowel&skipHello=1&seed=3&word=map');
   assert.equal(c.startLevel, 6); // clamped to the highest word level (6 = digraphs) assert.equal(c.tileCase, 'upper'); assert.equal(c.voice, 'upbeat');
   assert.equal(c.choiceStrategy[1], 'vowel'); assert.equal(c.hello.show, false); assert.equal(c.seed, 3); assert.equal(c.word, 'map');
@@ -114,7 +116,7 @@ test('manifest contents: names, sounds + held, 15 rimes, words, star words, both
   assert.equal(k('letter-name'), info.filter(([, x]) => !x.digraph && !x.noName).length); assert.equal(k('letter-sound'), info.length);
   assert.equal(k('letter-sound-held'), info.filter(([id]) => STRETCHY.has(id)).length);
   assert.ok(m.clips.some(c => c.id === 'snd-sh-held') && !m.clips.some(c => c.id === 'name-sh'));
-  assert.equal(k('rime'), 15); assert.ok(k('word') >= 28); assert.ok(k('star-word') >= 4 && k('star-word') <= 6);
+  assert.ok(L.protoRimes().every(r => m.clips.some(c => c.id === `rime-${r}`))); assert.ok(k('rime') >= 15); assert.ok(k('word') >= 28); assert.ok(k('star-word') >= 4 && k('star-word') <= 6);
   assert.equal(k('star-sentence'), k('star-word'));
   const ids = m.clips.map(c => c.id);
   for (const id of ['m-slide-again-calm', 'm-slide-again-upbeat', 'sfx-chime', 'm-hello']) assert.ok(ids.includes(id), id);

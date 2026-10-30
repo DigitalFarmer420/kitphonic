@@ -29,7 +29,7 @@ export const planCost = items => items.reduce((s, it) => s + itemCost(it), 0);
 // when fewer than 3 are known (then from the set being taught, which is introduced together). Targets are always
 // introduced sounds.
 export function letterPool(active, { size = 6, min = 3 } = {}) {
-  const single = g => GPC[g]?.grapheme.length === 1 && g !== 's_z';
+  const single = () => true; // digraphs (sh, ck, qu) and s = /z/ are tiles too; letter-logic keeps same-sound tiles apart
   const act = active.filter(single), pool = act.slice(-size);
   if (pool.length < min) {
     const set = GPC[act.at(-1)]?.set ?? 1;
@@ -52,8 +52,9 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // 1. Spaced review that is due (oldest first).
   const due = dueItems(responses, now), reviewCap = budget * 0.4; // review never crowds out the current stop
   const pushReview = it => planCost(items) + itemCost(it) <= reviewCap && push(it);
-  const dueSounds = due.filter(d => d.skill.startsWith('sound:')).map(d => d.skill.slice(6)).filter(g => pool.includes(g));
-  if (dueSounds.length) pushReview({ type: 'letters', activity: 'hunt', pool, targets: dueSounds, rounds: Math.max(3, Math.min(6, dueSounds.length)), why: 'review' });
+  const dueSounds = due.filter(d => d.skill.startsWith('sound:')).map(d => d.skill.slice(6)).filter(g => active.includes(g)).slice(0, 4);
+  const reviewPool = [...new Set([...dueSounds, ...pool])].slice(0, Math.max(pool.length, dueSounds.length + 2)); // old sounds fall out of the newest-6 pool, so due ones are added back
+  if (dueSounds.length) pushReview({ type: 'letters', activity: 'hunt', pool: reviewPool, targets: dueSounds, rounds: Math.max(3, Math.min(6, dueSounds.length)), why: 'review' });
   for (const d of due.filter(d => d.skill.startsWith('blend:'))) {
     const ws = wordsAt(+d.skill.slice(7), 2); if (ws.length) pushReview({ type: 'words', level: +d.skill.slice(7), words: ws, why: 'review' });
   }
@@ -94,9 +95,10 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // Sentences (design/words-board 4): one per session once a sentence decodes with known sounds + introduced stars.
   if (stars) {
     const introduced = new Set(responses.filter(r => r.skill?.startsWith('star:')).map(r => r.skill.slice(5)));
-    const read = id => responses.filter(r => r.skill === `sentence:${id}`).length;
-    const ss = servableSentences(known, introduced).sort((a, b) => read(a.id) - read(b.id) || rand() - .5);
-    if (ss.length) push({ type: 'sentence', sentence: ss[0], why: read(ss[0].id) ? 'mixed' : 'new' });
+    const reads = id => responses.filter(r => r.skill?.startsWith('sentence:') && r.itemId === id && r.firstAttempt);
+    const missed = id => reads(id).at(-1)?.correct === false; // last scored read picked the wrong picture: read it again
+    const ss = servableSentences(known, introduced).sort((a, b) => missed(b.id) - missed(a.id) || reads(a.id).length - reads(b.id).length || rand() - .5);
+    if (ss.length) push({ type: 'sentence', sentence: ss[0], why: missed(ss[0].id) ? 'retry' : reads(ss[0].id).length ? 'mixed' : 'new' });
   }
 
   // 3. Practice: introduced sounds that are not secure yet.

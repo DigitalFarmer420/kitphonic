@@ -1,5 +1,5 @@
 // Phase 1–2 letter activities (spec §3.3, §3.4): pure helpers for rounds, floating motion and hit testing.
-import { CONFUSABLE_PAIRS } from './sequence.js';
+import { CONFUSABLE_PAIRS, GPC } from './sequence.js';
 import { clipForTap, shuffle } from './word-logic.js';
 
 export const ACTIVITIES = {
@@ -11,7 +11,11 @@ export const ACTIVITIES = {
 
 // Letter-tap clip for an activity. Phase 1 activities always use 'name' mode (no dots).
 export const letterClip = (mode, target, letter) => clipForTap(mode, target, letter);
-const confusable = (a, b) => CONFUSABLE_PAIRS.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+// Look-alikes, plus (sets 6–8) two tiles that make the same sound (c / k / ck, s / ss) or look the same (s = /s/ vs /z/):
+// "find the one that says /k/" must have exactly one right answer.
+const confusable = (a, b) => CONFUSABLE_PAIRS.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+  || (GPC[a] && GPC[b] && (GPC[a].phoneme === GPC[b].phoneme || GPC[a].grapheme === GPC[b].grapheme));
+export const tileText = id => GPC[id]?.grapheme ?? id; // s_z shows 's', th_v shows 'th'
 
 // Letters on screen for one round: the target plus distractors from the pool, never two look-alikes together
 // (spec §3.3.1), 3–6 letters total.

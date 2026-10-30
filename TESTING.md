@@ -38,6 +38,9 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `activity=sentence&sentence=map-mat` | star word in a sentence: tap star chips, slide decodable words, then "Read it all" |
 | `parent=1` | open the Grown-ups area directly (in the app: press and hold the map gear for 2 s) |
 | `activity=family&rime=ap` | word family: tap-to-place or drag onsets in front of a fixed rime |
+| `activity=hunt&pool=x,y,zz,qu,sh,ck` | letter game with any GPC ids (digraph tiles; same-sound tiles are never shown together) |
+| `level=5&word=sand` | L5 final-blend word (CVCC) |
+| `progress=38` | map at the L6 digraph-words stop (44 stops: 38 sounds + L1–L6) |
 | `level=6&word=ship` | digraph word: one joined sky "sh" tile, one slider stop per sound |
 | `activity=intro&gpc=sh` | digraph fusion intro: s + h slide together into one sky tile |
 | `reducedMotion=1` | act as if the device asks for reduced motion (grown-ups setting On/Off still wins) |

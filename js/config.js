@@ -13,8 +13,8 @@ export const CONFIG = {
   choicesPerCheck: 3,           // 2–3 per spec
   // Distractors (review R8): 'minimal' = differ by exactly one phoneme, contrast position rotates onset/vowel/final.
   // Legacy: 'rhyme' = same rime, first sound differs (hat/mat/cat); 'vowel' = middle vowel first.  (?choices=)
-  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 6: 'minimal' },
-  tapMode: { 1: 'sound', 2: 'nameDot', 3: 'nameDot', 4: 'nameDot' }, // until mastery tracking exists (?mode=)
+  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 5: 'minimal', 6: 'minimal' },
+  tapMode: { 1: 'sound', 2: 'nameDot', 3: 'nameDot', 4: 'nameDot', 5: 'nameDot', 6: 'nameDot' }, // until mastery tracking exists (?mode=)
   markerOpts: { l1: 'dots', l4: 'dots' }, // L1 sound-by-sound (R2); 'bar' = one-bar 'at' (?l1=bar, ?l4=blendBar)
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
@@ -38,6 +38,7 @@ export function configFromUrl(search = '') {
   if (q.get('due') === '1') c.due = true;
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
   c.sentence = q.get('sentence') || undefined;
+  c.pool = q.get('pool')?.split(',').filter(Boolean) || undefined; // letter activities: ?pool=x,qu,sh (GPC ids)
   if (q.get('parent') === '1') c.parent = true;
   if (q.get('reducedMotion') === '1') c.reducedMotion = true;
   c.rime = q.get('rime') || undefined;

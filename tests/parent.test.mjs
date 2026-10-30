@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parentSummary } from '../js/parent.js';
+import { parentSummary, tryAtHome } from '../js/parent.js';
 import { seedProgress } from '../js/dev-seed.js';
 import { STOPS } from '../js/progress.js';
 import { createSettings, DEFAULT_SETTINGS } from '../js/settings.js';
@@ -30,4 +30,13 @@ test('parent mockup data: current + next stop, tiles for every map sound (not-ye
   assert.ok(s.soundTiles.some(t => t.state === 'new')); assert.ok(s.starTiles.length >= 3);
   assert.ok(s.tryAtHome?.text.includes('Kit will review'), JSON.stringify(s.tryAtHome));
   assert.equal(s.tryAtHome.id, 'm'); // the due review sound comes first
+});
+
+test("try at home: 'review' only for a review-due sound; new and practicing sounds say 'practice'", () => {
+  const due = tryAtHome([{ id: 'm', state: 'review-due', due: 1 }, { id: 's', state: 'practicing', accuracy: 0.4 }], null);
+  assert.equal(due.id, 'm'); assert.match(due.text, /Kit will review m next session\./);
+  const prac = tryAtHome([{ id: 's', state: 'practicing', accuracy: 0.4 }], null);
+  assert.equal(prac.id, 's'); assert.match(prac.text, /Kit will practice s next session\./); assert.doesNotMatch(prac.text, /review/);
+  const fresh = tryAtHome([{ id: 't', state: 'new' }], { kind: 'sound', gpc: 't' });
+  assert.equal(fresh.id, 't'); assert.match(fresh.text, /Kit will practice t next session\./); assert.doesNotMatch(fresh.text, /review/);
 });

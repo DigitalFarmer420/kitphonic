@@ -112,7 +112,7 @@ function startActivity(activity) { // dev: one letter game (or ?activity=intro|t
   if (activity === 'sentence') { show('sentence'); const ss = allSentences(); return sentenceScreen.start({ sentence: ss.find(x => x.id === cfg.sentence) ?? ss[0], onComplete: () => allDone([]) }); }
   if (activity === 'intro' || activity === 'trace') { show('lesson'); return lesson.start({ activity, gpc: cfg.gpc ?? 's', onComplete: () => allDone([]) }); }
   show('letters');
-  letters.start({ activity, pool: LETTERS.slice(0, 6), rounds: 4, mode: tapModeFor(activity), onComplete: () => allDone([]) });
+  letters.start({ activity, pool: cfg.pool ?? LETTERS.slice(0, 6), rounds: 4, mode: tapModeFor(activity), onComplete: () => allDone([]) });
 }
 function startDirect() { // dev: word screen at ?level (and ?word first)
   const lv = cfg.startLevel; sessionId = `s-${Date.now()}`;

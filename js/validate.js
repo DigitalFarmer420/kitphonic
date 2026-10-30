@@ -5,8 +5,10 @@ export const parseIds = e => (Array.isArray(e.parse) ? e.parse : e.parse.trim().
 export const expand = e => parseIds(e).map(id => [GPC[id]?.grapheme, GPC[id]?.phoneme]); // [[grapheme, phoneme]]
 export const patternOf = ids => ids.map(id => (GPC[id]?.vowel ? 'V' : 'C')).join('');
 export const LEVEL_PATTERNS = { 1: ['VC'], 2: ['CVC'], 3: ['CVC'], 4: ['CCVC'], 5: ['CVCC'], 6: ['CVC', 'CVCC'] }; // 6 = digraph words (sh i p is CVC by sound)
-// How far into the sequence each level may reach: L1–L4 = the prototype set; L6 = up to the first digraph (sh).
-export const LEVEL_K = { 6: GPC.sh.order };
+// How far into the sequence each level's words may reach. L2 (onset + rime) stays on the prototype set; L1, L3–L5 grow
+// with sets 3–7 (served only once known); L6 = set 8 digraphs (sh ch th ng nk) and must use one.
+const BEFORE_SET8 = GPC.sh.order - 1;
+export const LEVEL_K = { 1: BEFORE_SET8, 3: BEFORE_SET8, 4: BEFORE_SET8, 5: BEFORE_SET8, 6: GPC.nk.order };
 export const earliestLegalK = e => Math.max(...parseIds(e).map(id => GPC[id]?.order ?? Infinity));
 
 // Rules 1, 2, 4 (+ pictures). k = sequence position taught so far (prototype: 8).

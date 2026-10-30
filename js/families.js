@@ -5,7 +5,7 @@ import { GPC } from './sequence.js';
 
 export const FAMILY_MAX = 4, FAMILY_MIN = 2;
 export const RIME_TTS = { at: 'at', am: 'am', an: 'an', ap: 'app', ab: 'ab', ad: 'add', ag: 'ag', in: 'in', it: 'it', ip: 'ip', ig: 'ig', id: 'id',
-  op: 'opp', ot: 'ot', og: 'og', on: 'on', en: 'en', et: 'et', eg: 'egg', ed: 'ed', un: 'un', ug: 'ug', ut: 'ut', up: 'up', ub: 'ub', ud: 'ud' };
+  ock: 'ock', ess: 'ess', uck: 'uck', ell: 'ell', ep: 'ep', ill: 'ill', op: 'opp', ot: 'ot', og: 'og', on: 'on', en: 'en', et: 'et', eg: 'egg', ed: 'ed', un: 'un', ug: 'ug', ut: 'ut', up: 'up', ub: 'ub', ud: 'ud' };
 // CVC words whose three graphemes are single letters: onset + 2-letter rime
 const cvc = () => {
   const seen = new Set(), out = [];

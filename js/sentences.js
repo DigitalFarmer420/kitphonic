@@ -21,3 +21,16 @@ export const allSentences = () => SENTENCES.map(resolveSentence);
 export function servableSentences(known, introducedStars) {
   return allSentences().filter(s => s.tokens.every(t => t.kind === 'word' ? parseIds(t.entry).every(g => known.has(g)) : t.kind === 'star' ? introducedStars.has(t.star.w) : false));
 }
+
+// Scored read (comprehension check): after "read it all" the child picks the picture that shows the sentence from 3.
+// Distractors come from other sentences whose picture differs AND that share no decodable word with this one
+// (so "the mop is in the pot" is never paired with a pot picture). Returns shuffled pics incl. the answer.
+export function pictureChoices(sent, all = allSentences(), rand = Math.random, n = 3) {
+  const mine = new Set(sent.tokens.filter(t => t.kind === 'word').map(t => t.entry.w));
+  const ok = all.filter(o => o.id !== sent.id && o.pic !== sent.pic && !o.tokens.some(t => t.kind === 'word' && mine.has(t.entry.w)));
+  const pics = [];
+  for (const o of [...ok].sort(() => rand() - 0.5)) if (!pics.includes(o.pic)) pics.push(o.pic);
+  const out = [sent.pic, ...pics.slice(0, n - 1)];
+  for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; }
+  return out;
+}

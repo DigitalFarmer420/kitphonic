@@ -16,9 +16,9 @@ test('all content words pass the validator (parse, taught GPCs only, level patte
   assert.equal(errs.length, 0, '\n' + formatErrors(errs));
 });
 test('rejects "is" as an L1 decodable (s=/z/ untaught) and "sand" (d untaught), naming the GPC', () => {
-  const is = validateWord({ text: 'is', parse: 'i s_z', level: 1 });
+  const is = validateWord({ text: 'is', parse: 'i s_z', level: 1 }, { k: 8 }); // prototype reach (m s a t p i n o)
   assert.deepEqual(is.map(e => [e.rule, e.gpc]), [['untaught', 's_z']]);
-  const sand = validateWord({ text: 'sand', parse: 's a n d', level: 5 });
+  const sand = validateWord({ text: 'sand', parse: 's a n d', level: 5 }, { k: 8 });
   assert.deepEqual(sand.map(e => [e.rule, e.gpc]), [['untaught', 'd']]);
 });
 test('rejects bad parses and wrong level patterns', () => {
@@ -40,8 +40,9 @@ test('runtime legality: serve only words whose GPCs the child knows', () => {
   assert.ok(servable({ parse: 'm a t' }, new Set(['m', 'a', 't'])));
   assert.ok(!servable({ parse: 'm a p' }, new Set(['m', 'a', 't'])));
 });
-test('no proper names / no "is", "mom" in decodable content; old unit fixtures removed', () => {
-  for (const w of ['is', 'mom', 'mum', 'sun', 'cat', 'bat', 'hat', 'sand']) assert.ok(!all.some(e => e.text === w), w);
+test('no proper names / no "mom" in decodable content; "is" is parsed with s = /z/; old unit fixtures removed', () => {
+  for (const w of ['mom', 'mum', 'sam', 'pam']) assert.ok(!all.some(e => e.text === w), w);
+  assert.equal(all.find(e => e.text === 'is')?.parse, 'i s_z'); assert.equal(all.find(e => e.text === 'has')?.parse, 'h a s_z');
   const coreTests = readFileSync(new URL('./core.test.mjs', import.meta.url), 'utf8');
   assert.ok(!/'sun'|'cat'/.test(coreTests));
 });

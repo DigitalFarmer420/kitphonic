@@ -1,4 +1,4 @@
-import { familyClips } from './families.js';
+import { familyClips, RIME_TTS } from './families.js';
 // Builds audio/manifest.json content from content.js (pure; tools/build-manifest.mjs writes it).
 // Entry: { id, kind, text (what the clip must say, for the voice actor), tts (placeholder speech text),
 //          take (path under audio/ once recorded, else null), placeholder ('tts' | file path), notes? }
@@ -41,6 +41,7 @@ export function buildManifest(takeFiles = []) {
   for (const [id, text] of Object.entries(MASCOT)) add(id, 'mascot', text, text.replace('…', ''), { voice: id.endsWith('-upbeat') ? 'upbeat' : 'calm' });
   for (const [id, s] of Object.entries(SFX)) add(id, 'sfx', s.text, null, { placeholder: s.file });
 
+  for (const id of requiredClips()) if (id.startsWith('rime-') && !clips.some(c => c.id === id)) { const r = id.slice(5); add(id, 'rime', r, RIME_TTS[r] ?? r, { notes: 'rime chunk (onset + rime bar), said as one unit' }); }
   const missing = [...requiredClips()].filter(id => !clips.some(c => c.id === id));
   if (missing.length) throw new Error('manifest missing clips: ' + missing.join(', '));
   return {

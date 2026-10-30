@@ -6,14 +6,14 @@ import { stageFor } from '../js/stage.js';
 import { seedProgress } from '../js/dev-seed.js';
 
 const VPS = [[360, 780], [390, 844], [780, 360], [844, 390], [820, 1180], [1180, 820], [667, 375]];
-test('map window: current stop visible, <= 6 stops, teasers (sh, 📖) appear near the end', () => {
+test('map window: current stop visible, <= 6 stops, the stories teaser (📖) appears at the end', () => {
   for (let n = 0; n <= STOPS.length; n++) {
     const win = mapWindow(mapState(seedProgress(n)).stops, n);
     assert.ok(win.length <= 6);
     if (n < STOPS.length) assert.equal(win.filter(s => s.now).length, 1);
   }
   const end = mapWindow(STOPS.map(s => ({ ...s, status: 'passed' })), STOPS.length);
-  assert.deepEqual(end.slice(-2).map(s => s.label), TEASERS.map(t => t.label));
+  assert.deepEqual(end.slice(-TEASERS.length).map(s => s.label), TEASERS.map(t => t.label));
 });
 test('map layout: stops never overlap each other, the top bar or the ▶ button; all on stage', () => {
   for (const [vw, vh] of VPS) for (let n = 0; n <= STOPS.length; n++) {

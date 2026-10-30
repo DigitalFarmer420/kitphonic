@@ -19,8 +19,8 @@ export function clipForMarker(m, stretch) {
   return { id: held ? `snd-${id}-held` : `snd-${id}`, rate: stretch === 'short' ? 1.25 : 1 };
 }
 export function clipForTap(mode, target, letter) {
-  const r = tapResult(mode, target, letter);
-  return { id: r.play === 'name' ? `name-${letter}` : `snd-${letter}`, rate: 1 };
+  const r = tapResult(mode, target, letter), named = LETTER_INFO[letter] ? !LETTER_INFO[letter].digraph && !LETTER_INFO[letter].noName : true;
+  return { id: r.play === 'name' && named ? `name-${letter}` : `snd-${letter}`, rate: 1 };
 }
 export const clipForBlend = w => ({ id: `word-${w}`, rate: 1 });
 export const clipForReveal = w => ({ id: `reveal-${w}`, rate: 1 });
@@ -77,7 +77,8 @@ export function makeChoices(word, { n = 3, rand = Math.random, strategy = 'minim
   const pics = allPics(), target = { w: word, pic: pics.get(word) };
   if (!target.pic) throw new Error(`no picture for "${word}"`);
   const pairs = minimalPairs(word);
-  const order = strategy === 'rhyme' ? ['onset'] : strategy === 'vowel' ? ['vowel', 'onset', 'final']
+  // rhyme = onset contrasts only, unless the word has none (then any minimal pair, so a check never has one card)
+  const order = strategy === 'rhyme' && pairs.some(c => c.contrast === 'onset') ? ['onset'] : strategy === 'vowel' ? ['vowel', 'onset', 'final']
     : CONTRASTS.map((_, i) => CONTRASTS[(i + trial) % 3]);
   const byPos = Object.fromEntries(order.map(p => [p, shuffle(pairs.filter(c => c.contrast === p), rand)]));
   const out = [target], used = new Set([target.pic]); let lead = null;
@@ -118,9 +119,9 @@ export function requiredClips() {
   const ids = new Set();
   for (const l of LETTERS) { ids.add(`name-${l}`); ids.add(`snd-${l}`); if (STRETCHY.has(l)) ids.add(`snd-${l}-held`); }
   for (const r of protoRimes()) ids.add(`rime-${r}`); // every VC rime in the prototype set (15)
-  for (const [lv, list] of Object.entries(WORDS)) for (const { w } of list) {
-    ids.add(`word-${w}`); ids.add(`reveal-${w}`);
-    const variants = [markers(w, +lv), markers(w, +lv, { l1: 'dots' }), markers(w, +lv, { l4: 'blendBar' })];
+  for (const [lv, list] of Object.entries(WORDS)) for (const { w, parse } of list) {
+    ids.add(`word-${w}`); ids.add(`reveal-${w}`); const p = { ids: parse?.split(' ') };
+    const variants = [markers(w, +lv, p), markers(w, +lv, { ...p, l1: 'dots' }), markers(w, +lv, { ...p, l4: 'blendBar' })];
     for (const ms of variants) for (const m of ms) for (const s of ['long', 'normal']) ids.add(clipForMarker(m, s).id);
   }
   for (const { w } of STAR_WORDS) { ids.add(`star-${w}`); ids.add(`star-${w}-sentence`); }

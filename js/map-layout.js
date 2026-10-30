@@ -1,11 +1,10 @@
 // Learning-map geometry (pure, unit-tested). A window of up to 6 stops around the current one, winding bottom->top
 // in portrait and left->right in landscape, clear of the top bar and the big ▶ button (thumb zone, bottom centre).
 export const STOP_R = 38, NOW_R = 52, WINDOW = 6, TEASERS = [
-  { id: 'future:digraphs', kind: 'future', label: 'sh', group: 'sh · ch · th', status: 'upcoming' },
   { id: 'future:stories', kind: 'future', label: '📖', group: 'little stories', status: 'upcoming' },
 ];
 export const GO = { w: 200, h: 72, bottom: 22 };
-export const groupOf = s => s.group ?? (s.kind === 'words' ? (s.level >= 4 ? 'blends' : 'blend words') : s.kind === 'sound' ? 'sounds' : '');
+export const groupOf = s => s.group ?? (s.kind === 'words' ? (s.level === 6 ? 'sh · ch · th' : s.level === 5 ? 'end blends' : s.level >= 4 ? 'blends' : 'blend words') : s.kind === 'sound' ? 'sounds' : '');
 
 // stops: mapState().stops; index: current index. Returns the visible window (with teasers appended near the end).
 export function mapWindow(stops, index, size = WINDOW) {

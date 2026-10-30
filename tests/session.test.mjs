@@ -8,11 +8,16 @@ import { seedProgress } from '../js/dev-seed.js';
 import { knownGpcs, blendingUnlocked, DAY } from '../js/mastery.js';
 import { wordCards, rng } from '../js/word-logic.js';
 import { parseIds } from '../js/validate.js';
+import { roundLetters } from '../js/letter-logic.js';
+import { GPC } from '../js/sequence.js';
 
 const now = Date.UTC(2026, 9, 30, 17);
 test('map stops follow the sound sequence with word levels in between', () => {
-  assert.equal(STOPS.map(s => s.label).join(' '), 'm s a t at p mat i n pin o stop');
-  assert.equal(STOPS.filter(s => s.kind === 'words').length, 4);
+  assert.equal(STOPS.slice(0, 12).map(s => s.label).join(' '), 'm s a t at p mat i n pin o stop');
+  assert.equal(STOPS.map(s => s.label).join(' '),
+    'm s a t at p mat i n pin o stop d f sand c k e u g r h b l ck ff ll ss s j v w x y z zz qu sh ship ch th th ng nk');
+  assert.deepEqual(STOPS.filter(s => s.kind === 'words').map(s => s.level), [1, 2, 3, 4, 5, 6]);
+  assert.equal(STOPS.filter(s => s.kind === 'sound').length, 38);
 });
 test('seeded progress N lands on stop N; passed / current / upcoming', () => {
   for (let n = 0; n <= STOPS.length; n++) {
@@ -100,4 +105,35 @@ test('word families open with CVC words: taught letters only, 2-4 words, fixed r
   assert.ok(late.items.some(i => i.type === 'family'), 'a family once L2 is open');
   const early = planSession(seedProgress(3, { now }), { now, rand: rng(2), minutes: 10 });
   assert.ok(!early.items.some(i => i.type === 'family'), 'no families before CVC words');
+});
+
+// Full sequence (sets 1–8): every stop is reachable in normal play — the session at each stop exercises that stop's
+// skill, and the letter rounds always have exactly one tile that makes the target sound.
+test('normal play reaches every stop through L5 (sand) and L6 (ship): each session works on its current stop', () => {
+  const at = id => STOPS.findIndex(s => s.id === id);
+  assert.ok(at('words:L5') > at('sound:f') && at('words:L6') === at('sound:sh') + 1);
+  for (let n = 0; n < STOPS.length; n++) {
+    const cur = STOPS[n];
+    for (const seed of [1, 2, 3]) {
+      const p = planSession(seedProgress(n, { now }), { now, rand: rng(seed), minutes: 7 });
+      if (cur.kind === 'sound') {
+        const hunts = p.items.filter(i => i.activity === 'hunt' && i.targets?.includes(cur.gpc));
+        assert.ok(hunts.length, `stop ${n} ${cur.id}: no scored hunt for /${cur.gpc}/`);
+        for (const h of hunts) for (let k = 0; k < 8; k++) {
+          const ls = roundLetters(cur.gpc, h.pool, { n: 3, rand: rng(k) });
+          assert.ok(ls.length >= 3, `${cur.id}: only ${ls.length} tiles from ${h.pool}`);
+          assert.equal(ls.filter(l => GPC[l].phoneme === GPC[cur.gpc].phoneme).length, 1, `${cur.id}: two tiles say /${GPC[cur.gpc].phoneme}/ (${ls})`);
+          assert.equal(new Set(ls.map(l => GPC[l].grapheme)).size, ls.length, `${cur.id}: two tiles look the same (${ls})`);
+        }
+      } else {
+        const w = p.items.find(i => i.type === 'words' && i.level === cur.level && i.why === 'new');
+        assert.ok(w && w.words.length >= 2, `stop ${n} ${cur.id}: no L${cur.level} words`);
+      }
+    }
+  }
+});
+test('due reviews of old sounds still get a hunt once they fall out of the newest-6 pool', () => {
+  const p = planSession(seedProgress(STOPS.findIndex(s => s.id === 'sound:j'), { now, due: true }), { now: now + 3 * 864e5, rand: rng(1) });
+  const rev = p.items.find(i => i.why === 'review' && i.activity === 'hunt');
+  assert.ok(rev, 'review hunt'); for (const t of rev.targets) assert.ok(rev.pool.includes(t), t);
 });

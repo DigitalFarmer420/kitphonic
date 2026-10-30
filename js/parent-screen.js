@@ -17,7 +17,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
     return `<div class="prow"><div class="plabel">${label}</div><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, t]) =>
       `<button role="radio" aria-checked="${v === cur}" class="${v === cur ? 'on' : ''}" data-k="${key}" data-v="${v}">${t}</button>`).join('')}</div>${hint ? `<div class="phint">${hint}</div>` : ''}</div>`;
   }
-  const tile = t => `<span class="ptile L ${t.state}" title="${esc(t.text)}: ${STATE_LABEL[t.state]}">${esc(t.text)}</span>`;
+  const tile = t => `<span class="ptile L ${t.state}${t.ex ? ' ex' : ''}" title="${esc(t.text)}${t.ex ? ' as in ' + esc(t.ex) : ''}: ${STATE_LABEL[t.state]}">${esc(t.text)}${t.ex ? `<small>${esc(t.ex)}</small>` : ''}</span>`;
   function render() {
     const s = parentSummary(getResponses()), c = s.current;
     $('pa-body').innerHTML = `

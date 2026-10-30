@@ -432,3 +432,19 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .pcancel{border:2px solid #eadfcd;background:#fff;color:#5d4e42}.perase{border:0;background:#c9573c;color:#fff}
 /* the mockup is in real screen px: counter-zoom the stage scale so 48px controls are 48 screen px on every device */
 #parent{zoom:calc(1 / var(--scale, 1))}
+/* scored sentence read: which picture shows it? (3 picture buttons where Read it all was) */
+#sn-choices{position:absolute;left:0;right:0;bottom:18px;display:flex;justify-content:center;gap:16px}
+#sn-choices[hidden]{display:none}
+#sn-choices .pc{width:112px;height:112px;border-radius:24px;background:#fff;border:3px solid var(--line);box-shadow:0 5px 0 var(--line);font-size:64px;display:flex;align-items:center;justify-content:center;padding:0}
+#sn-choices .pc svg{width:96px;height:72px}
+#sn-choices .pc.no{opacity:.35}
+#sn-choices .pc.yes{border-color:var(--sage);background:#E7F1E4}
+#sentence.choosing #sn-read{visibility:hidden}
+.short #sn-choices,.tall #sn-choices{bottom:auto;top:252px}
+.short #sn-choices .pc{width:100px;height:100px;font-size:56px}
+.tall #sn-choices{top:300px}
+/* two-letter graphemes as one letter-game tile (sh, ck, qu): same tile, tighter type */
+.ltr .tile.two{font-size:64px!important;letter-spacing:-2px}
+.hunt .ltr .tile.two{font-size:72px!important}
+.ptile.ex{display:flex;flex-direction:column;line-height:1;gap:1px;justify-content:center}
+.ptile small{font:600 12px 'Nunito',sans-serif;opacity:.85}

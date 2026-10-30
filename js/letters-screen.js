@@ -1,5 +1,5 @@
 // Phase 1–2 letter activities UI: Floating Letters, Find the Letter, Sound Tap, Sound Hunt (spec §3.3–3.4, mockup 1).
-import { ACTIVITIES, letterClip, roundLetters, roundTargets, staticLayout, floatInit, floatStep, hitTest, FLOAT } from './letter-logic.js';
+import { tileText, ACTIVITIES, letterClip, roundLetters, roundTargets, staticLayout, floatInit, floatStep, hitTest, FLOAT } from './letter-logic.js';
 import { caseFor } from './word-logic.js';
 import { LETTER_INFO } from './content.js';
 
@@ -54,7 +54,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   function place(items) {
     arena.replaceChildren(...items.map(it => {
       const n = el('div', 'ltr'); n.dataset.l = it.l;
-      const t = el('button', 'tile L', caseFor(it.l === 'I' ? 'I' : it.l, run.case)); t.setAttribute('aria-label', it.l);
+      const tx = it.l === 'I' ? 'I' : tileText(it.l), t = el('button', 'tile L' + (tx.length > 1 ? ' two' : ''), caseFor(tx, run.case)); t.setAttribute('aria-label', tx);
       t.onpointerdown = e => { e.stopPropagation(); tap(it, 'letter', n); };
       n.append(t);
       if (run.dots) { const d = el('button', 'ldot', WAVE); d.setAttribute('aria-label', `${it.l} sound`); d.onpointerdown = e => { e.stopPropagation(); tap(it, 'dot', n); }; n.append(d); }
@@ -82,7 +82,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const t = run.target;
     if (run.activity === 'find') { // target shown lowercase in the tile font (Uiux r2: no caps, no l/I ambiguity)
       const p = say('', 'm-find-letter', `name-${t}`).then(() => (run.promptEnd = performance.now()));
-      bubble.innerHTML = `Can you find <span class="L btile">${caseFor(t, run.case)}</span>?`; return p; }
+      bubble.innerHTML = `Can you find <span class="L btile">${caseFor(tileText(t), run.case)}</span>?`; return p; }
     if (run.activity === 'hunt') { // design 1a: "sss… find sss!" — the sound only, never the name
       const p = say('', soundClip(t), 'm-find-sound', `snd-${t}`).then(() => { run && (run.promptEnd = performance.now()); idleHand(); });
       bubble.innerHTML = `Find <b>“${LETTER_INFO[t]?.sound ?? t}”</b>!`; return p; }

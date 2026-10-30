@@ -111,7 +111,10 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     say('Start at the green dot and follow the arrows!', 'm-trace-start').then(() => { // ghost hand traces the current stroke
       if (!run) return;
       hand.start(() => { if (!run || dragging) return null; const host = $('lesson').getBoundingClientRect(), s = stage.scale, pts = run.debugPoints?.() ?? [];
-        return pts.filter((_, i) => i % 2 === 0 || i === pts.length - 1).map(([x, y]) => [(x - host.left) / s, (y - host.top) / s + 30]); },
+        // the fingertip rides just below the stroke (clear of the green start dot's radius) and pauses beside the dot first
+        const r = 8 * Math.hypot(svg.getScreenCTM().a, svg.getScreenCTM().b) / s, dy = Math.max(30, r + 22);
+        const path = pts.filter((_, i) => i % 2 === 0 || i === pts.length - 1).map(([x, y]) => [(x - host.left) / s, (y - host.top) / s + dy]);
+        return path.length ? [path[0], ...path] : path; },
         { now: seen.demo('trace'), stepMs: 260 }); });
   }
 

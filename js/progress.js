@@ -4,7 +4,7 @@
 //   words stop  -> blend:L<n> secure or better (and blending unlocked: >= 4 secure sounds incl. a vowel)
 // Untaught-sound check: words / star words are only served when every GPC is known (validate.servable).
 import { GPCS, GPC, VOWEL_IDS } from './sequence.js';
-import { WORDS, STAR_WORDS, MAX_NEW_STAR_PER_LEVEL } from './content.js';
+import { WORDS, STAR_WORDS, MAX_NEW_STAR_PER_LEVEL, LETTER_INFO } from './content.js';
 import { skillState, atLeast, knownGpcs, blendingUnlocked } from './mastery.js';
 import { servable, parseIds } from './validate.js';
 
@@ -14,14 +14,19 @@ export const WORD_STOPS = [
   { level: 2, after: 'p', label: 'mat' },  // CVC
   { level: 3, after: 'n', label: 'pin' },  // CVC, second vowel
   { level: 4, after: 'o', label: 'stop' }, // CCVC
+  { level: 5, after: 'f', label: 'sand' }, // CVCC: final blends (set 3 done: sand, pond, fast, soft)
+  { level: 6, after: 'sh', label: 'ship' }, // digraphs: two letters, one sound (set 8)
 ];
 export const MIN_WORDS = 2; // L1 opens with at, am
-export const MAX_STOPS_GPCS = 8; // GPCs with content today (prototype set); extended as content grows
+export const MAX_STOPS_GPCS = GPCS.length; // the whole sequence (sets 1–8, 38 sounds); every set has words to read
 
 export function buildStops(gpcLimit = MAX_STOPS_GPCS) {
   const stops = [];
+  // graphemes with two sounds on the map (s = /s/ and /z/, th in thin / that) carry their example as the group label
+  const shared = g => GPCS.some(o => o.id !== g.id && o.grapheme === g.grapheme);
   for (const g of GPCS.slice(0, gpcLimit)) {
-    stops.push({ id: `sound:${g.id}`, kind: 'sound', gpc: g.id, label: g.grapheme, skill: `sound:${g.id}` });
+    const ex = shared(g) && /\((.+)\)/.exec(LETTER_INFO[g.id]?.sound ?? '')?.[1];
+    stops.push({ id: `sound:${g.id}`, kind: 'sound', gpc: g.id, label: g.grapheme, skill: `sound:${g.id}`, ...(ex ? { group: `${g.grapheme} as in ${ex}` } : {}) });
     for (const w of WORD_STOPS.filter(w => w.after === g.id))
       stops.push({ id: `words:L${w.level}`, kind: 'words', level: w.level, label: w.label, skill: `blend:L${w.level}` });
   }
