@@ -1,5 +1,5 @@
 // Grown-ups view data (spec §3.8.4): a plain summary of the local response log. Pure, so it is testable.
-import { skillState, skills, DAY } from './mastery.js';
+import { skillState, skills, DAY, blendL1Mastered } from './mastery.js';
 import { mapState, servableWords } from './progress.js';
 import { GPC } from './sequence.js';
 import { STAR_WORDS, LETTER_PICS, WORDS } from './content.js';
@@ -28,6 +28,9 @@ export function parentSummary(responses, now = Date.now()) {
     soundTiles: map.stops.filter(x => x.kind === 'sound').map(x => ({ id: x.gpc, text: GPC[x.gpc].grapheme, ex: x.group?.split(' as in ')[1], state: tileState(responses, `sound:${x.gpc}`, now) })), // ex: 'is' / 'thin' / 'that' tells same-looking tiles apart
     starTiles: STAR_WORDS.slice(0, Math.max(3, stars.length)).map(x => ({ id: x.w, text: x.w, state: tileState(responses, `star:${x.w}`, now) })),
     tryAtHome: tryAtHome(sounds, cur),
+    // spec §3.4.1: the parent view shows which tap mode the child is in; §3.8.4: trouble spots
+    letterMode: blendL1Mastered(responses, now) ? 'names' : 'sounds',
+    troubleSpots: troubleSpots(responses, now),
     needsPractice: [...sounds, ...stars, ...blends].filter(s => s.state === 'review-due' || (s.state === 'practicing' && s.trials >= 3 && s.accuracy < 0.6)).map(s => s.skill),
   };
 }
@@ -50,4 +53,19 @@ export function tryAtHome(sounds, cur) {
   const g = GPC[pick.id], ex = (LETTER_PICS[pick.id] ?? []).slice(0, 2).map(([w]) => `“${w}”`);
   const where = g.grapheme.length > 1 || pick.id === 'x' || pick.id === 'ck' || pick.id === 'nk' || pick.id === 'ng' ? 'have' : 'start with';
   return { id: pick.id, grapheme: g.grapheme, text: `point to things that ${where} /${g.grapheme}/${ex.length ? `, like ${ex.join(' and ')}` : ''}. Kit will ${pick.state === 'review-due' ? 'review' : 'practice'} ${g.grapheme} next session.` };
+}
+
+// Spec §3.7.1 / §3.8.4 error patterns, last 14 days, first attempts only: letter mix-ups (b/d …) from letter games
+// (>= 2 of the same pair), and word misses by contrast position (>= 3: short vowels, last sound, first sound).
+const CONTRAST_TEXT = { vowel: 'short vowel sounds (like pin / pan)', final: 'the last sound in a word', onset: 'the first sound in a word' };
+export function troubleSpots(responses, now = Date.now()) {
+  const recent = responses.filter(r => r.firstAttempt && !r.correct && r.timestamp >= now - 14 * DAY && !r.modelled);
+  const pairs = new Map();
+  for (const r of recent) if (/^(sound|name):/.test(r.skill) && r.picked && r.picked !== r.itemId) {
+    const a = GPC[r.itemId]?.grapheme ?? r.itemId, b = GPC[r.picked]?.grapheme ?? r.picked, k = [a, b].sort().join(' and ');
+    pairs.set(k, (pairs.get(k) ?? 0) + 1);
+  }
+  const by = new Map(); for (const r of recent) if (r.skill?.startsWith('blend:') && r.contrast) by.set(r.contrast, (by.get(r.contrast) ?? 0) + 1);
+  return [...[...pairs].filter(([, n]) => n >= 2).sort((x, y) => y[1] - x[1]).map(([k]) => `mixes up ${k}`),
+    ...[...by].filter(([, n]) => n >= 3).sort((x, y) => y[1] - x[1]).map(([c]) => `practising ${CONTRAST_TEXT[c] ?? c}`)].slice(0, 3);
 }

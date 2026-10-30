@@ -20,7 +20,28 @@ export const STROKES = {
   n: [line([28, 60], [28, 130], [28, 84], [38, 68], [52, 62], [66, 68], [74, 82], [74, 130])],
   m: [line([14, 60], [14, 130], [14, 82], [22, 67], [34, 62], [46, 70], [50, 84], [50, 130], [50, 84], [58, 67], [70, 62], [82, 70], [86, 84], [86, 130])],
   d: [join(arc(46, 95, 32, -30, -390), line([78, 10], [78, 130]))],
+  // sets 3–7 (formation order as taught in print: top-down, anticlockwise round letters, one lift where print lifts)
+  f: [line([74, 22], [64, 12], [52, 11], [43, 18], [40, 32], [40, 130]), line([22, 62], [64, 62])],
+  k: [line([28, 10], [28, 130]), line([72, 60], [30, 98], [74, 130])],
+  u: [line([24, 62], [24, 104], [32, 122], [48, 130], [62, 126], [74, 112], [76, 100], [76, 62], [76, 130])],
+  g: [join(arc(48, 95, 32, -40, -400), line([80, 62], [80, 150], [72, 165], [56, 171], [40, 169], [28, 160]))],
+  e: [join(line([20, 96], [81, 96]), arc(51, 96, 30, 0, -315))],
+  r: [line([30, 60], [30, 130], [30, 88], [40, 71], [54, 63], [72, 66])],
+  h: [line([28, 10], [28, 130], [28, 84], [38, 68], [52, 62], [66, 68], [74, 82], [74, 130])],
+  b: [join(line([28, 10], [28, 130], [28, 96]), arc(58, 96, 30, 180, 540))],
+  l: [line([50, 10], [50, 130])],
+  j: [line([58, 62], [58, 152], [50, 166], [36, 170], [24, 162]), line([58, 34], [58, 40])],
+  v: [line([20, 62], [50, 130], [80, 62])],
+  w: [line([8, 62], [28, 130], [50, 78], [72, 130], [92, 62])],
+  x: [line([24, 62], [76, 130]), line([76, 62], [24, 130])],
+  y: [line([22, 62], [50, 122]), line([78, 62], [36, 170])],
+  z: [line([24, 62], [76, 62], [24, 130], [76, 130])],
+  q: [join(arc(48, 95, 32, -40, -400), line([80, 62], [80, 170]))],
 };
+// Multi-letter graphemes (ck ff ll ss zz qu sh ch th ng nk): the letters in order, side by side (LETTER_ADVANCE apart).
+export const LETTER_ADVANCE = 84;
+for (const g of ['ck', 'ff', 'll', 'ss', 'zz', 'qu', 'sh', 'ch', 'th', 'ng', 'nk'])
+  STROKES[g] = [...g].flatMap((c, i) => STROKES[c].map(st => st.map(([x, y]) => [x + i * LETTER_ADVANCE, y])));
 export const hasStrokes = l => !!STROKES[l];
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 export function resample(poly, step = 2) {

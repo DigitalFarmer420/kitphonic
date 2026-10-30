@@ -2,7 +2,7 @@
 // responses for the parent view but never gate mastery (sound mastery comes from Sound Hunt).
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
-import { LETTER_PICS } from './content.js';
+import { LETTER_PICS, WORDS } from './content.js';
 import { GPC } from './sequence.js';
 import { STROKES, createTracer, resample, pathD, letterBox } from './trace.js';
 import { shuffle } from './word-logic.js';
@@ -15,6 +15,12 @@ export const TRACE_REPS = 3;
 export function picWordHtml(word, grapheme) {
   const i = word.indexOf(grapheme); if (i < 0) return word;
   return `${word.slice(0, i)}<b>${word.slice(i, i + grapheme.length)}</b>${word.slice(i + grapheme.length)}`;
+}
+// v2 V10: print the picture word only if it decodes with the sounds taught up to and including g (sequence order).
+const PARSE = new Map(Object.values(WORDS).flat().map(e => [e.w, e.parse.split(' ')]));
+export function introLabel(word, g) {
+  const ids = PARSE.get(word), at = GPC[g]?.order; if (!ids || at == null) return false;
+  return ids.every(id => GPC[id] && GPC[id].order <= at);
 }
 export const soundClip = (g, audio) => (audio?.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
 
@@ -35,8 +41,8 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     if (dg) { $('ic-letter').innerHTML = [...gr].map(c => `<span class="fl">${c}</span>`).join(''); if (reduced()) $('ic-letter').classList.add('fused'); }
     else $('ic-letter').textContent = gr;
     $('ic-letter').setAttribute('aria-label', dg ? `two letters, one sound: ${gr}` : `letter ${gr}`);
-    const P = $('ic-pic'); P.hidden = !word;
-    if (word) { P.innerHTML = `<span class="emoji">${pic}</span><span class="pw">${picWordHtml(word, gr)}</span>`; P.setAttribute('aria-label', word); }
+    const P = $('ic-pic'), label = word && introLabel(word, g); P.hidden = !word || (!pic && !label);
+    if (!P.hidden) { P.innerHTML = (pic ? `<span class="emoji">${pic}</span>` : '') + (label ? `<span class="pw">${picWordHtml(word, gr)}</span>` : ''); P.classList.toggle('wordonly', !pic); P.setAttribute('aria-label', word); }
     const snd = soundClip(g, audio);
     const prompt = () => dg ? say(`Two letters, one sound: <b>${gr}</b>. Tap it!`, 'm-two-letters', snd, 'm-tap-it')
       : say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd, 'm-tap-it');

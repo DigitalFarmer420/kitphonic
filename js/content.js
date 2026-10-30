@@ -51,21 +51,24 @@ export const LETTER_INFO = {
 };
 
 // Letter-intro pictures (design/letters-board 1b): words that START with the sound (x: ends), rotated per visit so a
-// sound is never tied to one picture. Placeholder emoji art; the word is shown with its letter in coral.
+// sound is never tied to one picture. Placeholder emoji art. v2 V10: the word is printed (its letter in coral) only when
+// the child can decode it at that point (lesson-screen introLabel); otherwise the picture + the big letter only.
+// A null picture = a decodable word shown as print alone (it, on, off). Misnamed pictures replaced (insect, ink, ox,
+// teddy, yak, cliff, feather, jet, zip, cup, net, king, sink).
 export const LETTER_PICS = {
   m: [['moon', '🌙'], ['mouse', '🐭'], ['map', '🗺️']], s: [['sun', '☀️'], ['sock', '🧦'], ['seal', '🦭']],
-  a: [['apple', '🍎'], ['ant', '🐜'], ['alligator', '🐊']], t: [['tiger', '🐯'], ['tent', '⛺'], ['teddy', '🧸']],
-  p: [['pig', '🐷'], ['penguin', '🐧'], ['pan', '🍳']], i: [['insect', '🐞'], ['ink', '🖋️']],
-  n: [['nest', '🪺'], ['nose', '👃'], ['net', '🥅']], o: [['octopus', '🐙'], ['ox', '🐂'], ['otter', '🦦']],
-  d: [['dog', '🐶'], ['duck', '🦆']], f: [['fish', '🐟'], ['fox', '🦊']], c: [['cat', '🐈'], ['cup', '☕']],
+  a: [['apple', '🍎'], ['ant', '🐜'], ['alligator', '🐊']], t: [['tiger', '🐯'], ['tent', '⛺']],
+  p: [['pig', '🐷'], ['penguin', '🐧'], ['pan', '🍳']], i: [['it', null]],
+  n: [['nest', '🪺'], ['nose', '👃'], ['nut', '🥜']], o: [['octopus', '🐙'], ['otter', '🦦'], ['on', null]],
+  d: [['dog', '🐶'], ['duck', '🦆']], f: [['fish', '🐟'], ['fox', '🦊']], c: [['cat', '🐈'], ['cap', '🧢']],
   k: [['kite', '🪁'], ['key', '🔑']], e: [['egg', '🥚'], ['elephant', '🐘']], u: [['umbrella', '☂️'], ['up', '⬆️']],
   g: [['goat', '🐐'], ['gift', '🎁']], r: [['rabbit', '🐇'], ['rocket', '🚀']], h: [['hat', '🎩'], ['horse', '🐴']],
-  b: [['bus', '🚌'], ['bed', '🛏️']], l: [['lion', '🦁'], ['leaf', '🍃']], j: [['jellyfish', '🪼'], ['jet', '✈️']],
+  b: [['bus', '🚌'], ['bed', '🛏️']], l: [['lion', '🦁'], ['leaf', '🍃']], j: [['jellyfish', '🪼'], ['jump', null]],
   v: [['van', '🚐'], ['violin', '🎻']], w: [['web', '🕸️'], ['worm', '🪱']], x: [['fox', '🦊'], ['box', '📦']],
-  y: [['yo-yo', '🪀'], ['yak', '🐃']], z: [['zebra', '🦓'], ['zip', '🤐']], qu: [['queen', '👸']],
+  y: [['yo-yo', '🪀'], ['yes', null]], z: [['zebra', '🦓']], qu: [['queen', '👸']],
   sh: [['ship', '🚢'], ['sheep', '🐑']], ch: [['chick', '🐤'], ['cheese', '🧀']], th: [['thumb', '👍']],
-  ng: [['ring', '💍'], ['king', '🤴']], ck: [['duck', '🦆'], ['sock', '🧦']], ll: [['bell', '🔔'], ['doll', '🪆']],
-  ss: [['dress', '👗']], s_z: [['nose', '👃'], ['rose', '🌹']], th_v: [['feather', '🪶']], ff: [['cliff', '🏔️']], zz: [['buzz', '🐝']], nk: [['sink', '🚰']],
+  ng: [['ring', '💍'], ['sing', '🎤']], ck: [['duck', '🦆'], ['sock', '🧦']], ll: [['bell', '🔔'], ['doll', '🪆']],
+  ss: [['dress', '👗']], s_z: [['nose', '👃'], ['rose', '🌹']], th_v: [['that', '👉']], ff: [['off', null], ['puff', '💨']], zz: [['buzz', '🐝']], nk: [['wink', '😉'], ['pink', '🩷']],
 };
 
 // Level ladder (§3.7) — review R5 data model. Each word: text, parse (GPC ids from js/sequence.js, space-separated),
@@ -86,8 +89,13 @@ export const WORDS = {
     W('pan', 'p a n', { pic: '🍳' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }),
     W('sip', 's i p', { say: 'Sip! Take a sip.' }), W('tin', 't i n', { say: 'Tin! A tin can.' }),
+    W('pat', 'p a t', { say: 'Pat! Pat the dog.' }), W('sap', 's a p', { say: 'Sap! Sticky tree sap.' }),
   ],
   3: [ // CVC, all phonemes. map/pan re-read sound-by-sound (spec L3 examples)
+    // v2 V8: >= 12 words at the L3 stop (m s a t p i n): the L2 words re-read sound by sound, plus nip / tan
+    W('mat', 'm a t', { pic: '#mat' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }), W('tap', 't a p', { say: 'Tap! Tap the drum.' }),
+    W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }), W('sip', 's i p', { say: 'Sip! Take a sip.' }),
+    W('tin', 't i n', { say: 'Tin! A tin can.' }), W('nip', 'n i p', { say: 'Nip! The crab can nip.' }), W('tan', 't a n', { say: 'Tan! A tan dog.' }),
     W('pot', 'p o t', { pic: '🍲' }), W('mop', 'm o p', {}), W('map', 'm a p', { pic: '🗺️' }), W('pan', 'p a n', { pic: '🍳' }),
     W('sit', 's i t', { say: 'Sit! Sit down.' }), W('pop', 'p o p', { say: 'Pop! Pop the bubble.' }),
     W('top', 't o p', { say: 'Top! Spin the top.' }), W('tip', 't i p', { say: 'Tip! The tip of my nose.' }),
@@ -131,6 +139,7 @@ export const WORDS = {
     W('dash', 'd a sh', { say: 'Dash! Dash to the door.' }), W('shed', 'sh e d', { say: 'Shed! A garden shed.' }),
     W('shut', 'sh u t', { say: 'Shut! Shut the door.' }), W('shin', 'sh i n', { say: 'Shin! I bumped my shin.' }),
     W('shell', 'sh e ll', { pic: '🐚', say: 'Shell! A sea shell.' }), W('rush', 'r u sh', { say: 'Rush! No need to rush.' }),
+    W('wish', 'w i sh', { say: 'Wish! Make a wish.' }), W('shock', 'sh o ck', { say: 'Shock! What a shock!' }), W('hush', 'h u sh', { say: 'Hush! The baby is asleep.' }),
     // ch
     W('chip', 'ch i p', { say: 'Chip! A chip of wood.' }), W('chop', 'ch o p', { say: 'Chop! Chop the wood.' }), W('chin', 'ch i n', { say: 'Chin! Touch your chin.' }),
     W('chick', 'ch i ck', { pic: '🐤', say: 'Chick! A fluffy chick.' }), W('much', 'm u ch', { say: 'Much! Thank you so much.' }), W('chat', 'ch a t', { say: 'Chat! A chat with a friend.' }),

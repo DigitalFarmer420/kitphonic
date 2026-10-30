@@ -28,6 +28,8 @@ SCENES = [  # name, query, js to run after load
     ('map-th', 'skipHello=1&progress=49&seed=1', None),
     ('word-L5', 'skipHello=1&level=5&word=sand&seed=1', "new Promise(r => setTimeout(r, 800))"),
     ('word-S1', 'skipHello=1&level=2&word=mat&support=1&seed=1', "new Promise(r => setTimeout(r, 900))"),  # v2 V2 read it: check at once + help
+    ('word-S1-cards', 'skipHello=1&level=2&word=sat&support=1&seed=1', "new Promise(r => setTimeout(r, 900))"),  # S1 word cards
+    ('word-S2-rime', 'skipHello=1&level=2&word=man&support=2&seed=1', "new Promise(r => setTimeout(r, 900))"),  # L2 onset + rime bar
     ('word-S2', 'skipHello=1&level=2&word=mat&support=2&seed=1', "new Promise(r => setTimeout(r, 900))"),  # silent dots
     ('hunt-digraph', 'skipHello=1&activity=hunt&pool=x,y,zz,qu,sh,ck&seed=1', None),
     ('levelup', 'skipHello=1&progress=5&levelup=1&seed=1', "new Promise(r => setTimeout(r, 1800))"),
@@ -47,6 +49,9 @@ SCENES = [  # name, query, js to run after load
     ('family', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('family-made', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500)).then(() => { document.querySelector('#fm-tray .ftile').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); }).then(() => new Promise(r => setTimeout(r, 2600)))"),
     ('digraph', 'skipHello=1&level=6&word=ship&seed=1', "new Promise(r => setTimeout(r, 800))"),
+    ('intro-i', 'skipHello=1&activity=intro&gpc=i&seed=1', "new Promise(r => setTimeout(r, 900))"),  # v2 V10: decodable word, no picture
+    ('intro-p', 'skipHello=1&activity=intro&gpc=p&seed=3', "new Promise(r => setTimeout(r, 900))"),
+    ('intro-m', 'skipHello=1&activity=intro&gpc=m&seed=1', "new Promise(r => setTimeout(r, 900))"),
     ('fuse', 'skipHello=1&activity=intro&gpc=sh&seed=1', "new Promise(r => setTimeout(r, 2200))"),
     ('parent', 'skipHello=1&progress=5&parent=1', "new Promise(r => setTimeout(r, 800))"),
     ('letters-float', 'skipHello=1&activity=float&seed=1', None),
@@ -54,7 +59,7 @@ SCENES = [  # name, query, js to run after load
 ]
 MEASURE = r"""() => {
   const vis = e => { const r = e.getBoundingClientRect(), cs = getComputedStyle(e);
-    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && !e.closest('[hidden]') && e.offsetParent !== null; };
+    return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.pointerEvents !== 'none' && !e.closest('[hidden]') && e.offsetParent !== null; }; // pointer-events:none = not a tap target
   const scr = [...document.querySelectorAll('.screen')].find(s => !s.hidden);
   const overlay = scr.querySelector('#check:not([hidden])');
   const root = overlay || scr;
@@ -72,7 +77,9 @@ MEASURE = r"""() => {
   const R = e => e.getBoundingClientRect(), hit = (a, b) => a.left + 2 < b.right && b.left + 2 < a.right && a.top + 2 < b.bottom && b.top + 2 < a.bottom;
   const cueHits = [...scr.querySelectorAll('.stop .cue')].filter(vis).flatMap(c => [...scr.querySelectorAll('.stop, .mlabel, .mkit, .stop .st')]
     .filter(o => vis(o) && o !== c.parentElement && !o.contains(c) && hit(R(c), R(o))).map(o => `cue ${c.textContent} / ${name(o)}`));
-  return { cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  // Uiux r8: no visible button is blank (it shows text, an icon or a picture)
+  const empty = [...root.querySelectorAll('button, .marker .bar, .marker .dot')].filter(vis).filter(e => !e.textContent.trim() && !e.matches('[data-dropslot]') && !e.querySelector('svg, img, .emoji')).map(name);
+  return { empty, cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 44  # grown-ups area: adult targets (Apple HIG 44pt); the mockup uses 48px segmented controls
@@ -89,6 +96,7 @@ def check(m, vp, scene):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
         if t['play'] and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
+    errs += [f'empty button {n}' for n in m.get('empty', [])]
     k = m['key']
     for i in range(len(k)):
         for j in range(i + 1, len(k)):

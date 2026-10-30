@@ -23,7 +23,7 @@
  <circle cx="34" cy="76" r="6" fill="#EF8B6E" opacity=".4"/><circle cx="86" cy="76" r="6" fill="#EF8B6E" opacity=".4"/>
  <path d="M30 34 q-6 -10 2 -4" fill="none"/>
 </symbol>
-<symbol id="mat" viewBox="0 0 120 80"><rect x="10" y="22" width="100" height="44" rx="10" fill="#EF8B6E"/><path d="M22 22v44M38 22v44M54 22v44M70 22v44M86 22v44M102 22v44" stroke="#F7B9A4" stroke-width="5"/><path d="M10 66l-4 8M24 66l-2 8M100 66l2 8M110 66l4 8" stroke="#EF8B6E" stroke-width="3" stroke-linecap="round"/></symbol>
+<symbol id="mat" viewBox="0 0 120 80"><ellipse cx="60" cy="66" rx="50" ry="6" fill="#E9DCC8"/><path d="M26 22 H94 L108 62 H12 Z" fill="#EF8B6E" stroke="#C9604A" stroke-width="2" stroke-linejoin="round"/><path d="M31 27 H89 L100 57 H20 Z" fill="none" stroke="#FFE3D6" stroke-width="3" stroke-linejoin="round"/><path d="M60 31 L72 42 L60 53 L48 42 Z" fill="#F2B950"/><path d="M36 42 h6 M78 42 h6" stroke="#F2B950" stroke-width="4" stroke-linecap="round"/><path d="M28 22 l-3 -7 M36 22 l-2 -7 M44 22 l-1 -7 M52 22 v-7 M60 22 v-7 M68 22 v-7 M76 22 l1 -7 M84 22 l2 -7 M92 22 l3 -7 M16 62 l-3 9 M26 62 l-2 9 M36 62 l-1 9 M46 62 v9 M56 62 v9 M66 62 v9 M76 62 v9 M86 62 l1 9 M96 62 l2 9 M106 62 l3 9" stroke="#C9604A" stroke-width="2.5" stroke-linecap="round"/></symbol>
 <symbol id="cat" viewBox="0 0 120 80"><path d="M36 24l6-18 12 14M84 24l-6-18-12 14" fill="#9C9089"/><ellipse cx="60" cy="40" rx="30" ry="26" fill="#9C9089"/><circle cx="50" cy="38" r="4" fill="#3A2E28"/><circle cx="70" cy="38" r="4" fill="#3A2E28"/><path d="M57 46h6l-3 3z" fill="#EF8B6E"/><path d="M30 48h18M30 54h18M72 48h18M72 54h18" stroke="#5B4A40" stroke-width="2"/></symbol>
 <symbol id="hat" viewBox="0 0 120 80"><ellipse cx="60" cy="62" rx="48" ry="10" fill="#4E97C9"/><path d="M34 62 V24 q26 -14 52 0 V62z" fill="#86BFE3"/><rect x="34" y="46" width="52" height="9" fill="#F2B950"/></symbol>
 <symbol id="hand" viewBox="0 0 60 70"><path d="M22 8a6 6 0 0 1 12 0v24l4-2a6 6 0 0 1 8 3l2 3 4-1a5 5 0 0 1 6 5v8c0 12-9 20-20 20h-6c-8 0-13-4-17-10L4 44a5 5 0 0 1 8-6l10 8z" fill="#fff" stroke="#3A2E28" stroke-width="3" stroke-linejoin="round"/></symbol>
@@ -54,6 +54,7 @@
     <div id="slider"><div id="track"><div id="fill"></div></div><div id="handle" role="slider" aria-label="Blend slider">▶</div></div>
     <button id="next" hidden aria-label="Next word">▶</button>
     <div id="check" hidden>
+      <button class="btn" id="check-home" aria-label="Home">⌂</button>
       <button class="btn" id="check-help" hidden aria-label="Help: show the sounds">🔊</button>
       <div class="L cword" id="check-word"></div>
       <div class="mascot"><svg width="64" height="64"><use href="#kit"/></svg><div class="bubble" id="check-bubble"></div></div>
@@ -127,7 +128,7 @@
     </div>
     <div class="mascot" id="fm-mascot"><svg width="72" height="72"><use href="#kit"/></svg><div class="bubble" id="fm-bubble"></div></div>
     <div id="fm-card"><span class="q">?</span></div>
-    <div id="fm-word"><button id="fm-slot" class="L" aria-label="Empty slot: put a letter here"></button><div id="fm-rime" class="L"></div></div>
+    <div id="fm-word"><button id="fm-slot" class="L" data-dropslot aria-label="Empty slot: put a letter here"></button><div id="fm-rime" class="L"></div></div>
     <div id="fm-made" aria-label="Words made so far"></div>
     <div id="fm-tray"></div>
   </section>

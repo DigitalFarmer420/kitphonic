@@ -152,3 +152,27 @@ test('due reviews of old sounds still get a hunt once they fall out of the newes
   const rev = p.items.find(i => i.why === 'review' && i.activity === 'hunt');
   assert.ok(rev, 'review hunt'); for (const t of rev.targets) assert.ok(rev.pool.includes(t), t);
 });
+test('v2 V8: every words stop from L3 on has >= 12 servable words (L1 / L2 open with only 4–5 letters known: at, am / 6 CVC)', async () => {
+  const { applyWords, servableWords } = await import('../js/progress.js');
+  const known = new Set(), passed = [];
+  for (const s of STOPS) {
+    if (s.kind === 'sound') { known.add(s.gpc); continue; }
+    if (s.kind !== 'words') continue;
+    const ws = s.apply ? applyWords(s.apply, known, Math.max(...passed, 1)) : servableWords(s.level, known);
+    if (s.level) passed.push(s.level);
+    if (s.level === 1 || s.level === 2) { assert.ok(ws.length >= 2, s.id); continue; }
+    assert.ok(new Set(ws.map(w => w.w)).size >= 12, `${s.id}: ${ws.length} words (${ws.map(w => w.w)})`);
+  }
+});
+test('v2 V4: at most one new sound per session — no plan, at any stop, introduces or targets two untaught GPCs', () => {
+  for (let n = 0; n < STOPS.length; n++) for (const seed of [1, 2]) {
+    const log = seedProgress(n, { now }), met = new Set(log.filter(r => r.skill?.startsWith('sound:')).map(r => r.skill.slice(6)));
+    const p = planSession(log, { now, rand: rng(seed), minutes: 7 });
+    const fresh = new Set();
+    for (const it of p.items) {
+      for (const g of [it.gpc, it.newSound, ...(it.targets ?? [])]) if (g && !met.has(g)) fresh.add(g);
+      for (const w of it.words ?? []) for (const g of parseIds(w)) if (!met.has(g)) fresh.add(g);
+    }
+    assert.ok(fresh.size <= 1, `stop ${n} ${STOPS[n].id}: new sounds ${[...fresh]}`);
+  }
+});

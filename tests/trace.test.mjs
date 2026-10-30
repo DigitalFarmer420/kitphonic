@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STROKES, createTracer, resample } from '../js/trace.js';
-import { PROTOTYPE_SET } from '../js/sequence.js';
+import { STROKES, createTracer, resample, LETTER_ADVANCE } from '../js/trace.js';
+import { PROTOTYPE_SET, GPCS } from '../js/sequence.js';
 
 const follow = (tr, noise = 0, seed = 1) => {
   let r = seed; const rnd = () => ((r = (r * 16807) % 2147483647) / 2147483647 - 0.5) * 2 * noise;
@@ -13,6 +13,13 @@ test('every prototype letter has strokes inside the 100x180 box', () => {
   for (const l of PROTOTYPE_SET) {
     assert.ok(STROKES[l]?.length, l);
     for (const s of STROKES[l]) for (const [x, y] of resample(s)) assert.ok(x >= 0 && x <= 100 && y >= 0 && y <= 180, `${l} ${x},${y}`);
+  }
+});
+test('every grapheme in the sequence can be traced; each letter inside its 100x180 cell', () => {
+  for (const g of GPCS) {
+    assert.ok(STROKES[g.grapheme]?.length, g.grapheme);
+    const w = 100 + LETTER_ADVANCE * (g.grapheme.length - 1);
+    for (const s of STROKES[g.grapheme]) for (const [x, y] of resample(s)) assert.ok(x >= 0 && x <= w && y >= 0 && y <= 180, `${g.grapheme} ${x},${y}`);
   }
 });
 test('following the path (with finger wobble) completes each letter', () => {

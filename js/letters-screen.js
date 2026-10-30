@@ -101,7 +101,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     }
     const right = it.l === run.target, latencyMs = run.promptEnd ? Math.round(performance.now() - run.promptEnd) : null;
     if (run.firstTry) record({ skill: `${run.def.scored}:${run.target}`, itemId: run.target, gpcs: [run.target], correct: right, firstAttempt: true,
-      assisted: false, latencyMs, activity: run.activity });
+      assisted: false, latencyMs, activity: run.activity, picked: it.l }); // picked: trouble spots (b/d) in the parent view
     run.firstTry = false;
     audio.stop();
     if (right) {

@@ -37,7 +37,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
     }));
     mk.replaceChildren(...ms.map((m, i) => {
-      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="34" height="34"><use href="#wave"/></svg></div>' : '<div class="bar"></div>');
+      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="34" height="34"><use href="#wave"/></svg></div>' : '<div class="bar"><svg width="34" height="34"><use href="#wave"/></svg></div>');
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', `${m.type} ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
     }));
@@ -193,7 +193,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
   $('next').onclick = next;
-  $('home').onclick = () => { audio.stop(); hand.stop(); onHome(); };
+  $('home').onclick = $('check-home').onclick = () => { audio.stop(); hand.stop(); $('check').hidden = true; onHome(); };
   // ↻ before the pick never says the target word unless Kit is modelling (S4); at S3 it replays the sounds (a hint)
   $('again').onclick = () => { audio.stop();
     if (state === 'revealed') return audio.play(`reveal-${entry.w}`);

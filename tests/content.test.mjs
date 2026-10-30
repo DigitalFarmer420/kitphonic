@@ -54,3 +54,13 @@ test('audio coverage: every prototype GPC has a sound clip and every word a word
 test('picture pool entries carry phonemes', () => {
   for (const p of PICTURE_POOL) assert.ok(p.phonemes.every(Boolean), p.text);
 });
+test('v2 V10: a printed letter-intro label never contains an untaught GPC; every intro shows a picture or a decodable word', async () => {
+  const { LETTER_PICS } = await import('../js/content.js'); const { introLabel } = await import('../js/lesson-screen.js'); const { GPC } = await import('../js/sequence.js');
+  const { WORDS } = await import('../js/content.js'); const parse = new Map(Object.values(WORDS).flat().map(e => [e.w, e.parse.split(' ')]));
+  for (const [g, pics] of Object.entries(LETTER_PICS)) for (const [word, pic] of pics) {
+    if (introLabel(word, g)) for (const id of parse.get(word)) assert.ok(GPC[id].order <= GPC[g].order, `${g}: "${word}" prints untaught ${id}`);
+    assert.ok(pic || introLabel(word, g), `${g}: "${word}" has neither a picture nor a decodable label`);
+  }
+  assert.equal(introLabel('moon', 'm'), false); assert.equal(introLabel('map', 'm'), false); assert.equal(introLabel('map', 'p'), true); assert.equal(introLabel('it', 'i'), true);
+  for (const bad of ['insect', 'ink', 'ox', 'teddy', 'yak', 'cliff', 'feather']) assert.ok(!Object.values(LETTER_PICS).flat().some(([w]) => w === bad), bad);
+});

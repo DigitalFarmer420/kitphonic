@@ -54,3 +54,16 @@ test('v2 V1: words read alone are counted apart from words read with Kit (modell
   assert.equal(s.wordsRead, 2); assert.equal(s.wordsWithKit, 1);
   assert.equal(counts(r('map', { modelled: true })), false); assert.equal(counts(r('mat')), true);
 });
+test('spec §3.4.1 / §3.8.4: parent view shows the letter-tap mode and trouble spots (b/d mix-ups, vowel misses)', async () => {
+  const { troubleSpots } = await import('../js/parent.js'); const now = Date.now();
+  const m = (skill, itemId, extra) => ({ skill, itemId, correct: false, firstAttempt: true, timestamp: now - 1000, sessionId: 'a', ...extra });
+  const log = [m('sound:b', 'b', { picked: 'd' }), m('sound:d', 'd', { picked: 'b' }), m('sound:m', 'm', { picked: 's' }),
+    ...['pin', 'pan', 'pen'].map(w => m('blend:L3', w, { contrast: 'vowel' })), m('blend:L3', 'mat', { contrast: 'final' })];
+  assert.deepEqual(troubleSpots(log, now), ['mixes up b and d', 'practising short vowel sounds (like pin / pan)']);
+  assert.deepEqual(troubleSpots(log.map(r => ({ ...r, timestamp: now - 20 * 864e5 })), now), []); // old misses fade
+  assert.equal(parentSummary([], 2).letterMode, 'sounds');
+});
+test('visible version: VERSION file = js/version.js = 1.0.0-rc1', async () => {
+  const { readFileSync } = await import('node:fs'); const { VERSION } = await import('../js/version.js');
+  assert.equal(readFileSync(new URL('../VERSION', import.meta.url), 'utf8').trim(), VERSION); assert.equal(VERSION, '1.0.0-rc1');
+});

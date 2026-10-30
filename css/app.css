@@ -10,7 +10,7 @@ html,body{margin:0;height:100%;background:#E9E1D5;overflow:hidden;font-family:'N
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 .btn{width:72px;height:72px;border-radius:22px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 .btn.coral{color:var(--coral)}
-#check-help{position:absolute;top:14px;right:18px}.portrait #check-help{right:14px}.short #check-help{top:10px;right:16px}#check-help[hidden]{display:none}
+#check-help,#check-home{position:absolute;top:14px;right:18px}#check-home{right:auto;left:18px}.portrait #check-help{right:14px}.portrait #check-home{left:14px}.short #check-help,.short #check-home{top:10px;right:16px}.short #check-home{right:auto;left:16px}#check-help[hidden]{display:none}
 .top{position:absolute;top:14px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;z-index:5}
 .path{display:flex;gap:10px;align-items:center}.peb{width:22px;height:22px;border-radius:50%;background:var(--line)}
 .peb.on{background:var(--honey)}.peb.now{background:#fff;border:4px solid var(--honey)}
@@ -72,7 +72,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #next[hidden],.next[hidden]{display:none}
 
 /* check overlay */
-#check{position:absolute;inset:0;background:rgba(255,248,236,.97);z-index:8;display:flex;flex-direction:column;align-items:center;padding-top:calc(40px + (var(--h) - 540px) * .3);gap:16px}
+#check{position:absolute;inset:0;background:var(--cream, #FFF8EC);z-index:8;display:flex;flex-direction:column;align-items:center;padding-top:calc(40px + (var(--h) - 540px) * .3);gap:16px}
 #check[hidden]{display:none}
 #check .cword{font-size:80px;letter-spacing:10px}
 #check .mascot{position:static}
@@ -160,6 +160,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   display:flex;align-items:center;justify-content:center;gap:18px;font-size:72px}
 .ipic .pw{font-family:'Andika';font-weight:700;font-size:52px;color:var(--ink)}
 .ipic .pw b{color:var(--coral)}
+.ipic.wordonly .pw{font-size:72px} /* v2 V10: a decodable word with no picture */
 .ibar{position:absolute;left:18px;right:18px;bottom:18px;display:flex;gap:16px;align-items:center}
 .wide{flex:1;height:84px;border-radius:28px;background:var(--honey);box-shadow:0 6px 0 #D9A23C;font-size:44px;color:var(--ink)}
 .wide[hidden]{display:none}
@@ -249,7 +250,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .portrait #markers{bottom:212px}
 .portrait #slider{bottom:110px}
 .portrait #next,.portrait .next{right:auto;left:50%;margin-left:-48px;bottom:10px}
-.portrait #check{padding-top:clamp(100px, calc(var(--h) * .15), 200px)}
+.portrait #check{padding-top:clamp(100px, calc(var(--h) * .15), 200px);justify-content:center;padding-bottom:8%}
 .portrait #check .cword{font-size:72px}
 .portrait #choices{justify-content:center;gap:12px;max-width:380px}
 .portrait .choice{width:116px;height:124px;font-size:64px}
@@ -313,6 +314,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 @keyframes wdglow{50%{box-shadow:0 0 0 9px rgba(242,185,80,.6)}}
 .wd.star.cur::after{top:-14px;right:-12px;font-size:28px}
 .wd.done{opacity:1;color:var(--saged);background:transparent;box-shadow:none;animation:none}
+.wd:not(.cur){min-width:0;pointer-events:none} /* Uiux r8: inactive words keep normal word spacing; only the current word is a tap target */
 .wd.lit{opacity:1;background:#FFE7A8;color:var(--ink)}
 #sn-tiles{position:absolute;left:0;right:0;bottom:226px;height:110px;pointer-events:none}
 .short #sentence:not(.blending) #sn-tiles,.tall #sentence:not(.blending) #sn-tiles{display:none}
@@ -373,6 +375,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #fm-tray,.tall #fm-tray{left:210px;right:16px}
 .short #fm-tray{bottom:10px}.short .ftile{height:88px;width:80px;font-size:56px}
 .tall #fm-word{top:110px;height:120px}.tall #fm-made{left:210px;top:262px}.tall #fm-tray{bottom:30px}
+.portrait #fm-tray{flex-wrap:wrap;left:24px;right:24px;row-gap:22px;max-width:none}.ftile{flex-shrink:0}
 /* Digraphs (words-board 3, note 20): ONE joined sky tile with an underline bar — same colour everywhere */
 .tile.dg{background:#EAF4FB;border-color:var(--sky);box-shadow:0 5px 0 var(--skyd)}
 .tile.dg::after{content:'';position:absolute;left:22%;right:22%;bottom:7px;height:6px;border-radius:3px;background:var(--skyd)}
@@ -391,7 +394,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #lesson.tracing .top .path{visibility:hidden}
 .short #trace .ibar{right:auto;bottom:auto;top:50%;transform:translateY(-50%);gap:14px}
 /* 3) sentence: ~8px clear around the glowing star word; its ⭐ sits inside the glow, never on a neighbour */
-.wd.star{margin:0 12px 4px}
+.wd.star.cur{margin:0 12px 4px} /* room for the ⭐ badge only while it is the word to tap (Uiux r8) */
 .wd.star.cur::after{top:-12px;right:-6px;font-size:24px}
 /* Grown-ups area (design/parent-mockup.html): adult UI — 48px segmented controls, Andika status tiles */
 #parent{background:#fdf6ea;flex-direction:column;font-size:15px;line-height:1.4;color:#3b2f28}
@@ -420,6 +423,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .plegend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:12px;color:#5d4e42}
 .plegend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px;border:2px solid transparent}
 .pnote{margin-top:12px;font-size:14px;background:#fdf6ea;border-radius:12px;padding:10px}
+.pmode{margin-top:10px;font-size:14px}.pfoot{margin:14px 4px 4px;font-size:12px;color:var(--muted);text-align:right}
 .ptip{color:#5d4e42}.plink{border:0;background:none;color:#4b7fa3;font:inherit;font-weight:700;text-decoration:underline;padding:12px 4px;min-height:44px}
 .prow{margin-bottom:14px}.plabel{font-size:14px;font-weight:700;margin-bottom:6px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:#f4ede2;border-radius:14px;padding:4px;gap:4px}

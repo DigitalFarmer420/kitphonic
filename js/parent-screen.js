@@ -1,5 +1,6 @@
 // Grown-ups area, behind the map's press-and-hold gear gate. Progress summary + settings (saved on this device).
 import { parentSummary, STATE_LABEL } from './parent.js';
+import { VERSION } from './version.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -36,6 +37,8 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
           <h3>Star words</h3><div class="ptiles">${s.starTiles.map(tile).join('')}</div>
           <div class="plegend"><span><i class="practicing"></i>Practicing</span><span><i class="secure"></i>Secure</span><span><i class="mastered"></i>Mastered</span><span><i class="review-due"></i>Review due</span><span><i class="new"></i>Not yet</span></div>
           ${s.tryAtHome ? `<div class="pnote"><b>Try at home:</b> ${esc(s.tryAtHome.text)}</div>` : ''}
+          ${s.troubleSpots.length ? `<div class="pnote pwatch"><b>Watch for:</b> ${s.troubleSpots.map(esc).join('; ')}.</div>` : ''}
+          <div class="pmuted pmode">Letters say their ${s.letterMode === 'names' ? '<b>names</b> (dots say their sounds)' : '<b>sounds</b> (names come once two-letter words are secure)'}.</div>
         </div>
       </div>
       <div class="pcol">
@@ -43,6 +46,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
           <div class="pnote ptip">${esc(tip)} <button class="plink" id="pa-test">Play a test sound</button></div>
           <div id="pa-reset-wrap"><button class="preset" id="pa-reset">Reset progress…</button><div class="phint">Asks again before erasing anything.</div></div>
         </div>
+        <div class="pfoot" id="pa-version">Kitphonic ${esc(VERSION)} · progress is saved on this device only</div>
       </div>`;
     $('pa-body').querySelectorAll('.seg button[data-k]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, v = typeof settings.get(k) === 'number' ? +b.dataset.v : b.dataset.v; settings.set(k, v); render(); });
