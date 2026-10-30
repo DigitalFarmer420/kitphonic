@@ -107,7 +107,9 @@ def main():
         ovl = []
         if a.audio:  # one sound at a time: no clip may start before the previous audible clip ended (5 ms tolerance)
             heard = sorted([e for e in pg.evaluate('() => __kitAudioLog') if e.get('end') is None or e['end'] >= e['t']], key=lambda e: e['t'])
-            ovl = [(x['id'], y['id'], round(x['end'] - y['t'])) for x, y in zip(heard, heard[1:]) if x.get('end') is not None and y['t'] < x['end'] - 5]
+            def span(e): return (e['a'], e['b']) if e.get('a') is not None and e.get('b') is not None else (e['t'], e.get('end'))  # audio clock when known
+            heard = sorted([e for e in heard if span(e)[1] is None or span(e)[1] > span(e)[0]], key=lambda e: span(e)[0])
+            ovl = [(x['id'], y['id'], round(span(x)[1] - span(y)[0])) for x, y in zip(heard, heard[1:]) if span(x)[1] is not None and span(y)[0] < span(x)[1] - 5]
             print(f"audio: {len(heard)} clips heard, overlaps: {len(ovl)} {ovl[:10]}")
             if ovl and os.environ.get('KP_DBG'): print([(e['id'], e['t'], e.get('end')) for e in heard[:12]])
         b.close(); sys.exit(0 if done and not ovl else 1)

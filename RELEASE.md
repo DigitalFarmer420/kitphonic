@@ -112,7 +112,7 @@ its own `then()` chain that `audio.stop()` could not cancel, so rapid taps stack
 **Now.**
 1. **One voice at a time, app-wide** (`js/audio.js`). Every clip goes through one serial queue; the next sound waits
    for the previous one to end + 250 ms (`gapMs` overrides it: 0 for slider phonemes, 300 after a trace chime).
-   `audio.say([...])` schedules a phrase gaplessly on the audio clock (edge silence skipped, 25 ms lookahead), so
+   `audio.say([...])` schedules a phrase gaplessly on the audio clock (edge silence skipped, 50 ms lookahead; the audio log records exact audio-clock start / end), so
    "Find… t" is one phrase with no gap and no overlap. `audio.stop()` (a new tap) cuts Kit off and drops the queue.
    Rapid taps can't stack (screens ignore taps while a round is resolving; any new tap stops the old audio first).
 2. **Correct tap = the chime only** (`js/feedback.js`: `CORRECT = ['sfx-chime']`). The green glow + a new **Kit nod**
@@ -135,7 +135,7 @@ its own `then()` chain that `audio.stop()` could not cancel, so rapid taps stack
 a gapless "Find… t" joint, stop + rapid replays never stacking, and a 60-step seeded random session with peak
 concurrency 1. Headless Chrome with the real takes: a letters round (wrong tap, correct tap, 3 rapid taps, correct tap)
 shows 0 overlaps > 5 ms; `tools/play-session.py --audio` sessions (letters, lesson + trace, family, star, word,
-level-up, sentence, story) report **0 overlapping sounds**.
+level-up, sentence, story) report **0 overlapping sounds**, locally and against the live site.
 
 ## Fixed in rc4 (Uiux rc3 audio review)
 - **Hello latency (medium):** Kit's hello, both SFX and the first lesson prompt (`EARLY_CLIPS` in `js/audio.js`,

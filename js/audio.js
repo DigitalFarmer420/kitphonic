@@ -74,16 +74,16 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
       onClip(c, via);
       if (buf) {
         const [lead, trail] = clips.length > 1 ? edges(buf) : [0, 0], dur = (buf.duration - lead - (k < clips.length - 1 ? trail : 0)) / rate;
-        at ??= ctx.currentTime + (clips.length > 1 ? 0.025 : 0); // a phrase is scheduled 25 ms ahead so its 1st clip can't start late and run into the 2nd
+        at ??= ctx.currentTime + (clips.length > 1 ? 0.05 : 0); // a phrase is scheduled 50 ms ahead so its 1st clip can't start late and run into the 2nd
         const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.connect(ctx.destination); sources.add(s);
         const e = { id: c.id, via, rate, t: Math.round(now() + (at - ctx.currentTime) * 1000) }; log.push(e);
         s.start(at, lead, dur * rate); at += dur;
-        const sched = e.t + dur * 1000; s.__e = e; s.__end = sched; // log the exact scheduled end (onended fires a few ms late on the main thread)
+        const sched = e.t + dur * 1000; s.__e = e; s.__end = sched; e.a = at * 1000 - dur * 1000; e.b = at * 1000; // a/b: audio clock (ms), exact // log the exact scheduled end (onended fires a few ms late on the main thread)
         ends.push(new Promise(r => (s.onended = () => { sources.delete(s); e.end ??= Math.round(sched); r(); })));
       } else { // no buffer: speech / tone, strictly after whatever was scheduled before it
         await Promise.all(ends.splice(0)); at = null; if (my !== gen) return;
-        const e = { id: c.id, via, rate, t: Math.round(now()) }; log.push(e);
-        await (via === 'tts' ? speak(c.tts, rate) : tone(c.id, rate)); e.end = Math.round(now());
+        const e = { id: c.id, via, rate, t: Math.round(now()), a: ctx ? ctx.currentTime * 1000 : undefined }; log.push(e);
+        await (via === 'tts' ? speak(c.tts, rate) : tone(c.id, rate)); e.end = Math.round(now()); if (ctx) e.b = ctx.currentTime * 1000;
       }
     }
     await Promise.all(ends);
@@ -139,7 +139,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
       gen++; pending = 0; tail = Promise.resolve();
       for (const [t, r] of timers) { clearTimeout(t); r(); } timers.clear();
       const cutAt = Math.round(now()); lastEnd = -Infinity; // a child's tap: the next sound may start at once
-      for (const s of sources) { if (s.__e) s.__e.end ??= Math.round(Math.min(cutAt, s.__end ?? cutAt)); /* cut before its start = never heard (end < t) */ try { s.stop(); } catch {} } sources.clear();
+      for (const s of sources) { if (s.__e) { s.__e.end ??= Math.round(Math.min(cutAt, s.__end ?? cutAt)); if (s.__e.b > ctx.currentTime * 1000) s.__e.b = Math.max(s.__e.a, ctx.currentTime * 1000); } /* cut before its start = never heard (end < t) */ try { s.stop(); } catch {} } sources.clear();
       if ('speechSynthesis' in window) speechSynthesis.cancel();
     },
   };
