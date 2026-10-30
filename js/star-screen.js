@@ -185,6 +185,18 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   }
   $('sn-handle').addEventListener('pointerdown', e => { hand.hide(); hand.poke(); if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
   addEventListener('pointermove', onMove); addEventListener('pointerup', () => { dragging = null; run?.sweep?.lift?.(); });
+  // rc4 (Uiux): locked words stay inert (pointer-events none), but a tap on one makes the current word bounce + a soft
+  // tap, pointing the child back. Reduced motion: a still glow instead of the bounce.
+  let nudgedAt = 0;
+  $('sn-strip').addEventListener('click', e => {
+    if (!run || run.reading || e.target.closest?.('.wd.cur')) return;
+    const cur = $('sn-strip').querySelector('.wd.cur'); if (!cur) return;
+    const hit = chips().some(c => c !== cur && !c.classList.contains('done') && (r => e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom)(c.getBoundingClientRect()));
+    if (!hit || performance.now() - nudgedAt < 450) return;
+    nudgedAt = performance.now(); run.nudges = (run.nudges ?? 0) + 1;
+    cur.classList.remove('nudge', 'nudge-still'); void cur.offsetWidth; cur.classList.add(reduced() ? 'nudge-still' : 'nudge');
+    setTimeout(() => cur.classList.remove('nudge', 'nudge-still'), 500); audio.play('sfx-tap');
+  });
   $('sn-read').onclick = readAll;
   $('sn-next').onclick = () => { if (!run || $('sn-next').hidden || run.reading) return; hand.poke(); audio.stop(); $('sn-next').hidden = true; run.i++; next(); };
   $('sn-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };

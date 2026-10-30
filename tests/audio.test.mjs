@@ -47,3 +47,27 @@ test('phoneme takes: held ~1 s (<= 1.3 s), short sounds brief (stops <= 0.35 s)'
     else assert.ok(d <= 0.9, `${c.id} ${d}s`);
   }
 });
+
+test('rc4: early clips (hello, sfx, first lesson prompt) are takes, preloaded in index.html at their conventional path', async () => {
+  const { EARLY_CLIPS, earlyFile } = await import('../js/audio.js');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.ok(EARLY_CLIPS.includes('m-hello') && EARLY_CLIPS.includes('sfx-chime') && EARLY_CLIPS.includes('sfx-tap'));
+  for (const id of EARLY_CLIPS) {
+    const c = m.clips.find(x => x.id === id);
+    assert.equal(c?.take, earlyFile(id), id);
+    assert.ok(html.includes(`<link rel="preload" href="audio/${earlyFile(id)}" as="fetch" crossorigin>`), `preload ${id}`);
+    assert.ok(statSync(new URL(c.take, root)).size < 30000, `${id} small`);
+  }
+  assert.ok(html.includes('<link rel="preload" href="audio/manifest.json" as="fetch" crossorigin>'));
+});
+
+test('rc4: Start registers on pointerdown; locked sentence words nudge the current word (reduced motion = still glow)', () => {
+  const app = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+  const sn = readFileSync(new URL('../js/star-screen.js', import.meta.url), 'utf8');
+  assert.match(app, /\$\('play'\)\.addEventListener\('pointerdown'[^\n]*classList\.add\('pressed'\)/);
+  assert.match(css, /#play\.pressed\{/);
+  assert.match(css, /\.wd:not\(\.cur\)\{min-width:0;pointer-events:none\}/); // locked words stay inert
+  assert.match(css, /\.wd\.cur\.nudge\{animation:wdbounce/); assert.match(css, /\.wd\.cur\.nudge-still\{/);
+  assert.match(sn, /reduced\(\) \? 'nudge-still' : 'nudge'/); assert.match(sn, /audio\.play\('sfx-tap'\)/);
+});

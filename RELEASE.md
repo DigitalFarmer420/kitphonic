@@ -1,10 +1,10 @@
-# Kitphonic 1.0.0-rc3 — release readiness
+# Kitphonic 1.0.0-rc4 — release readiness
 
-Version: `1.0.0-rc3` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc4` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc3:** `npm test` 166/166 (rc2: 160) · `tools/check-sizes.py` 300/300 (50 scenes × 6 phone / tablet viewports; ~14 min)
+**Gate status at rc4:** `npm test` 168/168 (rc3: 166) · `tools/check-sizes.py` 300/300 at rc3 (50 scenes × 6 phone / tablet viewports; ~14 min; rc4 changes no layout)
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py` end-to-end sessions.
@@ -97,6 +97,17 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
 
+## Fixed in rc4 (Uiux rc3 audio review)
+- **Hello latency (medium):** Kit's hello, both SFX and the first lesson prompt (`EARLY_CLIPS` in `js/audio.js`,
+  ~45 KB) plus the manifest are fetched as raw bytes at page load (`<link rel=preload as=fetch>` + reused by
+  `createAudio`); the unlock tap only resumes Web Audio and decodes. The SFX are now 7 KB / 1.6 KB MP3 takes (the chime
+  WAV was 70 KB; WAVs stay as fallback). Start gets an instant pressed state, Kit waves and the bubble updates on
+  pointerdown. Headless Chrome, 1.6 Mbps / 150 ms RTT, cache off, tap → hello audio start: **rc3 ≈ 675 ms
+  (Uiux saw 735–756 ms) → rc4 ≈ 17 ms**, also when tapped the instant the app boots; boot time unchanged (≈ 3.4 s
+  locally, uncompressed manifest).
+- **Locked sentence words (low):** still inert, but a tap on one makes the current word bounce once with a soft tap
+  sound, pointing the child back (reduced motion: a still glow, no bounce). Counted as `run.nudges`.
+
 ## Audio QA (rc3)
 Pipeline: `tools/audio_qa/process.py` (trim edges at −40 dB, phoneme cuts below, BS.1770 loudness −16 LUFS with
 peak ≤ −1.5 dBFS, mono MP3). Words / sentences / prompts were checked with a local ASR (faster-whisper small.en, then
@@ -122,6 +133,6 @@ medium.en on every mismatch); phonemes by duration + voicing/frication profile.
   warm in the background; each words round warms its words, reveals and pictures; anything else loads on first play.
   Takes always win over browser speech (speech only if a take fails to load).
 
-## Release steps after rc3
+## Release steps after rc4
 Listen to the flagged phonemes (above), replace emoji with drawn art and run the naming test, playtest
 8–12 children (spec §3.9) and tune thresholds (`RULES`, `SUPPORT_RULES`), then tag 1.0.0.

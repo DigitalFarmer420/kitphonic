@@ -9,7 +9,13 @@
 // whose timing is part of the blending design.
 export const SPOKEN = /^(m-|word-|star-|sent-|pic-)/;
 export const HOT = /^(snd-|name-|m-|sfx-)/; // small clips warmed right after unlock
-export async function createAudio({ base = 'audio/', onClip = () => {}, speechRate = () => 1 } = {}) {
+// rc4: files fetched as raw bytes at page load (no gesture needed) so the first tap plays at once. Conventional paths
+// (takes/<id>.mp3) so the fetch can start before the manifest arrives; index.html also
+// <link rel=preload>s them. Ids must stay in sync with EARLY_CLIPS there (tests/audio.test.mjs checks).
+export const EARLY_CLIPS = ['m-hello', 'sfx-chime', 'sfx-tap', 'm-letter-says', 'm-tap-it'];
+export const earlyFile = id => `takes/${id}.mp3`; // rc4: the sfx are small MP3 takes too (chime wav 70 KB -> 7 KB)
+export async function createAudio({ base = 'audio/', onClip = () => {}, speechRate = () => 1, early = EARLY_CLIPS } = {}) {
+  const raw = new Map(early.map(id => [earlyFile(id), fetch(base + earlyFile(id)).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null)]));
   const manifest = await (await fetch(base + 'manifest.json')).json();
   const byId = new Map(manifest.clips.map(c => [c.id, c]));
   const log = (window.__kitAudioLog = []);
@@ -24,10 +30,11 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
   };
   if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
 
+  const bytes = f => raw.get(f) ?? fetch(base + f).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
   async function load(id) {
     const c = byId.get(id), f = fileFor(c); if (!f || !ctx) return null;
-    if (!buffers.has(id)) buffers.set(id, fetch(base + f).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
-      .then(b => ctx.decodeAudioData(b)).catch(() => null));
+    if (!buffers.has(id)) { const p = raw.get(f); raw.delete(f); // raw bytes are single-use (decodeAudioData detaches them)
+      buffers.set(id, (p ?? bytes(f)).then(b => b && ctx.decodeAudioData(b)).catch(() => null)); }
     return buffers.get(id);
   }
   const queue = []; let active = 0;
@@ -60,11 +67,11 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     // Call from a user gesture (hello screen). Unlocks Web Audio + speech on iOS/Chrome autoplay policies.
     async unlock({ first = ['m-hello'] } = {}) {
       ctx ??= new (window.AudioContext || window.webkitAudioContext)();
-      if (ctx.state !== 'running') await ctx.resume().catch(() => {});
+      const resumed = ctx.state !== 'running' ? ctx.resume().catch(() => {}) : null; // in parallel with decoding (rc4)
       if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
-      // rc3: ~830 recorded takes. Only the sfx + the greeting gate the first play; the short, hot clips (letter
+      // rc3: ~830 recorded takes. Only the sfx + the greeting gate the first play (bytes already fetched at load, rc4); the short, hot clips (letter
       // sounds/names, Kit's lines) warm in the background; words/sentences load per session (warm) or on first play.
-      await Promise.all(manifest.clips.filter(c => fileFor(c) && (c.kind === 'sfx' || first.includes(c.id))).map(c => load(c.id)));
+      await Promise.all([resumed, ...manifest.clips.filter(c => fileFor(c) && (c.kind === 'sfx' || first.includes(c.id))).map(c => load(c.id))]);
       api.warm(manifest.clips.filter(c => fileFor(c) && HOT.test(c.id)).map(c => c.id));
       return ctx.state;
     },
@@ -72,6 +79,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     // Background fetch+decode with low concurrency so it never competes with first paint or the clip being played.
     warm(ids) { queue.push(...ids.filter(id => byId.has(id) && !buffers.has(id))); pump(); },
     get loadedCount() { return buffers.size; },
+    get earlyPending() { return raw.size; },
     get unlocked() { return ctx?.state === 'running'; },
     async play(id, { rate = 1, delayMs = 0 } = {}) {
       const my = gen; if (delayMs) await wait(delayMs); if (my !== gen) return;

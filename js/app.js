@@ -130,9 +130,12 @@ function startDirect() { // dev: word screen at ?level (and ?word first)
 }
 
 // Hello: one big play button; the tap unlocks audio (autoplay policies / iOS) and plays Kit's greeting.
+// rc4: the tap registers instantly (pressed button, Kit waves, bubble text) before any audio work.
+$('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
+for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
 $('play').onclick = async () => {
+  $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; // keyboard / no pointerdown
   await audio.unlock({ first: [cfg.hello.greetingClip] });
-  $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!";
   await audio.play(cfg.hello.greetingClip);
   cfg.activity || cfg.direct ? startSession() : showMap(); // the map is home
 };

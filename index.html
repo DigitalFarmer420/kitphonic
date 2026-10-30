@@ -7,6 +7,13 @@
 <title>Kitphonic</title>
 <link rel="icon" href="data:,">
 <link rel="preload" href="fonts/andika-700.woff2" as="font" type="font/woff2" crossorigin>
+<!-- rc4: manifest + EARLY_CLIPS (js/audio.js: hello, 2 sfx, first lesson prompt; ~45 KB) fetched as raw bytes at load so Start plays at once -->
+<link rel="preload" href="audio/manifest.json" as="fetch" crossorigin>
+<link rel="preload" href="audio/takes/m-hello.mp3" as="fetch" crossorigin>
+<link rel="preload" href="audio/takes/sfx-chime.mp3" as="fetch" crossorigin>
+<link rel="preload" href="audio/takes/sfx-tap.mp3" as="fetch" crossorigin>
+<link rel="preload" href="audio/takes/m-letter-says.mp3" as="fetch" crossorigin>
+<link rel="preload" href="audio/takes/m-tap-it.mp3" as="fetch" crossorigin>
 <link rel="stylesheet" href="fonts/fonts.css">
 <link rel="stylesheet" href="css/app.css">
 </head>

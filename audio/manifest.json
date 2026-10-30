@@ -7876,7 +7876,7 @@
       "kind": "sfx",
       "text": "soft warm chime (success, under 1 s)",
       "tts": null,
-      "take": null,
+      "take": "takes/sfx-chime.mp3",
       "placeholder": "placeholder/sfx-chime.wav"
     },
     {
@@ -7884,7 +7884,7 @@
       "kind": "sfx",
       "text": "soft tap tick",
       "tts": null,
-      "take": null,
+      "take": "takes/sfx-tap.mp3",
       "placeholder": "placeholder/sfx-tap.wav"
     },
     {

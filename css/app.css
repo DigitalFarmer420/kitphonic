@@ -32,6 +32,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
   box-shadow:0 7px 0 var(--saged);display:flex;align-items:center;justify-content:center}
 #play svg{width:60px;height:60px}
 #play:active{transform:translateX(-50%) translateY(3px);box-shadow:0 3px 0 var(--saged)}
+#play.pressed{transform:translateX(-50%) translateY(4px) scale(.96);box-shadow:0 3px 0 var(--saged);filter:brightness(.92)} /* rc4: instant on pointerdown */
+#hello.go .paw{animation:wavego .5s ease-out 1}
+@keyframes wavego{0%{transform:rotate(0)}35%{transform:rotate(-30deg)}70%{transform:rotate(16deg)}100%{transform:rotate(0)}}
 #speaker{position:absolute;right:18px;bottom:18px;width:72px;height:72px;border-radius:22px;background:#fff;border:2px solid var(--line);font-size:30px}
 #tip{position:absolute;right:100px;bottom:26px;background:#5B4A40;color:#fff;font-size:14px;font-weight:700;padding:8px 12px;border-radius:12px;max-width:260px}
 
@@ -317,6 +320,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .wd.star.cur::after{top:-14px;right:-12px;font-size:28px}
 .wd.done{opacity:1;color:var(--saged);background:transparent;box-shadow:none;animation:none}
 .wd:not(.cur){min-width:0;pointer-events:none} /* Uiux r8: inactive words keep normal word spacing; only the current word is a tap target */
+.wd.cur.nudge{animation:wdbounce .42s ease-out 1} /* rc4: a tap on a locked word points back to the current one */
+@keyframes wdbounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-12px)}60%{transform:translateY(3px)}80%{transform:translateY(-3px)}}
+.wd.cur.nudge-still{box-shadow:0 0 0 5px rgba(239,139,110,.55),inset 0 -5px 0 var(--coral)} /* reduced motion: no bounce */
 .wd.lit{opacity:1;background:#FFE7A8;color:var(--ink)}
 #sn-tiles{position:absolute;left:0;right:0;bottom:226px;height:110px;pointer-events:none}
 .short #sentence:not(.blending) #sn-tiles,.tall #sentence:not(.blending) #sn-tiles{display:none}
