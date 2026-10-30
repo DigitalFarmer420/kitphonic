@@ -38,10 +38,23 @@ def sentence_case(pg, base, q, label):
             pg.locator(f"#sn-choices .pc[data-pic='{ans}']").click(); pg.wait_for_timeout(500); break
         if st['reading']: pg.wait_for_timeout(300); continue
         if st['kind'] == 'star': pg.wait_for_timeout(300); pg.locator('#sn-strip .wd').nth(st['i']).click(); pg.wait_for_timeout(900); continue
+        if pg.locator('#sn-next').is_visible(): pg.locator('#sn-next').click(); pg.wait_for_timeout(600); continue  # S1: the child taps on
         if st['blend'] and pg.locator('#sn-handle').is_visible(): sweep(pg, '#sn-handle', '#sn-tiles .tile'); pg.wait_for_timeout(900); continue
         pg.wait_for_timeout(300)
-    rs = pg.evaluate("kitphonic.store.all().filter(r => /^(sentence|story):/.test(r.skill)).map(r => [r.scored, !!r.modelled])")
-    return (not bad and rs[:1] == [[True, False]]), f"{label}: before-pick {bad or 'clean'}, logged {rs}"
+    rs = pg.evaluate("kitphonic.store.all().filter(r => /^(sentence|story|reread):/.test(r.skill)).map(r => [r.scored, !!r.modelled])")
+    sk = pg.evaluate("kitphonic.store.all().filter(r => /^(sentence|story|reread):/.test(r.skill)).map(r => r.skill)")
+    want = 'reread:' if 'reread=1' in q else None  # v2 V9 rule 5: a re-read is logged under its own skill
+    ok = not bad and rs[:1] == [[True, False]] and (want is None or (sk and sk[0].startswith(want)))
+    return ok, f"{label}: before-pick {bad or 'clean'}, logged {rs} {sk[:1]}"
+
+def whole_word_case(pg, base, l1):  # Uiux rc1 / v2 V1: a marker that speaks the whole word before the pick = help, unscored
+    pg.goto(f"{base}?skipHello=1&seed=1&level=1&word=at&support=3&l1={l1}"); pg.wait_for_timeout(1500)
+    sweep(pg, '#handle', '#tiles .tile'); pg.wait_for_selector('#check:not([hidden])', timeout=8000); pg.wait_for_timeout(1200)
+    pg.locator("#choices .choice[data-w='at']").click(); pg.wait_for_timeout(1500)
+    r = pg.evaluate("kitphonic.store.all().filter(r => r.skill.startsWith('blend:'))[0]")
+    want = l1 != 'bar'  # dots: two sounds, scored; one 'at' bar: the word itself was heard -> unscored, helpUsed
+    ok = r['scored'] == want and bool(r.get('wordHeard')) == (not want) and r['helpUsed'] == (not want)
+    return ok, f"L1 at ?l1={l1}: logged scored={r['scored']} helpUsed={r['helpUsed']} wordHeard={r.get('wordHeard', False)}"
 
 def ladder_case(pg, base, word, support):
     pg.goto(f"{base}?skipHello=1&seed=1&level=2&word={word}&support={support}"); pg.wait_for_timeout(1500); t0 = now(pg)
@@ -65,8 +78,8 @@ if __name__ == '__main__':
     with sync_playwright() as p:
         b = p.chromium.launch(executable_path='/usr/bin/google-chrome', args=['--no-sandbox'])
         for fn, args in [(word_case, ('mat', 2)), (word_case, ('cat', 3)), (sentence_case, ('activity=sentence&sentence=bug-hat', 'sentence bug-hat')),
-                         (sentence_case, ('activity=story&story=lunch', 'story lunch')),
-                         (ladder_case, ('mat', 2)), (ladder_case, ('mat', 1)), (ladder_case, ('mat', 4))]:
+                         (sentence_case, ('activity=story&story=lunch', 'story lunch')), (sentence_case, ('activity=story&story=pot&reread=1', 'story pot re-read')),
+                         (ladder_case, ('mat', 2)), (ladder_case, ('mat', 1)), (ladder_case, ('mat', 4)), (whole_word_case, ('dots',)), (whole_word_case, ('bar',))]:
             pg = b.new_page(viewport={'width': 390, 'height': 844}); ok, msg = fn(pg, a.base, *args); pg.close()
             print(('OK   ' if ok else 'FAIL ') + msg); fails += not ok
         b.close()

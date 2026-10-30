@@ -176,3 +176,35 @@ test('v2 V4: at most one new sound per session — no plan, at any stop, introdu
     assert.ok(fresh.size <= 1, `stop ${n} ${STOPS[n].id}: new sounds ${[...fresh]}`);
   }
 });
+
+test('known issue 6: every words stop from L3 on has >= 5 pictured words the child can be served', async () => {
+  const { applyWords, servableWords } = await import('../js/progress.js');
+  for (const [i, s] of STOPS.entries()) {
+    if (s.kind !== 'words' || (s.level && s.level < 3)) continue;
+    const log = seedProgress(i, { now }), k = knownGpcs(log, now), m = mapState(log, now);
+    const passed = m.stops.filter(x => x.kind === 'words' && x.level && x.status === 'passed').map(x => x.level);
+    const ws = s.apply ? applyWords(s.apply, k, Math.max(...passed, 1)) : servableWords(s.level, k);
+    assert.ok(ws.filter(e => e.pic).length >= 5, `stop ${i} (${s.apply ? 'set ' + s.apply : 'L' + s.level}): ${ws.filter(e => e.pic).map(e => e.w)}`);
+  }
+});
+test('L7 plurals: two-of pictures; the singular is a final-sound distractor, never the reverse', async () => {
+  const L = await import('../js/word-logic.js'), { WORDS } = await import('../js/content.js');
+  for (const e of WORDS[7].filter(e => e.pic)) {
+    assert.ok(e.pic.startsWith('2x'), e.w);
+    assert.ok(L.minimalPairs(e.w).some(c => c.w === e.stem && c.contrast === 'final'), `${e.w} offers ${e.stem}`);
+  }
+  for (const w of ['cat', 'hat', 'pig', 'dog', 'hen']) assert.ok(!L.minimalPairs(w).some(c => c.w.endsWith('s') && c.w.length === w.length + 1), w);
+});
+
+test('v2 V9 rule 5: a story read in an earlier session is offered once as a re-read (its own reread:<id> skill)', async () => {
+  const { allStories } = await import('../js/sentences.js');
+  const i = STOPS.findIndex(s => s.kind === 'story'), id = STOPS[i].story, st = allStories().find(x => x.id === id);
+  const stars = [...new Set([...st.pages.flatMap(p => p.stars), ...st.titleTokens.filter(t => t.kind === 'star').map(t => t.star.w)])];
+  const base = [...seedProgress(i + 1, { now }), ...stars.map((w, k) => ({ skill: `star:${w}`, itemId: w, correct: true, firstAttempt: true, scored: true, timestamp: now - 2 * DAY + k, sessionId: 'st' }))]; // read after meeting its star words
+  const p = planSession(base, { now, rand: rng(4), minutes: 10 });
+  const it = p.items.find(x => x.type === 'story' && x.reread);
+  assert.ok(it, `re-read of ${id} offered`); assert.equal(it.story.id, id); assert.equal(it.why, 'reread');
+  const done = [...base, { skill: `reread:${id}`, itemId: id, correct: true, firstAttempt: true, scored: true, timestamp: now - 1000, sessionId: 'r' }];
+  assert.ok(!planSession(done, { now, rand: rng(4), minutes: 10 }).items.some(x => x.reread), 'offered once');
+  assert.equal(mapState(done, now).index, mapState(base, now).index, 're-reads never move the map');
+});

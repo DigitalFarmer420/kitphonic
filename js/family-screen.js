@@ -42,7 +42,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     }, 1300);
   }
   async function familyDone() {
-    hand.stop(); const chips = [...$('fm-made').children];
+    hand.stop(); const chips = [...$('fm-made').children]; $('fm-tray').classList.add('done'); // all made: the letters step aside for the chant
     say(`You made the whole <b>${run.fam.rime}</b> family! ⭐`, 'm-family-done');
     await new Promise(r => setTimeout(r, 300));
     const made = [...run.made];
@@ -50,6 +50,17 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     if (!run) return; const st = el('div', 'fchip star', '⭐ ' + run.fam.rime); $('fm-made').append(st); audio.play('sfx-chime');
     record({ skill: `family:${run.fam.rime}`, itemId: run.fam.rime, correct: true, firstAttempt: true, scored: false, made: run.made.size });
     setTimeout(() => { const r = run; run = null; hand.stop(); seen.mark('family'); r?.onComplete?.({}); }, 1200);
+  }
+  // Uiux rc1: balanced rows (7 -> 4 + 3, never a lone tile) centred under the slot + rime word, whatever the layout
+  function layoutTray() {
+    const tray = $('fm-tray'), ts = tiles(); if (!run || !ts.length || $('family').hidden) return;
+    tray.style.left = tray.style.right = tray.style.width = '';
+    const hw0 = host.clientWidth, land = !$('stage').classList.contains('portrait'); // landscape: one row across the whole width if it fits
+    const avail = land ? hw0 - 16 : tray.clientWidth, tw = ts[0].offsetWidth, gap = parseFloat(getComputedStyle(tray).columnGap) || 14;
+    const cap = Math.max(1, Math.floor((avail + gap) / (tw + gap))), rows = Math.ceil(ts.length / cap), per = Math.ceil(ts.length / rows);
+    const width = per * tw + (per - 1) * gap, wd = $('fm-word'), slot = $('fm-slot'), rime = $('fm-rime');
+    const cx = wd.offsetLeft + (slot.offsetLeft + rime.offsetLeft + rime.offsetWidth) / 2, hw = host.clientWidth;
+    tray.style.width = width + 'px'; tray.style.right = 'auto'; tray.style.left = Math.max(8, Math.min(hw - width - 8, cx - width / 2)) + 'px';
   }
   const pebbles = () => $('fm-pebbles').replaceChildren(...run.fam.words.map((_, i) => el('div', 'peb' + (i < run.made.size ? ' on' : i === run.made.size ? ' now' : ''))));
   // drag: pointer moves a floating copy; dropping near the slot places it. A press without movement = tap-to-select.
@@ -81,13 +92,14 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     start({ family, onComplete }) {
       run = { fam: family, made: new Set(), sel: null, busy: true, onComplete }; $('family').hidden = false;
       $('fm-card').className = ''; $('fm-card').innerHTML = '<span class="q">?</span>'; $('fm-made').replaceChildren();
-      $('fm-rime').textContent = caseFor(family.rime, cfg.tileCase); $('fm-slot').textContent = ''; $('fm-slot').className = 'L';
+      $('fm-rime').textContent = caseFor(family.rime, cfg.tileCase); $('fm-slot').textContent = ''; $('fm-slot').className = 'L'; $('fm-tray').className = '';
       $('fm-tray').replaceChildren(...shuffle(family.words.map(x => x.onset), rand).map(g => { const t = el('button', 'ftile L', caseFor(GPC[g].grapheme, cfg.tileCase)); t.dataset.g = g;
         t.setAttribute('aria-label', GPC[g].grapheme); t.onpointerdown = e => down(e, t); return t; }));
-      pebbles();
+      pebbles(); layoutTray();
       prompt().then(() => { if (!run) return; run.busy = false; hand.start(handPath, { now: seen.demo('family') }); });
     },
     stop() { run = null; hand.stop(); },
+    relayout: () => layoutTray(),
     get run() { return run; },
   };
 }

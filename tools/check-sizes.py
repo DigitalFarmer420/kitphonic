@@ -14,6 +14,8 @@ from playwright.sync_api import sync_playwright
 REQUIRED = ['360x780', '780x360', '820x1180']
 EXTRA = ['390x844', '844x390', '1180x820']
 MIN, KNOB = 64, 80
+# make n words in the family screen (tap a tile, tap the slot), waiting for each word to finish
+MAKE = "(async n => { const k = kitphonic.familyScreen, idle = () => new Promise(r => { const t = setInterval(() => (!k.run || !k.run.busy) && (clearInterval(t), r()), 50); }); for (let i = 0; i < n; i++) { await idle(); const t = document.querySelector('#fm-tray .ftile:not(.made)'); t.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); await new Promise(r => setTimeout(r, 150)); } })(%d)"
 SCENES = [  # name, query, js to run after load
     ('hello', '', None),
     ('word-map', 'skipHello=1&level=2&word=map&seed=1', None),
@@ -43,17 +45,25 @@ SCENES = [  # name, query, js to run after load
     ('star', 'skipHello=1&activity=star&word=the&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('sentence', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 1500))"),
     ('sentence-blend', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 3500)).then(() => document.querySelector('#sn-strip .wd').click()).then(() => new Promise(r => setTimeout(r, 1500)))"),
+    ('sentence-S1', 'skipHello=1&activity=sentence&sentence=map-mat&support=1&seed=1', "new Promise(r => setTimeout(r, 3500)).then(() => document.querySelector('#sn-strip .wd').click()).then(() => new Promise(r => setTimeout(r, 1500)))"),  # known issue 7: S1 taps on
     ('story', 'skipHello=1&activity=story&story=king&seed=1', "new Promise(r => setTimeout(r, 1800))"),
     ('story-ask', 'skipHello=1&activity=story&story=king&seed=1', "new Promise(r => setTimeout(r, 1500)).then(() => { const r = kitphonic.sentenceScreen.run; r.page = r.story.pages.length - 1; kitphonic.sentenceScreen.debugAsk(); }).then(() => new Promise(r => setTimeout(r, 600)))"),
     ('sentence-pick', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 1500)).then(() => kitphonic.sentenceScreen.debugAsk()).then(() => new Promise(r => setTimeout(r, 600)))"),
     ('family', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('family-made', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500)).then(() => { document.querySelector('#fm-tray .ftile').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); }).then(() => new Promise(r => setTimeout(r, 2600)))"),
+    ('family-made3', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1', MAKE % 3 + ".then(() => new Promise(r => { const t = setInterval(() => !kitphonic.familyScreen.run.busy && (clearInterval(t), r()), 50); }))"),  # several made words: chips vs tray collision
+    ('family-7', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1', "new Promise(r => setTimeout(r, 2500))"),  # Uiux rc1: 7 choices -> balanced 4 + 3
+    ('family-done', 'skipHello=1&activity=family&rime=at&seed=1', MAKE % 4 + ".then(() => new Promise(r => { const t = setInterval(() => document.querySelector('.fchip.star') && (clearInterval(t), r()), 50); }))"),
+    ('check-plural', 'skipHello=1&level=7&word=cats&seed=1', "kitphonic.screen.debugShow('check')"),  # known issue 6: two-of pictures, singular distractor
+    ('reveal-plural', 'skipHello=1&level=7&word=pigs&seed=1', "kitphonic.screen.debugShow('revealed')"),
+    ('check-sad', 'skipHello=1&level=3&word=sad&seed=1', "kitphonic.screen.debugShow('check')"),
     ('digraph', 'skipHello=1&level=6&word=ship&seed=1', "new Promise(r => setTimeout(r, 800))"),
     ('intro-i', 'skipHello=1&activity=intro&gpc=i&seed=1', "new Promise(r => setTimeout(r, 900))"),  # v2 V10: decodable word, no picture
     ('intro-p', 'skipHello=1&activity=intro&gpc=p&seed=3', "new Promise(r => setTimeout(r, 900))"),
     ('intro-m', 'skipHello=1&activity=intro&gpc=m&seed=1', "new Promise(r => setTimeout(r, 900))"),
     ('fuse', 'skipHello=1&activity=intro&gpc=sh&seed=1', "new Promise(r => setTimeout(r, 2200))"),
     ('parent', 'skipHello=1&progress=5&parent=1', "new Promise(r => setTimeout(r, 800))"),
+    ('parent-end', 'skipHello=1&progress=56&parent=1', "new Promise(r => setTimeout(r, 800))"),
     ('letters-float', 'skipHello=1&activity=float&seed=1', None),
     ('letters-float-4s', 'skipHello=1&activity=float&seed=2', "new Promise(r => setTimeout(r, 4000))"),
 ]
@@ -79,7 +89,9 @@ MEASURE = r"""() => {
     .filter(o => vis(o) && o !== c.parentElement && !o.contains(c) && hit(R(c), R(o))).map(o => `cue ${c.textContent} / ${name(o)}`));
   // Uiux r8: no visible button is blank (it shows text, an icon or a picture)
   const empty = [...root.querySelectorAll('button, .marker .bar, .marker .dot')].filter(vis).filter(e => !e.textContent.trim() && !e.matches('[data-dropslot]') && !e.querySelector('svg, img, .emoji')).map(name);
-  return { empty, cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  // Uiux rc1: grown-ups sound grid tiles never shrink below 32 px (the card scrolls instead)
+  const ptiles = [...document.querySelectorAll('#parent:not([hidden]) .ptile')].map(e => ({ name: 'ptile[' + e.textContent.trim() + ']', ...box(e) }));
+  return { ptiles, empty, cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 44  # grown-ups area: adult targets (Apple HIG 44pt); the mockup uses 48px segmented controls
@@ -97,6 +109,7 @@ def check(m, vp, scene):
         if t['play'] and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
     errs += [f'empty button {n}' for n in m.get('empty', [])]
+    errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 32" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 31.5]
     k = m['key']
     for i in range(len(k)):
         for j in range(i + 1, len(k)):

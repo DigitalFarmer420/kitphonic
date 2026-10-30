@@ -8,14 +8,16 @@ import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, sli
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const picHtml = pic => pic?.startsWith('#') ? `<svg viewBox="0 0 120 100"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`;
+const onePic = pic => pic?.startsWith('#') ? `<svg viewBox="0 0 120 100"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`;
+// '2x<pic>' (L7 plurals): two of the picture side by side
+export const picHtml = pic => pic?.startsWith('2x') ? `<span class="two">${onePic(pic.slice(2))}${onePic(pic.slice(2))}</span>` : onePic(pic);
 
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 // v2 V2 support ladder: support(entry) -> 4 model | 3 you blend | 2 silent dots | 1 read it (js/support.js)
 export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
-  let runDone = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
+  let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
@@ -37,7 +39,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
     }));
     mk.replaceChildren(...ms.map((m, i) => {
-      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="34" height="34"><use href="#wave"/></svg></div>' : '<div class="bar"><svg width="34" height="34"><use href="#wave"/></svg></div>');
+      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="30" height="30"><use href="#snd-one"/></svg></div>' : '<div class="bar"><svg width="52" height="32"><use href="#snd-chunk"/></svg></div>');
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', `${m.type} ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
     }));
@@ -46,17 +48,18 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     $('card').className = ''; $('card').innerHTML = '<span class="q">?</span>';
     $('next').hidden = true; $('check').hidden = true;
     sweep = createSweep(ms, { gapMs: cfg.sweepGapMs }); setHandle(0); light([]);
-    choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: cfg.choiceStrategy[level], trial: checkTrial++ })
-      : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.() }) : null;
+    choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: focus ? `focus:${focus}` : cfg.choiceStrategy[level], trial: checkTrial++ })
+      : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.(), focus }) : null;
     // support level for this word; without a check there is nothing to read against, so Kit models it (S4)
-    const sup = choices ? Math.max(1, Math.min(4, support(entry) ?? 3)) : 4;
+    // §3.7.1 step back (planner): an easier round with extra hints = never below S3 (the child hears each sound), hand demo at once
+    const sup = choices ? Math.max(assist ? 3 : 1, Math.min(4, support(entry) ?? 3)) : 4;
     trial = { picks: 0, assisted: false, scored: true, support: sup, served: sup, hints: 0, dotTaps: 0, helpUsed: false }; sweepStart = null;
     state = 'slide'; renderPebbles(); shownAt = performance.now(); blendEndAt = 0; showSlider(sup > 1);
     if (sup === 1) { blendEndAt = 0; showCheck(); return; } // S1 read it: no slider, the check starts at once
     const intro = sup === 2 ? say('Say the sounds, then pick.', { id: 'm-say-sounds' }) : say('Slide your finger under the word.', { id: 'm-slide-intro' });
     intro.then(() => {
       if (state !== 'slide') return; // ghost hand drags the knob along the track: first words ever + after 5 s idle
-      hand.start(handPath, { now: idx === 0 && seen.demo('slide') });
+      hand.start(handPath, { now: (idx === 0 && seen.demo('slide')) || (assist && idx === 0) });
     });
   }
   function showSlider(on) { $('slider').hidden = !on; mk.hidden = !on; $('word').dataset.support = trial.support; }
@@ -72,8 +75,11 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     const u = units[i], dg = u.b - u.a > 1, clip = dg ? { id: `snd-${u.id}`, rate: 1 } : clipForTap(mode, 'letter', u.text); audio.stop(); audio.play(clip.id, clip); hint(); // a digraph never says its letter names
     const t = tiles.children[i]; pulse(t); caption(audio.byId.get(clip.id)?.text ?? u.text, layout.tileLeft(u.a) + ((u.b - u.a) * layout.cell - layout.gap) / 2, tiles.offsetTop - 40);
   }
+  // v2 V1: a marker that spans the whole word (e.g. ?l1=bar on "at") speaks the word; before the pick that is help -> unscored
+  const wholeWord = m => ms.length === 1 || (m.start === 0 && m.end >= entry.w.length);
+  const heardWord = m => { if (wholeWord(m) && trial.picks === 0 && state !== 'revealed') Object.assign(trial, { helpUsed: true, scored: false, wordHeard: true }); };
   function tapMarker(i) {
-    const m = ms[i], clip = m.type === 'dot' ? clipForTap(mode, 'dot', m.id ?? m.text) : clipForMarker(m, 'normal');
+    const m = ms[i]; heardWord(m); const clip = m.type === 'dot' ? clipForTap(mode, 'dot', m.id ?? m.text) : clipForMarker(m, 'normal');
     audio.stop(); audio.play(clip.id, clip); pulse(mk.children[i]); hint(); // S2: a dot tap is the hint
     const b = layout.markerBox(m); caption(audio.byId.get(clip.id)?.text ?? m.text, b.left + b.width / 2, tiles.offsetTop - 40);
   }
@@ -102,12 +108,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       if (ev.kind === 'play' || ev.kind === 'replay') {
         const clip = clipForMarker(ms[ev.marker], ev.stretch);
         if (ev.kind === 'replay') audio.stop(); // ev.connect: previous sound is not cut; next joins it (R3)
-        if (trial.support !== 2 || trial.assisted) audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs }); // S2: the dots light silently
+        if (trial.support !== 2 || trial.assisted) { heardWord(ms[ev.marker]); audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs }); } // S2: the dots light silently
         light(sweep.lit, ev.marker);
       } else if (ev.kind === 'blend') {
         state = 'blending'; dragging = null; hand.stop();
         const sweepMs = performance.now() - (sweepStart ?? performance.now());
-        if (trial.picks === 0) Object.assign(trial, { sweepMs, scored: guessGuard({ sweepMs, phonemes: ms.length }).scored });
+        if (trial.picks === 0) Object.assign(trial, { sweepMs, scored: guessGuard({ sweepMs, phonemes: ms.length }).scored && !trial.wordHeard });
         if (!guessGuard({ sweepMs, phonemes: ms.length }).scored) audio.play('m-slide-slowly'); // gentle prompt; not scored
         // v2 V1: before a scored check the whole word is NOT spoken — the child blends the sounds; it plays after the pick.
         // No check possible (no picture / cards), or ?speakBeforeCheck=1: Kit models the word and the trial is unscored.
@@ -144,9 +150,9 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     const t = performance.now(), latencyMs = Math.round(t - (blendEndAt || checkAt)), first = trial.picks++ === 0;
     record({ ...tag, skill: `blend:L${level}`, itemId: entry.w, gpcs: entry.parse?.split(' ') ?? [...entry.w], correct: c.w === entry.w,
       firstAttempt: first, assisted: !first || trial.assisted, scored: trial.scored && !trial.modelled, ...(trial.modelled ? { modelled: true } : {}), fast: guessGuard({ pickLatencyMs: latencyMs }).fast,
-      latencyMs, sweepMs: Math.round(trial.sweepMs ?? 0), contrast: choices.contrast ?? null,
+      latencyMs, sweepMs: Math.round(trial.sweepMs ?? 0), contrast: (c.w !== entry.w && c.contrast) || choices.contrast || null, // a miss logs the position the picked word differed in
       // v2 V2 telemetry: the level served, hints (replays / taps at S3), dot taps (S2), 🔊 help (S1), both latencies
-      support: trial.served, pattern: supportPattern(entry), hints: trial.hints, dotTaps: trial.dotTaps, helpUsed: trial.helpUsed,
+      support: trial.served, pattern: supportPattern(entry), hints: trial.hints, dotTaps: trial.dotTaps, helpUsed: trial.helpUsed, ...(trial.wordHeard ? { wordHeard: true } : {}),
       latencyFromOnsetMs: Math.round(t - shownAt), latencyFromLastDotMs: blendEndAt ? Math.round(t - blendEndAt) : null, ...(trial.scored ? {} : { fling: true }) });
     if (c.w === entry.w) { state = 'picked'; btn.classList.add('right'); audio.play('sfx-chime'); setTimeout(reveal, 650); return; }
     // Wrong: gentle replay, reshuffle, never a fail screen.
@@ -206,7 +212,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
 
   return {
     relayout() { if (entry && state === 'slide') render(); },
-    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = opts.apply ? { apply: opts.apply } : {}; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

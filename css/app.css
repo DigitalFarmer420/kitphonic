@@ -80,6 +80,8 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .choice{width:180px;height:150px;border-radius:24px;background:#fff;border:3px solid var(--line);box-shadow:0 5px 0 var(--line);
   display:flex;align-items:center;justify-content:center;font-size:88px;transition:transform .2s}
 .choice svg{width:130px;height:110px}
+.two{display:flex;width:96%;align-items:center;justify-content:center;gap:0}.two .emoji{font-size:.62em}.two svg{flex:1 1 50%;width:50%!important;height:auto!important;min-width:0}
+#card .two{font-size:inherit}
 .choice.wcard{font-size:64px;width:170px;height:120px}
 .short .choice.wcard{font-size:56px;width:150px;height:110px}
 .portrait .choice.wcard{font-size:48px;width:116px;height:104px}
@@ -359,7 +361,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .fchip{height:72px;min-width:96px;padding:0 14px;border-radius:18px;background:#fff;border:3px solid var(--sage);box-shadow:0 4px 0 var(--saged);font-size:36px;color:var(--ink);display:flex;align-items:center;gap:6px}
 .fchip .emoji{font-size:28px}.fchip.lit{background:#FFE7A8;border-color:var(--honey)}
 .fchip.star{border-color:var(--honey);background:#FFF3D1;box-shadow:0 4px 0 #D9A23C}
-#fm-tray{position:absolute;left:0;right:0;bottom:40px;display:flex;justify-content:center;gap:14px}
+#fm-tray{position:absolute;left:0;right:0;bottom:40px;display:flex;flex-wrap:wrap;justify-content:center;gap:14px;row-gap:18px}
 .ftile{width:84px;height:104px;border-radius:20px;background:#fff;border:3px solid var(--line);box-shadow:0 5px 0 var(--line);font-size:64px;color:var(--ink);touch-action:none}
 .ftile.sel{transform:translateY(-10px);border-color:var(--coral);box-shadow:0 0 0 5px rgba(239,139,110,.3),0 5px 0 var(--coral)}
 .ftile.made{background:#EEF6EC}
@@ -373,9 +375,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #fm-slot{width:92px;height:110px;font-size:76px}.short #fm-rime{height:110px;font-size:76px;min-width:156px}
 .short #fm-made{left:210px;top:212px}
 .short #fm-tray,.tall #fm-tray{left:210px;right:16px}
-.short #fm-tray{bottom:10px}.short .ftile{height:88px;width:80px;font-size:56px}
+.short #fm-tray{bottom:10px;gap:10px}.short .ftile{height:88px;width:80px;font-size:56px}
 .tall #fm-word{top:110px;height:120px}.tall #fm-made{left:210px;top:262px}.tall #fm-tray{bottom:30px}
-.portrait #fm-tray{flex-wrap:wrap;left:24px;right:24px;row-gap:22px;max-width:none}.ftile{flex-shrink:0}
+.portrait #fm-tray{left:10px;right:10px;gap:10px;row-gap:14px;bottom:24px}
+#fm-tray.done{opacity:0;visibility:hidden;transition:opacity .4s}.ftile{flex-shrink:0}
 /* Digraphs (words-board 3, note 20): ONE joined sky tile with an underline bar — same colour everywhere */
 .tile.dg{background:#EAF4FB;border-color:var(--sky);box-shadow:0 5px 0 var(--skyd)}
 .tile.dg::after{content:'';position:absolute;left:22%;right:22%;bottom:7px;height:6px;border-radius:3px;background:var(--skyd)}
@@ -414,7 +417,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .pstats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .pstat{background:#fdf6ea;border-radius:14px;padding:4px;text-align:center}.pstat b{display:block;font-size:22px}.pstat span{font-size:12px;color:#7a6a5c}
 .ptiles{display:flex;flex-wrap:wrap;gap:8px}
-.ptile{min-width:46px;height:46px;padding:0 10px;border-radius:12px;display:grid;place-items:center;font-size:22px;font-weight:700;border:2px solid transparent}
+.ptile{flex-shrink:0;min-width:46px;min-height:46px;height:46px;padding:0 10px;border-radius:12px;display:grid;place-items:center;font-size:22px;font-weight:700;border:2px solid transparent}
 .ptile.practicing,.plegend i.practicing{background:#fdf0c4}
 .ptile.secure,.plegend i.secure{background:#dcefd9}
 .ptile.mastered,.plegend i.mastered{background:#9cc79a;color:#21401f}
@@ -446,6 +449,9 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #sn-choices .pc.no{opacity:.35}
 #sn-choices .pc.yes{border-color:var(--sage);background:#E7F1E4}
 #sentence.choosing #sn-read{visibility:hidden}
+/* known issue 7: S1 sentence word -> the child taps on; the arrow sits where the slider would be */
+#sn-next{left:50%;right:auto;top:auto;margin-left:-48px;bottom:116px}.short #sn-next{bottom:8px}.tall #sn-next{bottom:24px}
+#sentence.tapon #sn-read{visibility:hidden}
 .short #sn-choices,.tall #sn-choices{bottom:auto;top:252px}
 .short #sn-choices .pc{width:100px;height:100px;font-size:56px}
 .tall #sn-choices{top:300px}

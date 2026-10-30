@@ -20,8 +20,8 @@ export function allFamilies() {
   const by = new Map(); for (const x of cvc()) { if (!by.has(x.rime)) by.set(x.rime, []); by.get(x.rime).push(x); }
   return [...by].map(([rime, words]) => ({ rime, words })).filter(f => f.words.length >= FAMILY_MIN);
 }
-export function servableFamilies(known) {
-  return allFamilies().map(f => ({ ...f, words: f.words.filter(x => !known || x.ids.every(id => known.has(id))).slice(0, FAMILY_MAX) }))
+export function servableFamilies(known, max = FAMILY_MAX) {
+  return allFamilies().map(f => ({ ...f, words: f.words.filter(x => !known || x.ids.every(id => known.has(id))).slice(0, max) }))
     .filter(f => f.words.length >= FAMILY_MIN);
 }
 export const familyClips = () => allFamilies().map(f => ({ id: `rime-${f.rime}`, text: f.rime, tts: RIME_TTS[f.rime] ?? f.rime }));

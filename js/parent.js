@@ -1,4 +1,5 @@
 // Grown-ups view data (spec §3.8.4): a plain summary of the local response log. Pure, so it is testable.
+import { errorPatterns } from './patterns.js';
 import { skillState, skills, DAY, blendL1Mastered } from './mastery.js';
 import { mapState, servableWords } from './progress.js';
 import { GPC } from './sequence.js';
@@ -59,13 +60,6 @@ export function tryAtHome(sounds, cur) {
 // (>= 2 of the same pair), and word misses by contrast position (>= 3: short vowels, last sound, first sound).
 const CONTRAST_TEXT = { vowel: 'short vowel sounds (like pin / pan)', final: 'the last sound in a word', onset: 'the first sound in a word' };
 export function troubleSpots(responses, now = Date.now()) {
-  const recent = responses.filter(r => r.firstAttempt && !r.correct && r.timestamp >= now - 14 * DAY && !r.modelled);
-  const pairs = new Map();
-  for (const r of recent) if (/^(sound|name):/.test(r.skill) && r.picked && r.picked !== r.itemId) {
-    const a = GPC[r.itemId]?.grapheme ?? r.itemId, b = GPC[r.picked]?.grapheme ?? r.picked, k = [a, b].sort().join(' and ');
-    pairs.set(k, (pairs.get(k) ?? 0) + 1);
-  }
-  const by = new Map(); for (const r of recent) if (r.skill?.startsWith('blend:') && r.contrast) by.set(r.contrast, (by.get(r.contrast) ?? 0) + 1);
-  return [...[...pairs].filter(([, n]) => n >= 2).sort((x, y) => y[1] - x[1]).map(([k]) => `mixes up ${k}`),
-    ...[...by].filter(([, n]) => n >= 3).sort((x, y) => y[1] - x[1]).map(([c]) => `practising ${CONTRAST_TEXT[c] ?? c}`)].slice(0, 3);
+  const { pairs, contrasts } = errorPatterns(responses, now), gr = id => GPC[id]?.grapheme ?? id;
+  return [...pairs.map(p => `mixes up ${[gr(p.a), gr(p.b)].sort().join(' and ')}`), ...contrasts.map(c => `practising ${CONTRAST_TEXT[c.pos] ?? c.pos}`)].slice(0, 3);
 }

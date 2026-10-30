@@ -111,7 +111,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     } else { // never a fail state: the tapped letter says what it is, then the prompt repeats
       const c = run.activity === 'find' ? `name-${it.l}` : `snd-${it.l}`, what = run.activity === 'find' ? LETTER_INFO[it.l].name : `“${LETTER_INFO[it.l].sound}”`;
       run.misses++; node.classList.remove('wob'); void node.offsetWidth; node.classList.add('wob'); // soft wobble, no red / buzzer
-      if (run.misses >= 2) run.items.find(i => i.l === run.target)?.node.classList.add('hint'); // after 2 misses the right tile glows
+      if (run.misses >= (run.assist ? 1 : 2)) run.items.find(i => i.l === run.target)?.node.classList.add('hint'); // after 2 misses (1 in a step-back round) the right tile glows
       run.busy = true; say(`That's ${what}.`, 'm-thats', c).then(() => { if (!run) return; run.busy = false; prompt(); });
     }
   }

@@ -103,7 +103,7 @@ export const WORDS = {
     // set 3: o d f
     W('dog', 'd o g', { pic: '🐶', say: 'Dog! A happy dog.' }), W('dot', 'd o t', { pic: '⚫', say: 'Dot! A little dot.' }), W('fan', 'f a n', { pic: '🪭', say: 'Fan! A cool fan.' }),
     W('fin', 'f i n', { say: 'Fin! A fish has a fin.' }), W('dip', 'd i p', { say: 'Dip! Dip your toes.' }), W('nod', 'n o d', { say: 'Nod! Nod your head.' }),
-    W('sad', 's a d', { say: 'Sad! Not sad today.' }), W('get', 'g e t', { say: 'Get! Get the ball.' }), W('dad', 'd a d', { say: 'Dad! Hi, Dad!' }), W('fit', 'f i t', { say: 'Fit! It fits.' }),
+    W('sad', 's a d', { pic: '😢', say: 'Sad! A sad face.' }), W('mad', 'm a d', { pic: '😠', say: 'Mad! A mad face.' }), W('get', 'g e t', { say: 'Get! Get the ball.' }), W('dad', 'd a d', { say: 'Dad! Hi, Dad!' }), W('fit', 'f i t', { say: 'Fit! It fits.' }),
     // set 4: c k e u
     W('cat', 'c a t', { pic: '#cat', say: 'Cat! The cat sat.' }), W('cap', 'c a p', { pic: '🧢', say: 'Cap! A red cap.' }), W('cup', 'c u p', { say: 'Cup! A cup of milk.' }),
     W('pen', 'p e n', { pic: '🖊️', say: 'Pen! Write with a pen.' }), W('net', 'n e t', { say: 'Net! In the net.' }), W('nut', 'n u t', { pic: '🥜', say: 'Nut! A crunchy nut.' }),
@@ -139,7 +139,7 @@ export const WORDS = {
     W('dash', 'd a sh', { say: 'Dash! Dash to the door.' }), W('shed', 'sh e d', { say: 'Shed! A garden shed.' }),
     W('shut', 'sh u t', { say: 'Shut! Shut the door.' }), W('shin', 'sh i n', { say: 'Shin! I bumped my shin.' }),
     W('shell', 'sh e ll', { pic: '🐚', say: 'Shell! A sea shell.' }), W('rush', 'r u sh', { say: 'Rush! No need to rush.' }),
-    W('wish', 'w i sh', { say: 'Wish! Make a wish.' }), W('shock', 'sh o ck', { say: 'Shock! What a shock!' }), W('hush', 'h u sh', { say: 'Hush! The baby is asleep.' }),
+    W('wish', 'w i sh', { say: 'Wish! Make a wish.' }), W('shock', 'sh o ck', { say: 'Shock! What a shock!' }), W('hush', 'h u sh', { pic: '🤫', say: 'Hush! The baby is asleep.' }),
     // ch
     W('chip', 'ch i p', { say: 'Chip! A chip of wood.' }), W('chop', 'ch o p', { say: 'Chop! Chop the wood.' }), W('chin', 'ch i n', { say: 'Chin! Touch your chin.' }),
     W('chick', 'ch i ck', { pic: '🐤', say: 'Chick! A fluffy chick.' }), W('much', 'm u ch', { say: 'Much! Thank you so much.' }), W('chat', 'ch a t', { say: 'Chat! A chat with a friend.' }),
@@ -168,14 +168,15 @@ export const WORDS = {
     W('smell', 's m e ll', { say: 'Smell! Smell the flower.' }), W('swim', 's w i m', { say: 'Swim! Swim like a fish.' }), W('twin', 't w i n', { say: 'Twin! My twin.' }),
   ],
   7: [ // v2 V4f: -s suffix after s = /z/: stem + s (/s/ after a voiceless sound, /z/ otherwise). stem: a word above
-    W('cats', 'c a t s', { stem: 'cat', say: 'Cats! Two cats.' }), W('hats', 'h a t s', { stem: 'hat', say: 'Hats! Lots of hats.' }),
+    // pic '2x<pic>' = two of the stem's picture; the picture check can offer the stem (one) as the 'final' distractor
+    W('cats', 'c a t s', { stem: 'cat', pic: '2x#cat', say: 'Cats! Two cats.' }), W('hats', 'h a t s', { stem: 'hat', pic: '2x#hat', say: 'Hats! Lots of hats.' }),
     W('cups', 'c u p s', { stem: 'cup', say: 'Cups! Two cups.' }), W('pots', 'p o t s', { stem: 'pot', say: 'Pots! Pots and pans.' }),
-    W('maps', 'm a p s', { stem: 'map', say: 'Maps! Two maps.' }), W('nuts', 'n u t s', { stem: 'nut', say: 'Nuts! A bag of nuts.' }),
+    W('maps', 'm a p s', { stem: 'map', say: 'Maps! Two maps.' }), W('nuts', 'n u t s', { stem: 'nut', pic: '2x🥜', say: 'Nuts! Two nuts.' }),
     W('pets', 'p e t s', { stem: 'pet', say: 'Pets! Cats and dogs are pets.' }), W('its', 'i t s', { stem: 'it', say: 'Its! The cat licks its paw.' }),
-    W('bags', 'b a g s_z', { stem: 'bag', say: 'Bags! Two bags.' }), W('pigs', 'p i g s_z', { stem: 'pig', say: 'Pigs! Three pigs.' }),
-    W('dogs', 'd o g s_z', { stem: 'dog', say: 'Dogs! Two dogs.' }), W('beds', 'b e d s_z', { stem: 'bed', say: 'Beds! Bunk beds.' }),
-    W('hens', 'h e n s_z', { stem: 'hen', say: 'Hens! The hens sat.' }), W('bugs', 'b u g s_z', { stem: 'bug', say: 'Bugs! Little bugs.' }),
-    W('pens', 'p e n s_z', { stem: 'pen', say: 'Pens! Red pens.' }), W('legs', 'l e g s_z', { stem: 'leg', say: 'Legs! Two legs.' }),
+    W('bags', 'b a g s_z', { stem: 'bag', say: 'Bags! Two bags.' }), W('pigs', 'p i g s_z', { stem: 'pig', pic: '2x🐷', say: 'Pigs! Two pigs.' }),
+    W('dogs', 'd o g s_z', { stem: 'dog', pic: '2x🐶', say: 'Dogs! Two dogs.' }), W('beds', 'b e d s_z', { stem: 'bed', say: 'Beds! Bunk beds.' }),
+    W('hens', 'h e n s_z', { stem: 'hen', pic: '2x🐔', say: 'Hens! The hens sat.' }), W('bugs', 'b u g s_z', { stem: 'bug', pic: '2x🐛', say: 'Bugs! Little bugs.' }),
+    W('pens', 'p e n s_z', { stem: 'pen', pic: '2x🖊️', say: 'Pens! Red pens.' }), W('legs', 'l e g s_z', { stem: 'leg', say: 'Legs! Two legs.' }),
     W('rugs', 'r u g s_z', { stem: 'rug', say: 'Rugs! Soft rugs.' }), W('gets', 'g e t s', { stem: 'get', say: 'Gets! He gets wet.' }),
   ],
   5: [ // CVCC: final blend; each consonant its own dot (sand = 4 stops)
@@ -342,6 +343,8 @@ export const MASCOT = {
   'm-read-together': "Let's read it together!",
   'm-star-word': 'This is a star word. We just know it!',
   'm-star-tap': 'Star word! Tap it.',
+  'm-read-tap-on': 'Read it, then tap the arrow!',
+  'm-reread': 'This story again! You know this one.',
   'm-read-all': 'Now read it all!',
   'm-which-shows': 'Which picture shows it?',
   'm-read-again': "Let's read it again.",

@@ -73,6 +73,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   const handPath = () => { if (!run || run.reading || dragging) return null; const at = n => centerIn(n, $('sentence'), stage.scale), t = run.tokens[run.i];
     if (!t) return $('sn-read').disabled ? null : [at($('sn-read')), at($('sn-read'))];
     if (t.kind === 'star') { const c = at(chips()[run.i]); return [c, [c[0], c[1] + 10]]; }
+    if (!$('sn-next').hidden) { const c = at($('sn-next')); return [c, [c[0], c[1] + 10]]; }
     if (!run.ms) return null; const [x, y] = at($('sn-handle')); return [[x, y + 20], [run.layout.knobX(0.5), y + 20], [run.layout.knobX(1), y + 20]]; };
   const say = (t, ...clips) => { $('sn-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
   const chips = () => [...$('sn-strip').children];
@@ -84,15 +85,15 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   }
   const blending = on => $('sentence').classList.toggle('blending', on);
   function next() {
-    paint(); const t = run.tokens[run.i]; hand.hide(); hand.poke();
+    paint(); const t = run.tokens[run.i]; hand.hide(); hand.poke(); $('sn-next').hidden = true; $('sentence').classList.remove('tapon');
     if (!t) return allRead();
     if (t.kind === 'star') { // gold, tap to hear, no slider
       blending(false); $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
       say('Star word! Tap it.', 'm-star-tap');
     } else {
       const lv = run.tokSupport = Math.max(1, Math.min(4, support(t.entry) ?? 3)); run.levels.push(lv); if (lv === 4) run.modelled = true;
-      if (lv === 1) { blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; run.ms = null; $('sn-bubble').innerHTML = 'Read it!'; // S1: no slider
-        setTimeout(() => { if (run && run.tokens[run.i] === t) { run.i++; next(); } }, 900); }
+      // S1: no slider; the child reads the word in their head and taps on (never a timer: known issue 7)
+      if (lv === 1) { blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; run.ms = null; $('sn-next').hidden = false; $('sentence').classList.add('tapon'); say('Read it, then tap the arrow!', 'm-read-tap-on'); }
       else blendWord(t);
     }
   }
@@ -155,7 +156,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   async function pick(b, pic) {
     if (!run || run.reading || b.disabled) return; hand.hide(); hand.poke(); audio.stop();
     const st = run.story, correct = pic === (st ? st.ask.answer : run.sent.pic), first = run.tries++ === 0;
-    record({ skill: st ? `story:${st.id}` : `sentence:L${run.sent.level}`, itemId: st ? st.id : run.sent.id, gpcs: [...new Set(run.tokens.filter(t => t.kind === 'word').flatMap(t => t.entry.parse?.split(' ') ?? [...t.entry.w]))],
+    record({ ...(run.reread ? { reread: true } : {}), skill: st ? `${run.reread ? 'reread' : 'story'}:${st.id}` : `sentence:L${run.sent.level}`, itemId: st ? st.id : run.sent.id, gpcs: [...new Set(run.tokens.filter(t => t.kind === 'word').flatMap(t => t.entry.parse?.split(' ') ?? [...t.entry.w]))],
       correct, firstAttempt: first, scored: first && !run.modelled, ...(run.modelled ? { modelled: true } : {}), // v2 V1: read aloud first = modelled, not scored
       support: run.levels.length ? Math.max(...run.levels) : null, tokenSupport: run.levels, hints: run.hints, latencyFromOnsetMs: run.askAt ? Math.round(performance.now() - run.askAt) : null });
     if (!correct) { b.disabled = true; b.classList.add('no'); run.reading = true; await say("Let's read it again.", 'm-read-again');
@@ -185,16 +186,17 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   $('sn-handle').addEventListener('pointerdown', e => { hand.hide(); hand.poke(); if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
   addEventListener('pointermove', onMove); addEventListener('pointerup', () => { dragging = null; run?.sweep?.lift?.(); });
   $('sn-read').onclick = readAll;
+  $('sn-next').onclick = () => { if (!run || $('sn-next').hidden || run.reading) return; hand.poke(); audio.stop(); $('sn-next').hidden = true; run.i++; next(); };
   $('sn-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
   $('sn-again').onclick = () => run && (audio.stop(), audio.play(run.tokens[run.i]?.clip ?? `sent-${run.sent.id}`));
   return {
     // a sentence, or a story ({ story }): its pages are read one by one like sentences (page dots in the top bar)
-    start({ sentence, story, onComplete }) {
-      run = { story, page: 0, onComplete, levels: [], hints: 0 }; $('sentence').hidden = false; loadSentence(story ? story.pages[0] : sentence);
-      say(story ? `A story: <b>${story.title}</b>. Let's read it together!` : "Let's read it together!", 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
+    start({ sentence, story, reread = false, onComplete }) {
+      run = { story, reread: !!(story && reread), page: 0, onComplete, levels: [], hints: 0 }; $('sentence').hidden = false; loadSentence(story ? story.pages[0] : sentence);
+      say(run.reread ? "This story again! You know this one." : story ? `A story: <b>${story.title}</b>. Let's read it together!` : "Let's read it together!", run.reread ? 'm-reread' : 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
     },
     get run() { return run; },
-    debugAsk() { if (!run) return; run.i = run.tokens.length; paint(); blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; askPicture(); }, // tests/check-sizes only
+    debugAsk() { if (!run) return; $('sn-next').hidden = true; run.i = run.tokens.length; paint(); blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; askPicture(); }, // tests/check-sizes only
     relayout() { if (!run) return; fitLine(); if (run.ms) blendWord(run.tokens[run.i]); },
   };
 }

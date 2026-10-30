@@ -65,8 +65,11 @@ const VOWEL_PHONEMES = new Set(['æ', 'ɪ', 'ɒ', 'ɛ', 'ʌ']);
 export function minimalPairs(word) {
   const e = targetEntry(word); if (!e?.pic) return [];
   const pics = allPics(), phs = phonemeMap();
-  return [...phs].filter(([w]) => w !== word && pics.get(w) && pics.get(w) !== e.pic)
+  const out = [...phs].filter(([w]) => w !== word && pics.get(w) && pics.get(w) !== e.pic)
     .map(([w, ph]) => ({ w, pic: pics.get(w), contrast: contrastPosition(e.phonemes, ph) })).filter(c => c.contrast);
+  // L7 plural: the singular (one cat vs two cats) differs only by the final -s sound; never the other way round
+  if (e.stem && pics.get(e.stem) && pics.get(e.stem) !== e.pic) out.push({ w: e.stem, pic: pics.get(e.stem), contrast: 'final' });
+  return out;
 }
 export const CONTRASTS = ['onset', 'vowel', 'final'];
 // Picture-check choices (§3.5.2). Default strategy 'minimal' (review R8): every distractor differs from the target by
@@ -78,7 +81,10 @@ export function makeChoices(word, { n = 3, rand = Math.random, strategy = 'minim
   if (!target.pic) throw new Error(`no picture for "${word}"`);
   const pairs = minimalPairs(word);
   // rhyme = onset contrasts only, unless the word has none (then any minimal pair, so a check never has one card)
+  // focus:<pos> (error-pattern practice): that contrast leads every check when the word has one
+  const focus = strategy.startsWith?.('focus:') ? strategy.slice(6) : null;
   const order = strategy === 'rhyme' && pairs.some(c => c.contrast === 'onset') ? ['onset'] : strategy === 'vowel' ? ['vowel', 'onset', 'final']
+    : focus && CONTRASTS.includes(focus) ? [focus, ...CONTRASTS.filter(p => p !== focus)]
     : CONTRASTS.map((_, i) => CONTRASTS[(i + trial) % 3]);
   const byPos = Object.fromEntries(order.map(p => [p, shuffle(pairs.filter(c => c.contrast === p), rand)]));
   const out = [target], used = new Set([target.pic]); let lead = null;
@@ -96,13 +102,19 @@ export const needsCheck = (entry, cfg = {}, level = entry.level) =>
   !!entry.pic && cfg.checkPictureWords !== false && (level > 1 || !!cfg.checkAtL1) && minimalPairs(entry.w).length > 0;
 // Printed word-card check for words without a picture check (L1 VC words, sat, top…): the child picks the word they
 // just read from minimal-pair printed words (one letter different). opts.known: only words with taught GPCs.
-export function wordCards(word, { n = 3, rand = Math.random, known = null } = {}) {
+// Each card is tagged with the position it differs in (first letter = onset, last = final, a vowel letter = vowel),
+// so word-card misses feed the error patterns too; focus puts cards differing at that position first.
+export const cardContrast = (word, other) => { const i = [...word].findIndex((c, k) => c !== other[k]);
+  return i < 0 ? null : i === 0 ? 'onset' : i === word.length - 1 ? 'final' : /[aeiou]/.test(word[i]) && /[aeiou]/.test(other[i]) ? 'vowel' : null; };
+export function wordCards(word, { n = 3, rand = Math.random, known = null, focus = null } = {}) {
   const all = [...new Map(Object.values(WORDS).flat().map(e => [e.w, e])).values()];
   const ok = e => !known || e.parse.split(' ').every(g => known.has(g));
   const diff1 = w => w.length === word.length && [...w].filter((c, i) => c !== word[i]).length === 1;
-  const others = shuffle(all.filter(e => e.w !== word && diff1(e.w) && ok(e)), rand).slice(0, n - 1).map(e => ({ w: e.w, card: true }));
+  const pool = shuffle(all.filter(e => e.w !== word && diff1(e.w) && ok(e)), rand).map(e => ({ w: e.w, card: true, contrast: cardContrast(word, e.w) }));
+  if (focus) pool.sort((a, b) => (b.contrast === focus) - (a.contrast === focus));
+  const others = pool.slice(0, n - 1);
   if (!others.length) return null;
-  const res = shuffle([{ w: word, card: true }, ...others], rand); res.cards = true; res.contrast = null; return res;
+  const res = shuffle([{ w: word, card: true }, ...others], rand); res.cards = true; res.contrast = others[0].contrast; return res;
 }
 export const caseFor = (text, tileCase = 'lower') => tileCase === 'upper' ? text.toUpperCase() : text.toLowerCase();
 

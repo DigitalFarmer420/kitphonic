@@ -73,6 +73,7 @@ def main():
                     pic = pg.evaluate("() => { const r = kitphonic.sentenceScreen.run; return r.story ? r.story.ask.answer : r.sent.pic }"); pg.wait_for_timeout(400)
                     pg.locator('#sn-choices .pc').filter(has=pg.locator('*')).nth([pg.locator('#sn-choices .pc').nth(i).get_attribute('data-pic') for i in range(pg.locator('#sn-choices .pc').count())].index(pic)).click(); pg.wait_for_timeout(1200); continue
                 if st['read']: pg.locator('#sn-read').click(); pg.wait_for_timeout(800); continue
+                if pg.locator('#sn-next').is_visible(): pg.wait_for_timeout(500); pg.locator('#sn-next').click(); pg.wait_for_timeout(600); continue  # S1: tap on
                 if st['kind'] == 'star': pg.wait_for_timeout(500); pg.locator('#sn-strip .wd').nth(st['i']).click(); pg.wait_for_timeout(900); continue
                 if st['blend'] and pg.locator('#sn-handle').is_visible():
                     hb = pg.locator('#sn-handle').bounding_box(); tb = pg.locator('#sn-tiles .tile').last.bounding_box()

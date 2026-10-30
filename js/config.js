@@ -20,6 +20,7 @@ export const CONFIG = {
   markerOpts: { l1: 'dots', l4: 'dots' }, // L1 sound-by-sound (R2); 'bar' = one-bar 'at' (?l1=bar, ?l4=blendBar)
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
+  familyMax: 4,                 // word family letter choices per family (Uiux rc1: <= 5 early on); ?familyMax=2..7
   sweepGapMs: 180,
   minutes: 7,                   // session length target, clamped 5–10 (?minutes=)
   progress: undefined,          // dev: start with N map stops passed, in-memory log (?progress=N, ?due=1)
@@ -41,6 +42,7 @@ export function configFromUrl(search = '') {
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
   c.sentence = q.get('sentence') || undefined;
   c.story = q.get('story') || undefined;
+  if (q.get('reread') === '1') c.reread = true; // dev: ?activity=story&story=pot&reread=1
   if (q.get('ladder') === '0') c.supportLadder = false;
   if (/^[1-4]$/.test(q.get('support') ?? '')) c.support = +q.get('support');
   if (q.get('speakBeforeCheck')) c.speakBeforeCheck = q.get('speakBeforeCheck') === '1';
@@ -48,6 +50,7 @@ export function configFromUrl(search = '') {
   if (q.get('parent') === '1') c.parent = true;
   if (q.get('reducedMotion') === '1') c.reducedMotion = true;
   c.rime = q.get('rime') || undefined;
+  if (q.get('familyMax')) c.familyMax = Math.min(7, Math.max(2, +q.get('familyMax') || c.familyMax));
   if (q.get('direct') === '1' || ((q.get('word') || q.get('level')) && !c.activity)) c.direct = true; // dev: word screen only
   if (q.get('choices')) for (const k in c.choiceStrategy) c.choiceStrategy[k] = q.get('choices');
   if (q.get('mode')) for (const k in c.tapMode) c.tapMode[k] = q.get('mode');

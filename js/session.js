@@ -6,15 +6,17 @@
 //   { type: 'words', level, words: [entry], why }
 //   { type: 'star', word, why }   (only when opts.stars: Star Word screen)
 import { GPC, GPCS } from './sequence.js';
-import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked } from './mastery.js';
+import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor } from './mastery.js';
+import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
-import { shuffle } from './word-logic.js';
+import { shuffle, minimalPairs, wordCards } from './word-logic.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
 import { servableFamilies } from './families.js';
 
 export const COST = { storyPage: 45, explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, family: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
+const CONFUSABLE = new Set(['bd', 'pq', 'bp', 'dq', 'mn', 'nu', 'mw', 'ft', 'il', 'hn']); // letter pairs that look alike
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;
@@ -40,7 +42,7 @@ export function letterPool(active, { size = 6, min = 3 } = {}) {
   return pool;
 }
 
-export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = true } = {}) {
+export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = true, familyMax } = {}) {
   const budget = Math.max(MIN_MIN, Math.min(MAX_MIN, minutes)) * 60, minBudget = MIN_MIN * 60;
   const map = mapState(responses, now), cur = map.current, active = activeSounds(responses, now);
   const known = knownGpcs(responses, now), items = [];
@@ -49,6 +51,10 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   const push = it => { if (room(it)) { items.push(it); return true; } return false; };
   const pool = letterPool(active.length ? active : [GPCS[0].id]);
   const wordsAt = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? shuffle(ws, rand).slice(0, n) : []; };
+  const stepBack = skill => pacingFor(responses, skill) === 'stepBack';
+  // an easy pool for a step-back round: the sound + two secure letters that sound and look different
+  const easyPool = g => { const far = x => x !== g && GPC[x]?.phoneme !== GPC[g]?.phoneme && !CONFUSABLE.has([g, x].sort().join(''));
+    return [...new Set([g, ...active.filter(x => far(x) && atLeast(st(`sound:${x}`), 'secure')), ...pool.filter(far)])].slice(0, 3); };
   const passedLevels = map.stops.filter(s => s.kind === 'words' && s.level && s.status === 'passed').map(s => s.level);
 
   // 1. Spaced review that is due (oldest first).
@@ -74,6 +80,10 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
       if (canTrace) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
       if (map.index === 0) push({ type: 'letters', activity: 'soundTap', pool, newSound: g, why: 'new' });
       push(hunt(4));
+    } else if (stepBack(`sound:${g}`)) { // §3.7.1: < 60 % two sessions running -> an easier game with extra hints, no message
+      push({ type: 'letters', activity: 'soundTap', pool, newSound: g, why: 'easier' });
+      push({ type: 'letters', activity: 'hunt', pool: easyPool(g), targets: [g, g, g], rounds: 4, n: 3, assist: true, why: 'easier' });
+      if (canTrace) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'easier' });
     } else {
       push(hunt(5));
       if (canTrace && responses.filter(r => r.skill === `trace:${GPC[g].grapheme}`).length < 6) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
@@ -93,18 +103,45 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
     if (s) push({ type: 'story', story: s, why: 'new' });
     else if (!need.length) push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
   } else if (cur?.kind === 'words') {
-    let lv = cur.level, ws = wordsAt(lv, 5);
+    let lv = cur.level, ws = wordsAt(lv, 5), easier = false;
     if (!ws.length && passedLevels.length) { lv = passedLevels.at(-1); ws = wordsAt(lv, 5); }
-    if (ws.length && blendingUnlocked(responses, now)) push({ type: 'words', level: lv, words: ws, why: 'new' });
+    if (ws.length && stepBack(`blend:L${lv}`)) { // §3.7.1 step back: the last easier level passed, S3+ support and the hand demo
+      const down = passedLevels.filter(l => l < lv).at(-1), dws = down ? wordsAt(down, 4) : [];
+      if (dws.length) { lv = down; ws = dws; } else ws = ws.slice(0, 4);
+      easier = true;
+    }
+    if (ws.length && blendingUnlocked(responses, now)) push({ type: 'words', level: lv, words: ws, why: easier ? 'easier' : 'new', ...(easier ? { assist: true } : {}) });
     else push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' }); // sounds not yet secure enough
   }
+  // v2 V9 rule 5: the session after a story is read offers one re-read (scored separately as reread:<id>); the most
+  // recently read story first, never the story the current stop is about. Only when it fits (a story is a few minutes).
+  const lastAt = id => Math.max(...responses.filter(r => r.skill === `story:${id}`).map(r => r.timestamp));
+  const toReread = [...new Set(responses.filter(r => r.skill?.startsWith('story:')).map(r => r.skill.slice(6)))]
+    .filter(id => id !== cur?.story && !responses.some(r => r.skill === `reread:${id}`)).sort((a, b) => lastAt(b) - lastAt(a));
+  if (toReread.length && stars) {
+    const met = new Set(responses.filter(r => r.skill?.startsWith('star:')).map(r => r.skill.slice(5)));
+    const s = servableStory(toReread[0], known, met); if (s) push({ type: 'story', story: s, reread: true, why: 'reread' });
+  }
+
+  // Error patterns (§3.7.1): one short practice item for the strongest pattern of the last 14 days.
+  const pat = errorPatterns(responses, now), pair = pat.pairs.find(p => active.includes(p.a) && active.includes(p.b));
+  if (pair) { // both letters always on screen (3 tiles), alternating targets
+    const third = pool.find(g => g !== pair.a && g !== pair.b && GPC[g]?.phoneme !== GPC[pair.a]?.phoneme && GPC[g]?.phoneme !== GPC[pair.b]?.phoneme);
+    push({ type: 'letters', activity: 'hunt', pool: [pair.a, pair.b, ...(third ? [third] : [])], targets: [pair.a, pair.b, pair.b, pair.a], rounds: 4, n: 3, why: 'pattern', pattern: `${pair.a}/${pair.b}` });
+  }
+  const con = pat.contrasts[0], plv = cur?.kind === 'words' && cur.level ? cur.level : passedLevels.at(-1);
+  if (con && plv && blendingUnlocked(responses, now)) { // words whose picture check can lead with that contrast
+    const ws = shuffle(servableWords(plv, known).filter(e => minimalPairs(e.w).some(c => c.contrast === con.pos) || wordCards(e.w, { known, focus: con.pos, rand: () => .5 })?.contrast === con.pos), rand).slice(0, 3);
+    if (ws.length >= 2) push({ type: 'words', level: plv, words: ws, focus: con.pos, why: 'pattern', pattern: con.pos });
+  }
+
   if (stars) for (const s of availableStars(responses, now).filter(s => !atLeast(st(`star:${s.w}`), 'secure')).slice(0, 1))
     push({ type: 'star', word: s.w, why: 'new' });
 
   // Word families (design/words-board 2): once CVC words (L2) are open, one family per session, least-made first.
   if ((cur?.kind === 'words' && cur.level >= 2) || passedLevels.some(l => l >= 2)) {
     const made = r => responses.filter(x => x.skill === `family:${r}`).length;
-    const fs = servableFamilies(known).sort((a, b) => made(a.rime) - made(b.rime) || rand() - .5);
+    const fs = servableFamilies(known, familyMax).sort((a, b) => made(a.rime) - made(b.rime) || rand() - .5);
     if (fs.length && blendingUnlocked(responses, now)) push({ type: 'family', family: fs[0], why: made(fs[0].rime) ? 'mixed' : 'new' });
   }
 

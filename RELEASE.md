@@ -1,24 +1,25 @@
-# Kitphonic 1.0.0-rc1 — release readiness
+# Kitphonic 1.0.0-rc2 — release readiness
 
-Version: `1.0.0-rc1` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc2` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
-Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8.
+Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc1:** `npm test` 150/150 · `tools/check-sizes.py` all scenes at 6 phone / tablet viewports
+**Gate status at rc2:** `npm test` 160/160 · `tools/check-sizes.py` 294/294 (49 scenes × 6 phone / tablet viewports)
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
-7/7 (no target audio before a scored pick; S1/S2/S4 behave) · `tools/play-session.py` end-to-end sessions.
+10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
+re-reads logged separately) · `tools/play-session.py` end-to-end sessions.
 
 > ⚠️ **Do not playtest with children on this build's audio.** `audio/takes/` holds **0 recorded clips**; every sound,
 > word and line is a browser text-to-speech placeholder (v2 V3). Clipped / held phonemes (spec §3.2) cannot be judged
-> until a voice is recorded (`npm run manifest` lists all 826 clips).
+> until a voice is recorded (`npm run manifest` lists all 830 clips).
 >
 > ⚠️ **Pictures are placeholder emoji** (plus 3 drawn SVGs: mat, cat, hat). They must pass the v2 V6 rule (≥ 80 % of
 > 5+ children in the target region name each picture with its target word, unprompted) before release.
 
-## Content at rc1
+## Content at rc2
 38 sounds in 8 sets (m s a t · p i n · o d f · c k u · g e r h b l · ck ff ll ss s=/z/ · j v x y w z zz qu ·
-sh ch th th ng nk) · 56 map stops (38 sounds, 7 word levels L1–L7, 6 "new words" stops, 5 stories) · 253 words
-(61 pictured) · 14 star words · 30 picture-checked sentences · 5 decodable stories (from stop 19) · tracing paths
+sh ch th th ng nk) · 56 map stops (38 sounds, 7 word levels L1–L7, 6 "new words" stops, 5 stories) · 254 words
+(72 pictured; ≥ 5 at every words stop from L3) · 14 star words · 30 picture-checked sentences · 5 decodable stories (from stop 19) · tracing paths
 for every grapheme.
 
 ## Done vs spec §3
@@ -36,7 +37,7 @@ for every grapheme.
 | 3.3.2 | Floating Letters, Find the Letter | ✅ (float, find, soundTap, hunt) |
 | 3.3.2 | Match Up (upper ↔ lower drag) | ❌ not built |
 | 3.3.3 | Floating speed, ~80 pt tap radius, pause on tap, 3–6 letters | ✅ |
-| 3.4.1 | Dot with sound-wave icon, different colour | ✅ (rime bar carries the same icon, r8) |
+| 3.4.1 | Dot with sound icon, different colour | ✅ dot = speaker (one sound), bar = speaker + word shape (a chunk) — Uiux rc1 |
 | 3.4.2 | Sound Tap, Sound Hunt | ✅ |
 | 3.4.2 | First Sound, Name or Sound? | ❌ not built (letter intro shows start-sound pictures instead) |
 | 3.4.3 | Blending unlocks after 4–6 sounds incl. a vowel | ✅ 4 secure incl. a vowel |
@@ -48,8 +49,8 @@ for every grapheme.
 | 3.6 | Digraphs deferred past prototype | ➕ built (sh ch th th ng nk, ck ff ll ss zz qu) |
 | 3.7 | Level ladder L1–L5 | ✅ plus L6 digraph words, L7 -s suffix; levels only use secure sounds |
 | 3.7.1 | Mastery ≈ 90 % across 2 sessions on different days; spaced review 1/3/7/14(/30) days | ✅ |
-| 3.7.1 | Adaptive pacing (< 60 % two sessions → step back) | ⚠️ pacing computed (`core.pacing`) but the planner does not act on it; the slider ladder steps support back up on misses |
-| 3.7.1 | Error patterns tracked → extra practice | ⚠️ tracked (contrast position, letter picks) and shown to grown-ups; no targeted minimal-pair sessions yet (v2 V2 rule 5) |
+| 3.7.1 | Adaptive pacing (< 60 % two sessions → step back) | ✅ rc2: words → the last easier passed level with S3+ support and the hand demo; sounds → explore + 3-tile hunt, hint after 1 miss; 60–89 % = more practice on the same skill; no message to the child |
+| 3.7.1 | Error patterns tracked → extra practice | ✅ rc2 (`js/patterns.js`, 14 days): a letter mix-up (≥ 2) → a hunt with both letters on screen; a contrast position (≥ 3: short vowels / last / first sound) → a words round whose checks lead with that contrast; also shown to grown-ups |
 | 3.8.1 | Targets ≥ 64 pt, tap / drag only, landscape + portrait | ✅ automated at 6 viewports; ~100 ms audio latency not instrumented |
 | 3.8.2 | Calm mascot; 5–10 min sessions with "all done"; quiet rewards (stickers); speech recognition optional / off | ✅ (speech recognition not built — out of scope) |
 | 3.8.3 | Kid font (single-storey a/g), warm palette, subtle animation, reduced motion, shape-coded markers, captions, audio speed | ✅ Andika; captions on taps + speech bubbles |
@@ -59,16 +60,25 @@ for every grapheme.
 
 ## Known issues
 1. **Placeholder audio** (above) — blocks child playtests (V3).
-2. **Placeholder emoji art** — 192 of 253 words have no picture (they get printed word cards). Sentence scenes show two
-   pictures side by side, so "in" vs "on" is not depicted; some stand-ins are weak (🟤 mud, 👑 the king, 🧺 lunch).
+2. **Placeholder emoji art** — 182 of 254 words have no picture (they get printed word cards). Sentence scenes show two
+   pictures side by side, so "in" vs "on" is not depicted; some stand-ins are weak (🟤 mud, 👑 the king, 🧺 lunch). New in
+   rc2 and to be checked in the naming test: plurals as two of a picture (two cats look small at 360 px because the
+   drawn cat has padding), 🤫 hush, 😢 sad, 😠 mad.
 3. Picture-naming validation (≥ 80 % rule) not run.
-4. Adaptive pacing "step back" and error-pattern practice not wired into the planner (see 3.7.1).
-5. Not built: Match Up, First Sound, Name or Sound?, uppercase letters, story re-reads (V9 rule 5), S1 "at a glance" per
-   word (V2), story validator rules on star-word ratio / recycling / new-GPC-per-page (V9 rules 2, 5, 6).
-6. Word pools: L1 (at, am) and L2 (6 CVC) open with only 4–5 letters known; every later words stop has ≥ 12 words
-   (tested). ≥ 5 pictured words per stop is not met at L6 (4) and L7 (0, plurals).
-7. Sentence words at S1 auto-advance after ~1 s (no tap needed); digraph tracing is the two letters side by side.
+4. Not built: Match Up, First Sound, Name or Sound?, uppercase letters, S1 "at a glance" per word (V2), story validator
+   rules on star-word ratio / recycling / new-GPC-per-page (V9 rules 2, 5, 6).
+5. Word pools: L1 (at, am) and L2 (6 CVC, 2 pictured) open with only 4–5 letters known; every later words stop has
+   ≥ 12 words and ≥ 5 pictured words (both tested).
+6. Digraph tracing is the two letters side by side.
+7. Pacing thresholds (step back < 60 % over two sessions, patterns ≥ 2 mix-ups / ≥ 3 contrast misses in 14 days) are
+   starting values to tune in the playtest; a step-back round's own responses still count toward mastery.
 8. Progress lives in this browser's storage only; clearing site data erases it (by design, spec §3.9).
+
+Fixed in rc2: adaptive step-back and error-pattern practice in the planner (was 4); S1 sentence words wait for the
+child's tap on a big arrow instead of auto-advancing after ~1 s (was 7); ≥ 5 pictured words at L6 and L7 (was 6);
+story re-reads — the session after a story offers one re-read, scored separately as `reread:<id>` (V9 rule 5);
+Uiux rc1 — distinct dot / bar icons, family letters in balanced centred rows (7 → 4 + 3), the tray steps aside when
+a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`), grown-ups sound tiles never shrink.
 
 ## Held user decisions (configurable, current defaults)
 | Decision | Default | Switch |
@@ -84,6 +94,6 @@ for every grapheme.
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
 
-## Release steps after rc1
+## Release steps after rc2
 Record the voice (all clips in `audio/manifest.json`), replace emoji with drawn art and run the naming test, playtest
 8–12 children (spec §3.9) and tune thresholds (`RULES`, `SUPPORT_RULES`), then tag 1.0.0.

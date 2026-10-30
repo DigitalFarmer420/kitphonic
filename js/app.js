@@ -22,12 +22,12 @@ import { createStarScreen, createSentenceScreen } from './star-screen.js';
 import { createParentScreen } from './parent-screen.js';
 import { createSeen } from './seen.js';
 import { createFamilyScreen } from './family-screen.js';
-import { allFamilies } from './families.js';
+import { servableFamilies } from './families.js';
 import { allSentences, allStories } from './sentences.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
-const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); });
+const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
@@ -84,7 +84,7 @@ export function startSession() {
   if (cfg.activity) return startActivity(cfg.activity);
   if (cfg.direct) return startDirect();
   sessionId = `s-${Date.now()}`;
-  const plan = planSession(store.all(), { minutes: cfg.minutesSet ? cfg.minutes : settings.get('sessionMinutes'), rand });
+  const plan = planSession(store.all(), { minutes: cfg.minutesSet ? cfg.minutes : settings.get('sessionMinutes'), rand, familyMax: cfg.familyMax });
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index };
   runNext();
 }
@@ -95,12 +95,12 @@ function runNext() {
   if (!it || overTime) return allDone();
   if (it.type === 'letters') {
     show('letters');
-    letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound,
+    letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound, assist: it.assist, n: it.n,
       onComplete: r => { if (r?.score) session && session.stickers.push('⭐'); runNext(); } });
   } else if (it.type === 'words') {
-    show('word'); screen.start(it.words, it.level, { apply: it.apply, onDone: st => { session?.stickers.push(...st); runNext(); } });
+    show('word'); screen.start(it.words, it.level, { apply: it.apply, assist: it.assist, focus: it.focus, onDone: st => { session?.stickers.push(...st); runNext(); } });
   } else if (it.type === 'story') {
-    show('sentence'); sentenceScreen.start({ story: it.story, onComplete: () => { session?.stickers.push('📚'); runNext(); } });
+    show('sentence'); sentenceScreen.start({ story: it.story, reread: it.reread, onComplete: () => { session?.stickers.push('📚'); runNext(); } });
   } else if (it.type === 'lesson') {
     show('lesson'); lesson.start({ activity: it.activity, gpc: it.gpc, onComplete: () => { session?.stickers.push(it.activity === 'trace' ? '✏️' : '🔤'); runNext(); } });
   } else if (it.type === 'star') {
@@ -114,8 +114,9 @@ function runNext() {
 function startActivity(activity) { // dev: one letter game (or ?activity=intro|trace&gpc=s)
   sessionId ??= `s-${Date.now()}`;
   if (activity === 'star') { show('star'); return starScreen.start({ word: cfg.word ?? 'the', onComplete: () => allDone([]) }); }
-  if (activity === 'family') { show('family'); const fs = allFamilies(); return familyScreen.start({ family: fs.find(f => f.rime === cfg.rime) ?? fs[0], onComplete: () => allDone([]) }); }
-  if (activity === 'story') { show('sentence'); const ss = allStories(); return sentenceScreen.start({ story: ss.find(x => x.id === cfg.story) ?? ss[0], onComplete: () => allDone([]) }); }
+  if (activity === 'family') { show('family'); const fs = servableFamilies(undefined, cfg.familyMax); return familyScreen.start({ family: fs.find(f => f.rime === cfg.rime) ?? fs[0], // capped at FAMILY_MAX like a real session
+    onComplete: () => allDone([]) }); }
+  if (activity === 'story') { show('sentence'); const ss = allStories(); return sentenceScreen.start({ story: ss.find(x => x.id === cfg.story) ?? ss[0], reread: cfg.reread, onComplete: () => allDone([]) }); }
   if (activity === 'sentence') { show('sentence'); const ss = allSentences(); return sentenceScreen.start({ sentence: ss.find(x => x.id === cfg.sentence) ?? ss[0], onComplete: () => allDone([]) }); }
   if (activity === 'intro' || activity === 'trace') { show('lesson'); return lesson.start({ activity, gpc: cfg.gpc ?? 's', onComplete: () => allDone([]) }); }
   show('letters');
