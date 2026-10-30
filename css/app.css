@@ -10,6 +10,7 @@ html,body{margin:0;height:100%;background:#E9E1D5;overflow:hidden;font-family:'N
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
 .btn{width:72px;height:72px;border-radius:22px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 .btn.coral{color:var(--coral)}
+#check-help{position:absolute;top:14px;right:18px}.portrait #check-help{right:14px}.short #check-help{top:10px;right:16px}#check-help[hidden]{display:none}
 .top{position:absolute;top:14px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;z-index:5}
 .path{display:flex;gap:10px;align-items:center}.peb{width:22px;height:22px;border-radius:50%;background:var(--line)}
 .peb.on{background:var(--honey)}.peb.now{background:#fff;border:4px solid var(--honey)}
@@ -437,6 +438,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #sn-choices[hidden]{display:none}
 #sn-choices .pc{width:112px;height:112px;border-radius:24px;background:#fff;border:3px solid var(--line);box-shadow:0 5px 0 var(--line);font-size:64px;display:flex;align-items:center;justify-content:center;padding:0}
 #sn-choices .pc svg{width:96px;height:72px}
+.scene{display:flex;align-items:center;justify-content:center;gap:4px}.scene .emoji{font-size:.6em}#sn-card .scene svg,#sn-choices .pc .scene svg{width:.95em;height:.8em}
 #sn-choices .pc.no{opacity:.35}
 #sn-choices .pc.yes{border-color:var(--sage);background:#E7F1E4}
 #sentence.choosing #sn-read{visibility:hidden}
@@ -448,3 +450,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .hunt .ltr .tile.two{font-size:72px!important}
 .ptile.ex{display:flex;flex-direction:column;line-height:1;gap:1px;justify-content:center}
 .ptile small{font:600 12px 'Nunito',sans-serif;opacity:.85}
+/* Uiux r7: cue picture on same-spelling stops (s / s=z, th / th), top-left, opposite the star */
+.stop .cue{position:absolute;top:-10px;left:-10px;width:36px;height:36px;border-radius:50%;background:#fff;border:2px solid var(--line);display:grid;place-items:center;font-size:22px;pointer-events:none}
+.stop .cue.tr{left:auto;right:-10px}
+.stop .cue.ml{top:calc(50% - 18px);left:-26px}

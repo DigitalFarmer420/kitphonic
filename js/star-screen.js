@@ -10,11 +10,13 @@ import { clipForMarker, clipForBlend, shuffle, caseFor } from './word-logic.js';
 import { guessGuard } from './mastery.js';
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
-import { pictureChoices, allSentences } from './sentences.js';
+import { pictureChoices } from './sentences.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const picHtml = pic => (pic?.startsWith('#') ? `<svg width="150" height="110"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`);
+const onePic = pic => (pic?.startsWith('#') ? `<svg width="150" height="110" viewBox="0 0 120 100"><use href="${pic}"/></svg>` : `<span class="emoji">${pic ?? '⭐'}</span>`);
+// v2 V7 scenes: 'a+b' = two pictures side by side (the sentence's two content words)
+const picHtml = pic => (pic?.includes('+') ? `<span class="scene">${pic.split('+').map(onePic).join('')}</span>` : onePic(pic));
 export const STAR_ROUNDS = 3;
 // Distractors for "find <star>": other star words + decodable words of similar length, all different in print.
 // Distractors are decodable words made only of taught letters (untaught-sound rule), so the only "new" print is the star.
@@ -63,7 +65,9 @@ export function createStarScreen({ audio, stage, rand = Math.random, record = ()
   };
 }
 
-export function createSentenceScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen, reduced = () => false }) {
+// v2 V2: each decodable token is served at its pattern's support level (support(entry): 4 model, 3 blend, 2 silent
+// dots, 1 read it = no slider). Any S4 token makes the read modelled (Kit said a word), so the pick is not scored.
+export function createSentenceScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
   let run = null, dragging = null;
   const hand = createGhostHand({ host: $('sentence'), reduced });
   const handPath = () => { if (!run || run.reading || dragging) return null; const at = n => centerIn(n, $('sentence'), stage.scale), t = run.tokens[run.i];
@@ -85,10 +89,15 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     if (t.kind === 'star') { // gold, tap to hear, no slider
       blending(false); $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
       say('Star word! Tap it.', 'm-star-tap');
-    } else blendWord(t);
+    } else {
+      const lv = run.tokSupport = Math.max(1, Math.min(4, support(t.entry) ?? 3)); run.levels.push(lv); if (lv === 4) run.modelled = true;
+      if (lv === 1) { blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; run.ms = null; $('sn-bubble').innerHTML = 'Read it!'; // S1: no slider
+        setTimeout(() => { if (run && run.tokens[run.i] === t) { run.i++; next(); } }, 900); }
+      else blendWord(t);
+    }
   }
   function blendWord(t) {
-    $('sn-bubble').innerHTML = 'Slide to read it!'; blending(true);
+    $('sn-bubble').innerHTML = run.tokSupport === 2 ? 'Say the sounds!' : 'Slide to read it!'; blending(true);
     const w = t.entry.w, ids = t.entry.parse?.split(' '); run.ms = markers(w, 3, { ids }); run.layout = wordLayout(w.length, layoutFor(stage.info)); run.sweep = createSweep(run.ms, { gapMs: cfg.sweepGapMs ?? 180 }); run.t0 = null;
     const L = run.layout, tiles = $('sn-tiles'); tiles.replaceChildren();
     graphemeUnits(w, ids).forEach(u => { const d = el('div', 'tile L' + (u.b - u.a > 1 ? ' dg' : ''), caseFor(u.text, cfg.tileCase)); d.style.left = L.tileLeft(u.a) + 'px'; d.style.width = (u.b - u.a) * L.cell - L.gap + 'px'; d.style.fontSize = Math.round(Math.min(84, L.tileW * .78)) + 'px'; tiles.append(d); });
@@ -104,42 +113,74 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     const p = stage.toStage(e); run.t0 ??= performance.now();
     for (const ev of run.sweep.move(run.layout.fracFromX(p.x), e.timeStamp)) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
-        const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs });
+        const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); if (run.tokSupport !== 2) audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs }); // S2: silent dots
         [...$('sn-tiles').children][ev.marker]?.classList.add('passed'); $('sn-track').querySelectorAll('.tdot')[ev.marker]?.classList.add('on');
       } else if (ev.kind === 'blend') {
         dragging = null; const t = run.tokens[run.i], ok = guessGuard({ sweepMs: performance.now() - run.t0, phonemes: run.ms.length }).scored;
-        run.ms = null; audio.play(clipForBlend(t.entry.w).id, { delayMs: (ev.delayMs || 0) + 300 }).then(() => {
-          if (!run) return; if (!ok) audio.play('m-slide-slowly'); run.i++; next(); });
+        // v2 V1: the whole word is NOT spoken before the scored picture pick (the child blends it); ?speakBeforeCheck=1 = old model
+        run.ms = null; const after = () => { if (!run) return; if (!ok) audio.play('m-slide-slowly'); run.i++; next(); };
+        if (cfg.speakBeforeCheck || run.tokSupport === 4) audio.play(clipForBlend(t.entry.w).id, { delayMs: (ev.delayMs || 0) + 300 }).then(after); else setTimeout(after, 500);
       }
     }
     if (run.ms) setKnob(run.sweep.position);
   }
-  function allRead() { // "read it all" unlocks
-    blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; const b = $('sn-read'); b.disabled = false;
-    say('Now read it all!', 'm-read-all');
+  function allRead() { // every word swept: scored mode goes straight to the question; model mode unlocks "read it all"
+    blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true;
+    if (!cfg.speakBeforeCheck) return afterRead();
+    const b = $('sn-read'); b.disabled = false; say('Now read it all!', 'm-read-all');
+  }
+  async function karaoke(tokens = run.tokens) { // Kit reads the line, lighting each word (model / reward)
+    for (const [i, t] of tokens.entries()) { if (!run) return; const c = chips()[i]; c?.classList.add('lit'); await audio.play(t.clip); c?.classList.remove('lit'); c?.classList.add('done'); }
   }
   async function readAll() {
-    const b = $('sn-read'); if (b.disabled || !run || run.reading) return; run.reading = true; b.disabled = true;
-    for (const [i, t] of run.tokens.entries()) { if (!run) return; const c = chips()[i]; c.classList.add('lit'); await audio.play(t.clip); c.classList.remove('lit'); c.classList.add('done'); }
-    run.reading = false; askPicture();
+    const b = $('sn-read'); if (b.disabled || !run || run.reading) return; run.reading = true; b.disabled = true; run.modelled = true;
+    await karaoke(); if (run) { run.reading = false; afterRead(); }
+  }
+  async function afterRead() {
+    if (run.story && run.page < run.story.pages.length - 1) { // story: reveal this page's picture, then turn the page
+      run.reading = true; $('sn-card').className = 'revealed'; $('sn-card').innerHTML = picHtml(run.sent.pic); audio.play('sfx-chime');
+      if (cfg.speakBeforeCheck) await audio.play(`sent-${run.sent.id}`); else await new Promise(r => setTimeout(r, 1200)); if (!run) return;
+      setTimeout(() => { if (!run) return; run.page++; loadSentence(run.story.pages[run.page]); say('Next page!').then(() => { if (run) { next(); } }); }, 700);
+      return;
+    }
+    askPicture(); // story: the last page's picture stays hidden (it would give the answer away)
   }
   // Scored read: which picture shows it? First pick is the scored response; a miss rereads the sentence, then retry.
   function askPicture() {
-    const pics = pictureChoices(run.sent, allSentences(), rand); run.tries = 0; $('sentence').classList.add('choosing');
+    const st = run.story, pics = st ? shuffle([st.ask.answer, ...st.ask.others], rand) : pictureChoices(run.sent, rand); run.tries = 0; $('sentence').classList.add('choosing');
     $('sn-choices').replaceChildren(...pics.map(pic => { const b = el('button', 'pc', picHtml(pic)); b.dataset.pic = pic; b.onclick = () => pick(b, pic); return b; }));
-    $('sn-choices').hidden = false; say('Which picture shows it?', 'm-which-shows');
+    $('sn-choices').hidden = false; run.askAt = performance.now(); if (st) say(st.ask.text, `story-${st.id}-ask`); else say('Which picture shows it?', 'm-which-shows');
     hand.start(() => run && !run.reading ? [...$('sn-choices').children].filter(b => !b.disabled).map(b => centerIn(b, $('sentence'), stage.scale)) : null, { now: false });
   }
   async function pick(b, pic) {
     if (!run || run.reading || b.disabled) return; hand.hide(); hand.poke(); audio.stop();
-    const correct = pic === run.sent.pic, first = run.tries++ === 0;
-    record({ skill: `sentence:L${run.sent.level}`, itemId: run.sent.id, gpcs: [...new Set(run.tokens.filter(t => t.kind === 'word').flatMap(t => t.entry.parse?.split(' ') ?? [...t.entry.w]))],
-      correct, firstAttempt: first, scored: first });
-    if (!correct) { b.disabled = true; b.classList.add('no'); run.reading = true; await say("Let's read it again.", 'm-read-again'); await audio.play(`sent-${run.sent.id}`); if (run) { run.reading = false; say('Which picture shows it?'); } return; }
+    const st = run.story, correct = pic === (st ? st.ask.answer : run.sent.pic), first = run.tries++ === 0;
+    record({ skill: st ? `story:${st.id}` : `sentence:L${run.sent.level}`, itemId: st ? st.id : run.sent.id, gpcs: [...new Set(run.tokens.filter(t => t.kind === 'word').flatMap(t => t.entry.parse?.split(' ') ?? [...t.entry.w]))],
+      correct, firstAttempt: first, scored: first && !run.modelled, ...(run.modelled ? { modelled: true } : {}), // v2 V1: read aloud first = modelled, not scored
+      support: run.levels.length ? Math.max(...run.levels) : null, tokenSupport: run.levels, hints: run.hints, latencyFromOnsetMs: run.askAt ? Math.round(performance.now() - run.askAt) : null });
+    if (!correct) { b.disabled = true; b.classList.add('no'); run.reading = true; await say("Let's read it again.", 'm-read-again');
+      if (st) { for (const p of st.pages) { if (!run) return; await audio.play(`sent-${p.id}`); } } else await audio.play(`sent-${run.sent.id}`);
+      if (run) { run.reading = false; say(st ? st.ask.text : 'Which picture shows it?'); } return; }
     run.reading = true; b.classList.add('yes'); $('sn-choices').hidden = true; $('sentence').classList.remove('choosing'); hand.stop();
-    $('sn-card').className = 'revealed'; $('sn-card').innerHTML = picHtml(run.sent.pic); audio.play('sfx-chime'); say('Yes!');
-    await audio.play(`sent-${run.sent.id}`);
+    $('sn-card').className = 'revealed'; $('sn-card').innerHTML = picHtml(st ? st.ask.answer : run.sent.pic); audio.play('sfx-chime'); say(st ? 'Yes! The end.' : 'Yes!');
+    // after the pick, Kit reads it aloud as the reward / model (never before a scored pick)
+    if (!st) { if (run.modelled) await audio.play(`sent-${run.sent.id}`); else { await new Promise(r => setTimeout(r, 500)); await karaoke(); } }
+    else { for (const p of st.pages) { if (!run) return; await audio.play(`sent-${p.id}`); } }
     setTimeout(() => { const r = run; run = null; hand.stop(); seen.mark('sentence'); r?.onComplete?.({ correct: first }); }, 900);
+  }
+  function loadSentence(sentence) { // one sentence (or story page) on screen, nothing read yet
+    run.sent = sentence; run.tokens = sentence.tokens; run.i = 0; run.ms = null; run.reading = false;
+    $('sn-card').className = ''; $('sn-card').innerHTML = '<span class="q">?</span>'; $('sn-read').disabled = true;
+    $('sn-pebbles').replaceChildren(...(run.story ? run.story.pages.map((_, i) => el('div', 'peb' + (i < run.page ? ' on' : i === run.page ? ' now' : ''))) : []));
+    $('sn-choices').hidden = true; $('sn-choices').replaceChildren(); $('sentence').classList.remove('choosing');
+      $('sn-strip').replaceChildren(...sentence.tokens.map((t, i) => {
+        const c = el('button', 'wd L' + (t.kind === 'star' ? ' star' : ''), (t.kind === 'star' ? t.w : caseFor(t.w, cfg.tileCase)) + (t.punct ? `<span class="p">${t.punct}</span>` : ''));
+        c.setAttribute('aria-label', t.w);
+        c.onclick = () => { if (!run) return; audio.stop(); audio.play(t.clip); if (t.kind === 'word' && !run.reading) run.hints++; // hearing a decodable word = a hint
+          if (i === run.i && t.kind === 'star') { c.classList.add('done'); run.i++; setTimeout(next, 700); } };
+        return c;
+      }));
+    blending(false); fitLine();
   }
   $('sn-handle').addEventListener('pointerdown', e => { hand.hide(); hand.poke(); if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
   addEventListener('pointermove', onMove); addEventListener('pointerup', () => { dragging = null; run?.sweep?.lift?.(); });
@@ -147,18 +188,10 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   $('sn-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
   $('sn-again').onclick = () => run && (audio.stop(), audio.play(run.tokens[run.i]?.clip ?? `sent-${run.sent.id}`));
   return {
-    start({ sentence, onComplete }) {
-      run = { sent: sentence, tokens: sentence.tokens, i: 0, onComplete }; $('sentence').hidden = false;
-      $('sn-card').className = ''; $('sn-card').innerHTML = '<span class="q">?</span>'; $('sn-read').disabled = true;
-      $('sn-pebbles').replaceChildren(); $('sn-choices').hidden = true; $('sn-choices').replaceChildren(); $('sentence').classList.remove('choosing');
-      $('sn-strip').replaceChildren(...sentence.tokens.map((t, i) => {
-        const c = el('button', 'wd L' + (t.kind === 'star' ? ' star' : ''), (t.kind === 'star' ? t.w : caseFor(t.w, cfg.tileCase)) + (t.punct ? `<span class="p">${t.punct}</span>` : ''));
-        c.setAttribute('aria-label', t.w);
-        c.onclick = () => { if (!run) return; audio.stop(); audio.play(t.clip); if (i === run.i && t.kind === 'star') { c.classList.add('done'); run.i++; setTimeout(next, 700); } };
-        return c;
-      }));
-      blending(false); fitLine();
-      say("Let's read it together!", 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
+    // a sentence, or a story ({ story }): its pages are read one by one like sentences (page dots in the top bar)
+    start({ sentence, story, onComplete }) {
+      run = { story, page: 0, onComplete, levels: [], hints: 0 }; $('sentence').hidden = false; loadSentence(story ? story.pages[0] : sentence);
+      say(story ? `A story: <b>${story.title}</b>. Let's read it together!` : "Let's read it together!", 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
     },
     get run() { return run; },
     debugAsk() { if (!run) return; run.i = run.tokens.length; paint(); blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; askPicture(); }, // tests/check-sizes only

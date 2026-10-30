@@ -40,3 +40,17 @@ test("try at home: 'review' only for a review-due sound; new and practicing soun
   const fresh = tryAtHome([{ id: 't', state: 'new' }], { kind: 'sound', gpc: 't' });
   assert.equal(fresh.id, 't'); assert.match(fresh.text, /Kit will practice t next session\./); assert.doesNotMatch(fresh.text, /review/);
 });
+
+test('parent summary describes "new words" and story stops', async () => {
+  const { describe } = await import('../js/parent.js');
+  const ap = STOPS.find(s => s.apply === 4), st = STOPS.find(s => s.kind === 'story');
+  assert.match(describe(ap).learning, /set 4 sounds/); assert.match(describe(st).learning, /story “the cat and the pot”/);
+});
+
+test('v2 V1: words read alone are counted apart from words read with Kit (modelled); modelled reads never count for mastery', async () => {
+  const { counts } = await import('../js/mastery.js');
+  const r = (itemId, extra) => ({ skill: 'blend:L2', itemId, correct: true, firstAttempt: true, scored: true, timestamp: 1, sessionId: 'a', ...extra });
+  const s = parentSummary([r('mat'), r('map', { modelled: true, scored: false }), r('pan')], 2);
+  assert.equal(s.wordsRead, 2); assert.equal(s.wordsWithKit, 1);
+  assert.equal(counts(r('map', { modelled: true })), false); assert.equal(counts(r('mat')), true);
+});

@@ -82,74 +82,73 @@ export const WORDS = {
     W('off', 'o ff', { say: 'Off! Lights off.' }), W('is', 'i s_z', { say: 'Is! It is fun.' }), W('as', 'a s_z', { say: 'As! As big as a bus.' }),
   ],
   2: [ // CVC (display: onset + rime by default — ⚠️ L2 blend style awaits user decision)
-    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', { pic: '🚰' }),
+    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', {}),
     W('pan', 'p a n', { pic: '🍳' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }),
     W('sip', 's i p', { say: 'Sip! Take a sip.' }), W('tin', 't i n', { say: 'Tin! A tin can.' }),
   ],
   3: [ // CVC, all phonemes. map/pan re-read sound-by-sound (spec L3 examples)
-    W('pot', 'p o t', { pic: '🍲' }), W('mop', 'm o p', { pic: '🧹' }), W('map', 'm a p', { pic: '🗺️' }), W('pan', 'p a n', { pic: '🍳' }),
+    W('pot', 'p o t', { pic: '🍲' }), W('mop', 'm o p', {}), W('map', 'm a p', { pic: '🗺️' }), W('pan', 'p a n', { pic: '🍳' }),
     W('sit', 's i t', { say: 'Sit! Sit down.' }), W('pop', 'p o p', { say: 'Pop! Pop the bubble.' }),
     W('top', 't o p', { say: 'Top! Spin the top.' }), W('tip', 't i p', { say: 'Tip! The tip of my nose.' }),
-    W('not', 'n o t', { say: 'Not! Not now.' }), W('pit', 'p i t', { say: 'Pit! A big pit.' }),
+    W('not', 'n o t', { say: 'Not! Not now.' }), W('hit', 'h i t', { say: 'Hit! Hit the ball.' }),
     // set 3: o d f
     W('dog', 'd o g', { pic: '🐶', say: 'Dog! A happy dog.' }), W('dot', 'd o t', { pic: '⚫', say: 'Dot! A little dot.' }), W('fan', 'f a n', { pic: '🪭', say: 'Fan! A cool fan.' }),
-    W('fin', 'f i n', { pic: '🦈', say: 'Fin! A shark fin.' }), W('dip', 'd i p', { say: 'Dip! Dip your toes.' }), W('nod', 'n o d', { say: 'Nod! Nod your head.' }),
-    W('sad', 's a d', { say: 'Sad! Not sad today.' }), W('dad', 'd a d', { say: 'Dad! Hi, Dad!' }), W('fit', 'f i t', { say: 'Fit! It fits.' }), W('pod', 'p o d', { say: 'Pod! A pea pod.' }),
+    W('fin', 'f i n', { say: 'Fin! A fish has a fin.' }), W('dip', 'd i p', { say: 'Dip! Dip your toes.' }), W('nod', 'n o d', { say: 'Nod! Nod your head.' }),
+    W('sad', 's a d', { say: 'Sad! Not sad today.' }), W('get', 'g e t', { say: 'Get! Get the ball.' }), W('dad', 'd a d', { say: 'Dad! Hi, Dad!' }), W('fit', 'f i t', { say: 'Fit! It fits.' }),
     // set 4: c k e u
-    W('cat', 'c a t', { pic: '#cat', say: 'Cat! The cat sat.' }), W('cap', 'c a p', { pic: '🧢', say: 'Cap! A red cap.' }), W('cup', 'c u p', { pic: '☕', say: 'Cup! A cup of milk.' }),
-    W('pen', 'p e n', { pic: '🖊️', say: 'Pen! Write with a pen.' }), W('net', 'n e t', { pic: '🥅', say: 'Net! In the net.' }), W('nut', 'n u t', { pic: '🥜', say: 'Nut! A crunchy nut.' }),
+    W('cat', 'c a t', { pic: '#cat', say: 'Cat! The cat sat.' }), W('cap', 'c a p', { pic: '🧢', say: 'Cap! A red cap.' }), W('cup', 'c u p', { say: 'Cup! A cup of milk.' }),
+    W('pen', 'p e n', { pic: '🖊️', say: 'Pen! Write with a pen.' }), W('net', 'n e t', { say: 'Net! In the net.' }), W('nut', 'n u t', { pic: '🥜', say: 'Nut! A crunchy nut.' }),
     W('sun', 's u n', { pic: '☀️', say: 'Sun! The hot sun.' }), W('can', 'c a n', { pic: '🥫', say: 'Can! A tin can.' }), W('kid', 'k i d', { say: 'Kid! A happy kid.' }),
     W('kit', 'k i t', { say: 'Kit! That is me!' }), W('ten', 't e n', { say: 'Ten! Count to ten.' }), W('pet', 'p e t', { say: 'Pet! A pet cat.' }), W('cut', 'c u t', { say: 'Cut! Cut the paper.' }),
-    W('mud', 'm u d', { say: 'Mud! Muddy boots.' }), W('fun', 'f u n', { say: 'Fun! That was fun.' }), W('den', 'd e n', { say: 'Den! A fox den.' }),
+    W('mud', 'm u d', { say: 'Mud! Muddy boots.' }), W('fun', 'f u n', { say: 'Fun! That was fun.' }), W('den', 'd e n', { say: 'Den! The fox is in its den.' }),
     // set 5: g r h b l
-    W('bag', 'b a g', { pic: '👜', say: 'Bag! A big bag.' }), W('bed', 'b e d', { pic: '🛏️', say: 'Bed! Time for bed.' }), W('bus', 'b u s', { pic: '🚌', say: 'Bus! Get on the bus.' }),
+    W('bag', 'b a g', { say: 'Bag! A big bag.' }), W('bed', 'b e d', { pic: '🛏️', say: 'Bed! Time for bed.' }), W('bus', 'b u s', { pic: '🚌', say: 'Bus! Get on the bus.' }),
     W('bat', 'b a t', { pic: '🦇', say: 'Bat! A bat can fly.' }), W('bin', 'b i n', { pic: '🗑️', say: 'Bin! In the bin.' }), W('bug', 'b u g', { pic: '🐛', say: 'Bug! A little bug.' }),
     W('hat', 'h a t', { pic: '#hat', say: 'Hat! A big hat.' }), W('hen', 'h e n', { pic: '🐔', say: 'Hen! The hen sat.' }), W('leg', 'l e g', { pic: '🦵', say: 'Leg! Hop on one leg.' }),
     W('log', 'l o g', { pic: '🪵', say: 'Log! A big log.' }), W('rat', 'r a t', { pic: '🐀', say: 'Rat! A rat ran.' }), W('pig', 'p i g', { pic: '🐷', say: 'Pig! A pink pig.' }),
     W('tag', 't a g', { pic: '🏷️', say: 'Tag! A name tag.' }), W('big', 'b i g', { say: 'Big! So big!' }), W('hop', 'h o p', { say: 'Hop! Hop like a frog.' }),
     W('hot', 'h o t', { say: 'Hot! It is hot.' }), W('hug', 'h u g', { say: 'Hug! A big hug.' }), W('red', 'r e d', { say: 'Red! A red ball.' }), W('run', 'r u n', { say: 'Run! Run fast.' }),
     W('lid', 'l i d', { say: 'Lid! Put the lid on.' }), W('got', 'g o t', { say: 'Got! I got it.' }), W('dig', 'd i g', { say: 'Dig! Dig a hole.' }), W('ran', 'r a n', { say: 'Ran! The dog ran.' }),
-    W('rug', 'r u g', { say: 'Rug! A soft rug.' }), W('gum', 'g u m', { say: 'Gum! Chewing gum.' }), W('lot', 'l o t', { say: 'Lot! A lot of fun.' }),
+    W('rug', 'r u g', { say: 'Rug! A soft rug.' }), W('had', 'h a d', { say: 'Had! I had fun.' }), W('gum', 'g u m', { say: 'Gum! Chewing gum.' }), W('lot', 'l o t', { say: 'Lot! A lot of toys.' }), W('bun', 'b u n', { say: 'Bun! A hot bun.' }),
     // set 6: ck ff ll ss, s = /z/
     W('duck', 'd u ck', { pic: '🦆', say: 'Duck! Quack, quack.' }), W('sock', 's o ck', { pic: '🧦', say: 'Sock! A warm sock.' }), W('lock', 'l o ck', { pic: '🔒', say: 'Lock! Lock the door.' }),
-    W('bell', 'b e ll', { pic: '🔔', say: 'Bell! Ring the bell.' }), W('doll', 'd o ll', { pic: '🪆', say: 'Doll! A little doll.' }), W('hill', 'h i ll', { pic: '⛰️', say: 'Hill! Up the hill.' }),
-    W('kick', 'k i ck', { say: 'Kick! Kick the ball.' }), W('back', 'b a ck', { say: 'Back! Come back.' }), W('neck', 'n e ck', { say: 'Neck! A long neck.' }), W('sick', 's i ck', { say: 'Sick! Not sick now.' }),
+    W('bell', 'b e ll', { pic: '🔔', say: 'Bell! Ring the bell.' }), W('doll', 'd o ll', { pic: '🪆', say: 'Doll! A little doll.' }), W('hill', 'h i ll', { say: 'Hill! Up the hill.' }),
+    W('kick', 'k i ck', { say: 'Kick! Kick the ball.' }), W('back', 'b a ck', { say: 'Back! Come back.' }), W('neck', 'n e ck', { say: 'Neck! A long neck.' }), W('rock', 'r o ck', { say: 'Rock! A big rock.' }), W('sick', 's i ck', { say: 'Sick! Not sick now.' }),
     W('tell', 't e ll', { say: 'Tell! Tell me.' }), W('fell', 'f e ll', { say: 'Fell! It fell down.' }), W('kiss', 'k i ss', { say: 'Kiss! A goodnight kiss.' }), W('mess', 'm e ss', { say: 'Mess! What a mess.' }),
     W('puff', 'p u ff', { say: 'Puff! Puff of smoke.' }), W('his', 'h i s_z', { say: 'His! His hat.' }), W('has', 'h a s_z', { say: 'Has! She has a cat.' }),
     // set 7: j v w x y z zz qu
-    W('jam', 'j a m', { pic: '🍯', say: 'Jam! Jam on toast.' }), W('jet', 'j e t', { pic: '✈️', say: 'Jet! A fast jet.' }), W('van', 'v a n', { pic: '🚐', say: 'Van! A big van.' }),
+    W('jam', 'j a m', { say: 'Jam! Jam on toast.' }), W('jet', 'j e t', { say: 'Jet! A fast jet.' }), W('van', 'v a n', { pic: '🚐', say: 'Van! A big van.' }),
     W('web', 'w e b', { pic: '🕸️', say: 'Web! A spider web.' }), W('box', 'b o x', { pic: '📦', say: 'Box! In the box.' }), W('fox', 'f o x', { pic: '🦊', say: 'Fox! A red fox.' }),
-    W('zip', 'z i p', { pic: '🤐', say: 'Zip! Zip it up.' }), W('buzz', 'b u zz', { pic: '🐝', say: 'Buzz! Buzz, buzz, bee.' }), W('wig', 'w i g', { say: 'Wig! A funny wig.' }),
+    W('zip', 'z i p', { say: 'Zip! Zip it up.' }), W('buzz', 'b u zz', { pic: '🐝', say: 'Buzz! Buzz, buzz, bee.' }), W('wig', 'w i g', { say: 'Wig! A funny wig.' }),
     W('wet', 'w e t', { say: 'Wet! Wet socks.' }), W('win', 'w i n', { say: 'Win! We win!' }), W('six', 's i x', { say: 'Six! Six legs.' }), W('mix', 'm i x', { say: 'Mix! Mix it up.' }),
     W('yes', 'y e s', { say: 'Yes! Yes, please.' }), W('yum', 'y u m', { say: 'Yum! Yum, yum.' }), W('vet', 'v e t', { say: 'Vet! The vet helps pets.' }), W('jog', 'j o g', { say: 'Jog! Jog to the park.' }),
     W('fizz', 'f i zz', { say: 'Fizz! Fizzy drink.' }), W('quiz', 'qu i z', { say: 'Quiz! A fun quiz.' }), W('quit', 'qu i t', { say: 'Quit! Never quit.' }),
   ],
   6: [ // digraph sh (sequence set 8; L5 = CVCC final blends is reserved): one joined sky tile, one slider stop per SOUND (ship = 3 stops)
     W('ship', 'sh i p', { pic: '🚢', say: 'Ship! A big ship.' }), W('shop', 'sh o p', { pic: '🏪', say: 'Shop! A little shop.' }),
-    W('fish', 'f i sh', { pic: '🐟', say: 'Fish! A fish can swim.' }), W('dish', 'd i sh', { pic: '🍽️', say: 'Dish! A dish for dinner.' }),
-    W('cash', 'c a sh', { say: 'Cash! Money to spend.' }), W('shed', 'sh e d', { pic: '🛖', say: 'Shed! A garden shed.' }),
-    W('shut', 'sh u t', { say: 'Shut! Shut the door.' }), W('shot', 'sh o t', { say: 'Shot! What a good shot.' }),
+    W('fish', 'f i sh', { pic: '🐟', say: 'Fish! A fish can swim.' }), W('dish', 'd i sh', { say: 'Dish! A dish for dinner.' }),
+    W('dash', 'd a sh', { say: 'Dash! Dash to the door.' }), W('shed', 'sh e d', { say: 'Shed! A garden shed.' }),
+    W('shut', 'sh u t', { say: 'Shut! Shut the door.' }), W('shin', 'sh i n', { say: 'Shin! I bumped my shin.' }),
     W('shell', 'sh e ll', { pic: '🐚', say: 'Shell! A sea shell.' }), W('rush', 'r u sh', { say: 'Rush! No need to rush.' }),
     // ch
-    W('chip', 'ch i p', { say: 'Chip! A crunchy chip.' }), W('chop', 'ch o p', { say: 'Chop! Chop the wood.' }), W('chin', 'ch i n', { say: 'Chin! Touch your chin.' }),
-    W('chick', 'ch i ck', { pic: '🐤', say: 'Chick! A fluffy chick.' }), W('much', 'm u ch', { say: 'Much! Thank you so much.' }), W('rich', 'r i ch', { say: 'Rich! Rich chocolate.' }),
-    W('lunch', 'l u n ch', { pic: '🥪', say: 'Lunch! Time for lunch.' }), W('chest', 'ch e s t', { say: 'Chest! A treasure chest.' }), W('bench', 'b e n ch', { say: 'Bench! Sit on the bench.' }),
+    W('chip', 'ch i p', { say: 'Chip! A chip of wood.' }), W('chop', 'ch o p', { say: 'Chop! Chop the wood.' }), W('chin', 'ch i n', { say: 'Chin! Touch your chin.' }),
+    W('chick', 'ch i ck', { pic: '🐤', say: 'Chick! A fluffy chick.' }), W('much', 'm u ch', { say: 'Much! Thank you so much.' }), W('chat', 'ch a t', { say: 'Chat! A chat with a friend.' }),
+    W('lunch', 'l u n ch', { say: 'Lunch! Time for lunch.' }), W('chest', 'ch e s t', { say: 'Chest! A treasure chest.' }), W('bench', 'b e n ch', { say: 'Bench! Sit on the bench.' }),
     // th (thin) and th (that)
     W('thin', 'th i n', { say: 'Thin! A thin stick.' }), W('bath', 'b a th', { pic: '🛁', say: 'Bath! Bath time.' }), W('moth', 'm o th', { say: 'Moth! A moth at night.' }),
     W('path', 'p a th', { say: 'Path! Walk on the path.' }), W('thick', 'th i ck', { say: 'Thick! A thick book.' }),
     W('that', 'th_v a t', { say: 'That! Look at that.' }), W('this', 'th_v i s', { say: 'This! I like this.' }), W('them', 'th_v e m', { say: 'Them! Give it to them.' }), W('then', 'th_v e n', { say: 'Then! And then?' }),
     // ng, nk
-    W('ring', 'r i ng', { pic: '💍', say: 'Ring! A gold ring.' }), W('king', 'k i ng', { pic: '🤴', say: 'King! The king sat.' }), W('wing', 'w i ng', { say: 'Wing! A bird wing.' }),
+    W('ring', 'r i ng', { pic: '💍', say: 'Ring! A gold ring.' }), W('king', 'k i ng', { say: 'King! The king sat.' }), W('wing', 'w i ng', { say: 'Wing! A bird wing.' }),
     W('song', 's o ng', { say: 'Song! Sing a song.' }), W('long', 'l o ng', { say: 'Long! A long snake.' }), W('sing', 's i ng', { say: 'Sing! Sing with me.' }), W('thing', 'th i ng', { say: 'Thing! A funny thing.' }),
     W('sink', 's i nk', { say: 'Sink! Wash in the sink.' }), W('pink', 'p i nk', { say: 'Pink! A pink pig.' }), W('bank', 'b a nk', { pic: '🏦', say: 'Bank! Money in the bank.' }),
     W('tank', 't a nk', { say: 'Tank! A fish tank.' }), W('wink', 'w i nk', { say: 'Wink! Wink at me.' }), W('think', 'th i nk', { say: 'Think! Let me think.' }),
   ],
   4: [ // CCVC: starting blend; each blend consonant its own dot
-    W('stop', 's t o p', { pic: '🛑', say: 'Stop!' }), W('spot', 's p o t', { pic: '🔴', say: 'A red spot!' }), // no minimal-pair pictures yet: reveal without check
+    W('stop', 's t o p', { pic: '🛑', say: 'Stop!' }), W('spot', 's p o t', { say: 'Spot! A spotty dog.' }),
     W('snap', 's n a p', { say: 'Snap! Snap your fingers.' }), W('spin', 's p i n', { say: 'Spin! Spin around.' }),
-    W('snip', 's n i p', { say: 'Snip! Snip the paper.' }), W('spit', 's p i t', { say: 'Spit! Spit it out.' }),
-    W('spat', 's p a t', { say: 'Spat! The cat spat.' }),
+    W('snip', 's n i p', { say: 'Snip! Snip the paper.' }), // v2 V6: spit / spat removed (unsuitable / obscure)
     // later sets
     W('step', 's t e p', { say: 'Step! One more step.' }), W('skip', 's k i p', { say: 'Skip! Skip along.' }), W('flag', 'f l a g', { pic: '🚩', say: 'Flag! A red flag.' }),
     W('frog', 'f r o g', { pic: '🐸', say: 'Frog! A green frog.' }), W('drum', 'd r u m', { pic: '🥁', say: 'Drum! Bang the drum.' }), W('crab', 'c r a b', { pic: '🦀', say: 'Crab! A red crab.' }),
@@ -159,19 +158,33 @@ export const WORDS = {
     W('clock', 'c l o ck', { pic: '⏰', say: 'Clock! Tick tock, clock.' }), W('dress', 'd r e ss', { pic: '👗', say: 'Dress! A party dress.' }), W('truck', 't r u ck', { pic: '🚚', say: 'Truck! A big truck.' }),
     W('smell', 's m e ll', { say: 'Smell! Smell the flower.' }), W('swim', 's w i m', { say: 'Swim! Swim like a fish.' }), W('twin', 't w i n', { say: 'Twin! My twin.' }),
   ],
+  7: [ // v2 V4f: -s suffix after s = /z/: stem + s (/s/ after a voiceless sound, /z/ otherwise). stem: a word above
+    W('cats', 'c a t s', { stem: 'cat', say: 'Cats! Two cats.' }), W('hats', 'h a t s', { stem: 'hat', say: 'Hats! Lots of hats.' }),
+    W('cups', 'c u p s', { stem: 'cup', say: 'Cups! Two cups.' }), W('pots', 'p o t s', { stem: 'pot', say: 'Pots! Pots and pans.' }),
+    W('maps', 'm a p s', { stem: 'map', say: 'Maps! Two maps.' }), W('nuts', 'n u t s', { stem: 'nut', say: 'Nuts! A bag of nuts.' }),
+    W('pets', 'p e t s', { stem: 'pet', say: 'Pets! Cats and dogs are pets.' }), W('its', 'i t s', { stem: 'it', say: 'Its! The cat licks its paw.' }),
+    W('bags', 'b a g s_z', { stem: 'bag', say: 'Bags! Two bags.' }), W('pigs', 'p i g s_z', { stem: 'pig', say: 'Pigs! Three pigs.' }),
+    W('dogs', 'd o g s_z', { stem: 'dog', say: 'Dogs! Two dogs.' }), W('beds', 'b e d s_z', { stem: 'bed', say: 'Beds! Bunk beds.' }),
+    W('hens', 'h e n s_z', { stem: 'hen', say: 'Hens! The hens sat.' }), W('bugs', 'b u g s_z', { stem: 'bug', say: 'Bugs! Little bugs.' }),
+    W('pens', 'p e n s_z', { stem: 'pen', say: 'Pens! Red pens.' }), W('legs', 'l e g s_z', { stem: 'leg', say: 'Legs! Two legs.' }),
+    W('rugs', 'r u g s_z', { stem: 'rug', say: 'Rugs! Soft rugs.' }), W('gets', 'g e t s', { stem: 'get', say: 'Gets! He gets wet.' }),
+  ],
   5: [ // CVCC: final blend; each consonant its own dot (sand = 4 stops)
-    W('sand', 's a n d', { say: 'Sand! Sand at the beach.' }), W('pond', 'p o n d', { say: 'Pond! Ducks on the pond.' }), W('mist', 'm i s t', { say: 'Mist! Morning mist.' }),
-    W('past', 'p a s t', { say: 'Past! Run past it.' }), W('fast', 'f a s t', { say: 'Fast! So fast!' }), W('soft', 's o f t', { say: 'Soft! A soft pillow.' }),
-    W('damp', 'd a m p', { say: 'Damp! Damp socks.' }), W('mint', 'm i n t', { say: 'Mint! A mint leaf.' }),
+    W('sand', 's a n d', { say: 'Sand! Sand at the beach.' }), W('pond', 'p o n d', { say: 'Pond! Ducks on the pond.' }), W('best', 'b e s t', { say: 'Best! You are the best.' }),
+    W('past', 'p a s t', { say: 'Past! The bus went past.' }), W('fast', 'f a s t', { say: 'Fast! So fast!' }), W('soft', 's o f t', { say: 'Soft! A soft pillow.' }),
+    W('camp', 'c a m p', { say: 'Camp! We camp in a tent.' }), W('mint', 'm i n t', { say: 'Mint! A mint leaf.' }),
     W('hand', 'h a n d', { pic: '✋', say: 'Hand! Wave your hand.' }), W('tent', 't e n t', { pic: '⛺', say: 'Tent! A tent for camping.' }), W('milk', 'm i l k', { pic: '🥛', say: 'Milk! A glass of milk.' }),
-    W('nest', 'n e s t', { pic: '🪺', say: 'Nest! A bird nest.' }), W('lamp', 'l a m p', { pic: '💡', say: 'Lamp! Turn on the lamp.' }), W('gift', 'g i f t', { pic: '🎁', say: 'Gift! A gift for you.' }),
-    W('vest', 'v e s t', { pic: '🦺', say: 'Vest! A bright vest.' }), W('desk', 'd e s k', { say: 'Desk! Sit at the desk.' }), W('dust', 'd u s t', { say: 'Dust! Dust on the shelf.' }),
-    W('help', 'h e l p', { say: 'Help! Can I help?' }), W('jump', 'j u m p', { say: 'Jump! Jump up high.' }), W('just', 'j u s t', { say: 'Just! Just one more.' }),
+    W('nest', 'n e s t', { pic: '🪺', say: 'Nest! A bird nest.' }), W('lamp', 'l a m p', { say: 'Lamp! Turn on the lamp.' }), W('gift', 'g i f t', { pic: '🎁', say: 'Gift! A gift for you.' }),
+    W('vest', 'v e s t', { say: 'Vest! A bright vest.' }), W('desk', 'd e s k', { say: 'Desk! Sit at the desk.' }), W('dust', 'd u s t', { say: 'Dust! Dust on the shelf.' }),
+    W('help', 'h e l p', { say: 'Help! Can I help?' }), W('jump', 'j u m p', { say: 'Jump! Jump up high.' }), W('just', 'j u s t', { say: 'Just! Just one more cookie.' }),
     W('land', 'l a n d', { say: 'Land! Land the plane.' }), W('last', 'l a s t', { say: 'Last! The last one.' }), W('left', 'l e f t', { say: 'Left! Turn left.' }),
     W('lift', 'l i f t', { say: 'Lift! Lift it up.' }), W('lost', 'l o s t', { say: 'Lost! I lost my sock.' }), W('melt', 'm e l t', { say: 'Melt! The snow will melt.' }),
-    W('must', 'm u s t', { say: 'Must! We must go.' }), W('rest', 'r e s t', { say: 'Rest! Time to rest.' }), W('went', 'w e n t', { say: 'Went! We went home.' }),
-    W('best', 'b e s t', { say: 'Best! You are the best.' }), W('band', 'b a n d', { say: 'Band! A band plays music.' }), W('hunt', 'h u n t', { say: 'Hunt! A treasure hunt.' }),
-    W('next', 'n e x t', { say: 'Next! What is next?' }), W('camp', 'c a m p', { say: 'Camp! We camp in a tent.' }), W('belt', 'b e l t', { say: 'Belt! A brown belt.' }),
+    W('must', 'm u s t', { say: 'Must! We must brush our teeth.' }), W('rest', 'r e s t', { say: 'Rest! Time to rest.' }), W('went', 'w e n t', { say: 'Went! We went home.' }),
+    W('band', 'b a n d', { say: 'Band! A band plays music.' }), W('hunt', 'h u n t', { say: 'Hunt! A treasure hunt.' }),
+    W('next', 'n e x t', { say: 'Next! You are next on the slide.' }), W('bump', 'b u m p', { say: 'Bump! A big bump.' }),
+    // VCC (v2 V4g): and is one of the most frequent words in English
+    W('and', 'a n d', { say: 'And! Cats and dogs.' }), W('ant', 'a n t', { say: 'Ant! A little ant.' }), W('end', 'e n d', { say: 'End! The end.' }),
+    W('ask', 'a s k', { say: 'Ask! Ask a friend.' }), W('elf', 'e l f', { say: 'Elf! A tiny elf.' }), W('belt', 'b e l t', { say: 'Belt! A brown belt.' }),
   ],
 };
 for (const [lv, list] of Object.entries(WORDS)) for (const e of list) {
@@ -183,11 +196,11 @@ for (const [lv, list] of Object.entries(WORDS)) for (const e of list) {
 // `ph` = GPC ids of the spoken phonemes; R8: each distractor differs from its target by exactly one phoneme.
 export const PICTURE_POOL = [
   { text: 'hat', pic: '#hat', ph: 'h a t' }, { text: 'cat', pic: '#cat', ph: 'c a t' }, { text: 'bat', pic: '🦇', ph: 'b a t' },
-  { text: 'rat', pic: '🐀', ph: 'r a t' }, { text: 'mitt', pic: '🧤', ph: 'm i t' }, { text: 'cap', pic: '🧢', ph: 'c a p' },
+  { text: 'rat', pic: '🐀', ph: 'r a t' }, { text: 'cap', pic: '🧢', ph: 'c a p' },
   { text: 'fan', pic: '🪭', ph: 'f a n' }, { text: 'van', pic: '🚐', ph: 'v a n' }, { text: 'pen', pic: '🖊️', ph: 'p e n' },
-  { text: 'fin', pic: '🦈', ph: 'f i n' }, { text: 'bin', pic: '🗑️', ph: 'b i n' }, { text: 'pig', pic: '🐷', ph: 'p i g' },
+  { text: 'bin', pic: '🗑️', ph: 'b i n' }, { text: 'pig', pic: '🐷', ph: 'p i g' },
   { text: 'tag', pic: '🏷️', ph: 't a g' }, { text: 'dot', pic: '⚫', ph: 'd o t' },
-  { text: 'chip', pic: '🍟', ph: 'ch i p' }, { text: 'chop', pic: '🪓', ph: 'ch o p' },
+  { text: 'chop', pic: '🪓', ph: 'ch o p' },
 ];
 for (const p of PICTURE_POOL) p.phonemes = p.ph.split(' ').map(id => GPC[id].phoneme);
 
@@ -198,27 +211,93 @@ const IRR = (g, ph) => ({ g, ph, irregular: true });
 export const STAR_WORDS = [
   { w: 'I',    level: 2, parse: [IRR('I', 'aɪ')],              introAfter: { gpcs: ['i'] }, say: 'I can see Kit.', capital: true },
   { w: 'the',  level: 2, parse: [IRR('th', 'ð'), IRR('e', 'ə')], introAfter: { gpcs: ['m', 's', 'a', 't'] }, say: 'The cat sat on the mat.' }, // at blending unlock
-  { w: 'is',   level: 3, parse: ['i', IRR('s', 'z')],          introAfter: { gpcs: ['s', 'i'] }, say: 'It is a map.' },
+  { w: 'is',   level: 3, parse: ['i', IRR('s', 'z')],          graduates: 's_z', introAfter: { gpcs: ['s', 'i'] }, say: 'It is a map.' },
   { w: 'to',   level: 3, parse: ['t', IRR('o', 'uː')],         introAfter: { gpcs: ['t', 'o'] }, say: 'Go to the top.' },
   { w: 'no',   level: 4, parse: ['n', IRR('o', 'oʊ')],         introAfter: { gpcs: ['n', 'o'] }, say: 'No, not now.', note: '⚠️ o = /oʊ/ (US) or /əʊ/ (UK)' },
   { w: 'into', level: 4, parse: ['i', 'n', 't', IRR('o', 'uː')], introAfter: { gpcs: ['i', 'n', 't', 'o'], star: 'to' }, say: 'Pop it into the pot.' },
+  // v2 V5: the schedule beyond "into" (regular parts taught first; <= 2 new per level). ⚠️ accent-dependent vowels noted.
+  { w: 'a',    level: 1, parse: [IRR('a', 'ə')],               introAfter: { gpcs: ['a', 't'] }, say: 'A cat sat on a mat.' },
+  { w: 'he',   level: 1, parse: ['h', IRR('e', 'iː')],         introAfter: { gpcs: ['h', 'e'] }, say: 'He is hot.' },
+  { w: 'go',   level: 5, parse: ['g', IRR('o', 'oʊ')],         introAfter: { gpcs: ['g', 'o'] }, say: 'Go, go, go!', note: '⚠️ o = /oʊ/ (US) or /əʊ/ (UK)' },
+  { w: 'of',   level: 5, parse: [IRR('o', 'ʌ'), IRR('f', 'v')], introAfter: { gpcs: ['o', 'f'] }, say: 'A cup of milk.' },
+  { w: 'she',  level: 6, parse: ['sh', IRR('e', 'iː')],        introAfter: { gpcs: ['sh', 'e'] }, say: 'She is my friend.' },
+  { w: 'you',  level: 6, parse: ['y', IRR('ou', 'uː')],        introAfter: { gpcs: ['y'] }, say: 'I like you.' },
+  { w: 'we',   level: 7, parse: ['w', IRR('e', 'iː')],         introAfter: { gpcs: ['w', 'e'] }, say: 'We can run.' },
+  { w: 'was',  level: 7, parse: ['w', IRR('a', 'ɒ'), 's_z'],   introAfter: { gpcs: ['w', 'a', 's_z'] }, say: 'It was fun.', note: '⚠️ a = /ɒ/ (UK) or /ʌ/ (US)' },
 ];
 for (const s of STAR_WORDS) s.tricky = s.parse.filter(p => p.irregular).map(p => p.g).join('+');
 export const MAX_NEW_STAR_PER_LEVEL = 2;
 
 // Decodable sentences (design/words-board 4): every token is a star word or a word from WORDS (any level), so the
-// untaught-sound check applies word by word. pic: revealed after "read it all".
+// untaught-sound check applies word by word. Full stops throughout; no negation in picture-checked sentences (v2 V7).
+// Scored check (v2 V7): `scene` names two content words of the sentence and their pictures (shown together); each
+// `alts` entry swaps exactly ONE of them, so every distractor differs from the sentence by one word and one noun alone
+// never gives the answer away. Distractor words are spoken / pictured only, never printed (untaught sounds are fine).
+const S = (id, text, scene, alts) => ({ id, text, scene, alts });
 export const SENTENCES = [
-  { id: 'man-sat', text: 'the man sat', pic: '👨' },
-  { id: 'sat-mat', text: 'I sat on the mat', pic: '#mat' },
-  { id: 'tap-pan', text: 'tap the pan', pic: '🍳' },
-  { id: 'map-mat', text: 'the map is on the mat', pic: '🗺️' },
-  { id: 'pin-tin', text: 'the pin is in the tin', pic: '📌' },
-  { id: 'mop-pot', text: 'the mop is in the pot', pic: '🧹' },
-  { id: 'not-pot', text: 'no, not the pot', pic: '🍲' },
-  { id: 'pop-pot', text: 'pop it into the pot', pic: '🍲' },
-  { id: 'stop-top', text: 'stop at the top', pic: '🛑' },
+  S('man-mat', 'the man sat on the mat.', { man: '👨', mat: '#mat' }, { man: ['cat', '#cat'], mat: ['pan', '🍳'] }),
+  S('map-mat', 'the map is on the mat.', { map: '🗺️', mat: '#mat' }, { map: ['pin', '📌'], mat: ['pan', '🍳'] }),
+  S('pin-pot', 'the pin is in the pot.', { pin: '📌', pot: '🍲' }, { pin: ['map', '🗺️'], pot: ['pan', '🍳'] }),
+  S('pot-map', 'a pot is on a map.', { pot: '🍲', map: '🗺️' }, { pot: ['pan', '🍳'], map: ['mat', '#mat'] }),
+  // sets 3–8 (each served only once all its sounds are known and its star words were met)
+  S('dog-mat', 'the dog sat on the mat.', { dog: '🐶', mat: '#mat' }, { dog: ['pig', '🐷'], mat: ['bed', '🛏️'] }),
+  S('fan-pot', 'the fan is on the pot.', { fan: '🪭', pot: '🍲' }, { fan: ['pin', '📌'], pot: ['pan', '🍳'] }),
+  S('cat-pan', 'the cat is in the pan.', { cat: '#cat', pan: '🍳' }, { cat: ['dog', '🐶'], pan: ['pot', '🍲'] }),
+  S('nut-can', 'a nut is in the can.', { nut: '🥜', can: '🥫' }, { nut: ['pin', '📌'], can: ['pot', '🍲'] }),
+  S('hen-bed', 'the hen is on the bed.', { hen: '🐔', bed: '🛏️' }, { hen: ['dog', '🐶'], bed: ['mat', '#mat'] }),
+  S('bug-hat', 'the bug is on the hat.', { bug: '🐛', hat: '#hat' }, { bug: ['ant', '🐜'], hat: ['cap', '🧢'] }),
+  S('rat-hat', 'a rat is in the hat.', { rat: '🐀', hat: '#hat' }, { rat: ['bat', '🦇'], hat: ['cap', '🧢'] }),
+  S('cat-bus', 'the cat is on the bus.', { cat: '#cat', bus: '🚌' }, { cat: ['dog', '🐶'], bus: ['van', '🚐'] }),
+  S('dog-log', 'the dog ran to the log.', { dog: '🐶', log: '🪵' }, { dog: ['pig', '🐷'], log: ['bed', '🛏️'] }),
+  S('sock-bed', 'the sock is on the bed.', { sock: '🧦', bed: '🛏️' }, { sock: ['hat', '#hat'], bed: ['mat', '#mat'] }),
+  S('doll-bed', 'the doll is in the bed.', { doll: '🪆', bed: '🛏️' }, { doll: ['duck', '🦆'], bed: ['pot', '🍲'] }),
+  S('duck-hat', 'the duck has a hat.', { duck: '🦆', hat: '#hat' }, { duck: ['hen', '🐔'], hat: ['sock', '🧦'] }),
+  S('fox-box', 'the fox is in the box.', { fox: '🦊', box: '📦' }, { fox: ['cat', '#cat'], box: ['bed', '🛏️'] }),
+  S('bug-web', 'a bug is in the web.', { bug: '🐛', web: '🕸️' }, { bug: ['bee', '🐝'], web: ['box', '📦'] }),
+  S('dog-van', 'the dog is in the van.', { dog: '🐶', van: '🚐' }, { dog: ['pig', '🐷'], van: ['bus', '🚌'] }),
+  S('frog-log', 'the frog is on the log.', { frog: '🐸', log: '🪵' }, { frog: ['duck', '🦆'], log: ['bed', '🛏️'] }),
+  S('frog-drum', 'the frog sat on the drum.', { frog: '🐸', drum: '🥁' }, { frog: ['cat', '#cat'], drum: ['box', '📦'] }),
+  S('crab-pot', 'the crab is in the pot.', { crab: '🦀', pot: '🍲' }, { crab: ['fish', '🐟'], pot: ['pan', '🍳'] }),
+  S('dog-truck', 'the dog is in the truck.', { dog: '🐶', truck: '🚚' }, { dog: ['pig', '🐷'], truck: ['bus', '🚌'] }),
+  S('cat-tent', 'the cat is in the tent.', { cat: '#cat', tent: '⛺' }, { cat: ['dog', '🐶'], tent: ['van', '🚐'] }),
+  S('gift-box', 'the gift is in the box.', { gift: '🎁', box: '📦' }, { gift: ['sock', '🧦'], box: ['bed', '🛏️'] }),
+  S('cat-dog', 'the cat and the dog sat.', { cat: '#cat', dog: '🐶' }, { cat: ['pig', '🐷'], dog: ['hen', '🐔'] }),
+  S('fish-bath', 'the fish is in the bath.', { fish: '🐟', bath: '🛁' }, { fish: ['duck', '🦆'], bath: ['pot', '🍲'] }),
+  S('chick-nest', 'the chick is in the nest.', { chick: '🐤', nest: '🪺' }, { chick: ['frog', '🐸'], nest: ['hat', '#hat'] }),
+  S('ring-box', 'the ring is in the box.', { ring: '💍', box: '📦' }, { ring: ['bell', '🔔'], box: ['pot', '🍲'] }),
+  S('duck-ship', 'the duck is on the ship.', { duck: '🦆', ship: '🚢' }, { duck: ['dog', '🐶'], ship: ['bus', '🚌'] }),
 ];
+// scene picture: the content pictures joined with '+' (rendered side by side); distractors swap one of them
+export const scenePic = scene => Object.values(scene).join('+');
+for (const s of SENTENCES) s.pic = scenePic(s.scene);
+
+// Tiny decodable stories (v2 V9): 3–5 pages, one decodable sentence each (star words tapped, the rest blended), each
+// page's picture revealed after it is read (the last one only after the question). One character, one problem, one
+// turn, past tense. Titles are printed, so they decode too. `after`: the map stop the story follows (stories start at
+// the first new-words stops, about stop 19, not only at the end). The ask's 3 answers come from the story itself.
+export const STORIES = [
+  { id: 'pot', after: 'words:set4', cover: '🍲', title: 'the cat and the pot', pages: [
+    { text: 'a cat sat on a mat.', pic: '#cat+#mat' }, { text: 'a pot is on the mat.', pic: '🍲+#mat' },
+    { text: 'the cat can tip it!', pic: '#cat+🍲' }, { text: 'the pot is not on the mat.', pic: '#mat' }, { text: 'the cat is sad.', pic: '#cat' }],
+    ask: { text: 'What did the cat tip?', answer: '🍲', others: ['#mat', '#cat'] } },
+  { id: 'hat', after: 'words:set6', cover: '🎩', title: 'the red hat', pages: [
+    { text: 'the dog had a big red hat.', pic: '🐶+#hat' }, { text: 'the hat fell off!', pic: '#hat' },
+    { text: 'it fell in the mud.', pic: '#hat+🟤' }, { text: 'the dog got the hat back.', pic: '🐶+#hat' }, { text: 'the dog got a big hug.', pic: '🐶+🤗' }],
+    ask: { text: 'What fell in the mud?', answer: '#hat', others: ['🐶', '🧦'] } },
+  { id: 'fox', after: 'words:set7', cover: '🦊', title: 'the fox and the box', pages: [
+    { text: 'the fox got in the box.', pic: '🦊+📦' }, { text: 'the cat sat on the box!', pic: '#cat+📦' },
+    { text: 'bump! the box fell.', pic: '📦' }, { text: 'the fox ran.', pic: '🦊' }],
+    ask: { text: 'Who ran?', answer: '🦊', others: ['#cat', '📦'] } },
+  { id: 'king', cover: '👑', title: 'the king got wet', pages: [
+    { text: 'the king had a big ship.', pic: '👑+🚢' }, { text: 'bump! the ship hit a rock.', pic: '🚢+🪨' },
+    { text: 'the king fell in!', pic: '👑+🌊' }, { text: 'a fish got the king back.', pic: '🐟+👑' }],
+    ask: { text: 'Who fell in?', answer: '👑', others: ['🐟', '🚢'] } },
+  { id: 'lunch', cover: '🧺', title: 'lunch on the bench', pages: [
+    { text: 'I sit on the bench.', pic: '🪑' }, { text: 'lunch is in the bag.', pic: '🧺' },
+    { text: 'the duck got the bun!', pic: '🦆' }, { text: 'no, duck, no!', pic: '😮' }],
+    ask: { text: 'Who got the bun?', answer: '🦆', others: ['🧒', '🐶'] } },
+];
+STORIES.forEach(s => s.pages.forEach((p, i) => (p.id = `${s.id}-${i + 1}`)));
 
 // Mascot lines. Two takes of "Let's slide it again": calm (default) and upbeat; neither sounds disappointed.
 export const MASCOT = {
@@ -228,6 +307,9 @@ export const MASCOT = {
   'm-tap-hint-sound': 'Tap a letter or a dot to hear its sound!',
   'm-which-picture': 'Which picture is…',
   'm-which-word': 'Which word did you read?',
+  'm-which-pic': 'Which picture?',
+  'm-say-sounds': 'Say the sounds, then pick.', // v2 V2 S2: silent dots
+  'm-read-it': 'Read it!', // v2 V2 S1: no slider
   'm-slide-again-calm': "Let's slide it again.",
   'm-slide-again-upbeat': "Ooh, so close! Let's slide it again!",
   'm-you-read-it': 'You read it!',

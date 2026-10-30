@@ -3,7 +3,7 @@ import { familyClips, RIME_TTS } from './families.js';
 // Entry: { id, kind, text (what the clip must say, for the voice actor), tts (placeholder speech text),
 //          take (path under audio/ once recorded, else null), placeholder ('tts' | file path), notes? }
 import { LETTERS, STRETCHY } from './core.js';
-import { LETTER_INFO, WORDS, STAR_WORDS, MASCOT, SFX, LETTER_PICS, SENTENCES } from './content.js';
+import { LETTER_INFO, WORDS, STAR_WORDS, MASCOT, SFX, LETTER_PICS, SENTENCES, STORIES } from './content.js';
 import { requiredClips, protoRimes } from './word-logic.js';
 
 export const TAKE_EXTS = ['m4a', 'mp3', 'ogg', 'wav'];
@@ -37,6 +37,8 @@ export function buildManifest(takeFiles = []) {
     add(`star-${s.w}-sentence`, 'star-sentence', s.say, s.say);
   }
   for (const s of SENTENCES) add(`sent-${s.id}`, 'sentence', s.text, s.text, { notes: 'read smoothly, karaoke pace' });
+  for (const st of STORIES) { for (const p of st.pages) add(`sent-${p.id}`, 'story-page', p.text, p.text, { notes: `story "${st.title}", read smoothly` });
+    add(`story-${st.id}-ask`, 'story-question', st.ask.text, st.ask.text, { voice: 'calm' }); }
   for (const r of familyClips()) if (!clips.some(c => c.id === r.id)) add(r.id, 'rime', r.text, r.tts, { notes: 'word-family rime, said as one chunk' });
   for (const [id, text] of Object.entries(MASCOT)) add(id, 'mascot', text, text.replace('…', ''), { voice: id.endsWith('-upbeat') ? 'upbeat' : 'calm' });
   for (const [id, s] of Object.entries(SFX)) add(id, 'sfx', s.text, null, { placeholder: s.file });

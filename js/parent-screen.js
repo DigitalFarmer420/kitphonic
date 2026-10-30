@@ -30,7 +30,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
         <div class="pstats">
           <div class="pstat"><b>${s.sessionsThisWeek}</b><span>sessions this week</span></div>
           <div class="pstat"><b>${s.minutesThisWeek}</b><span>minutes</span></div>
-          <div class="pstat"><b>${s.wordsRead}</b><span>words read</span></div>
+          <div class="pstat"><b>${s.wordsRead}</b><span>words read alone${s.wordsWithKit ? ` · +${s.wordsWithKit} with Kit` : ''}</span></div>
         </div>
         <div class="pcard"><h2>Sounds</h2><div class="ptiles">${s.soundTiles.map(tile).join('')}</div>
           <h3>Star words</h3><div class="ptiles">${s.starTiles.map(tile).join('')}</div>

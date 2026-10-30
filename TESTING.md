@@ -38,9 +38,12 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `activity=sentence&sentence=map-mat` | star word in a sentence: tap star chips, slide decodable words, then "Read it all" |
 | `parent=1` | open the Grown-ups area directly (in the app: press and hold the map gear for 2 s) |
 | `activity=family&rime=ap` | word family: tap-to-place or drag onsets in front of a fixed rime |
+| `speakBeforeCheck=1` | old model: Kit says the blended word / reads the sentence before the check (logged `modelled`, never scored) |
+| `support=1..4` / `ladder=0` | v2 V2 slider fade-out: force S1 read it, S2 silent dots, S3 you blend, S4 model; `ladder=0` = always S3 (sessions use js/support.js) |
+| `activity=story&story=fox` | tiny decodable story (pot / hat / fox / king / lunch; mid-map after their `after` stop): pages read like sentences, picture question at the end |
 | `activity=hunt&pool=x,y,zz,qu,sh,ck` | letter game with any GPC ids (digraph tiles; same-sound tiles are never shown together) |
 | `level=5&word=sand` | L5 final-blend word (CVCC) |
-| `progress=38` | map at the L6 digraph-words stop (44 stops: 38 sounds + L1–L6) |
+| `progress=47` | map at the L6 digraph-words stop (56 stops: 38 sounds, L1–L7, 6 new-words stops, 5 stories) |
 | `level=6&word=ship` | digraph word: one joined sky "sh" tile, one slider stop per sound |
 | `activity=intro&gpc=sh` | digraph fusion intro: s + h slide together into one sky tile |
 | `reducedMotion=1` | act as if the device asks for reduced motion (grown-ups setting On/Off still wins) |
@@ -65,3 +68,5 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 - Picture check: three pictures, one differs by one sound; a quick random tap does not count as correct.
 - Device silent switch: the 🔈 button on hello plays a chime and shows the tip.
 - `prefers-reduced-motion`: floating letters stand still; no pulses or confetti.
+
+`tools/check-scored-audio.py` (v2 V1 acceptance): sweeps a word, a sentence and a story in headless Chrome and fails if the target word or sentence audio plays before the first pick, or if the read is not logged as scored.

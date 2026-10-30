@@ -1,8 +1,6 @@
 // Learning-map geometry (pure, unit-tested). A window of up to 6 stops around the current one, winding bottom->top
 // in portrait and left->right in landscape, clear of the top bar and the big ▶ button (thumb zone, bottom centre).
-export const STOP_R = 38, NOW_R = 52, WINDOW = 6, TEASERS = [
-  { id: 'future:stories', kind: 'future', label: '📖', group: 'little stories', status: 'upcoming' },
-];
+export const STOP_R = 38, NOW_R = 52, WINDOW = 6, TEASERS = []; // the stories teaser became the real story stops
 export const GO = { w: 200, h: 72, bottom: 22 };
 export const groupOf = s => s.group ?? (s.kind === 'words' ? (s.level === 6 ? 'sh · ch · th' : s.level === 5 ? 'end blends' : s.level >= 4 ? 'blends' : 'blend words') : s.kind === 'sound' ? 'sounds' : '');
 
@@ -40,7 +38,8 @@ export function levelUpChips(stop, responses, stops) {
   const right = responses.filter(r => r.correct && r.skill?.startsWith('blend:')).sort((a, b) => b.timestamp - a.timestamp);
   const uniq = xs => [...new Set(xs)];
   let words = [];
-  if (stop.kind === 'words') words = uniq(right.filter(r => r.skill === `blend:L${stop.level}`).map(r => r.itemId));
+  if (stop.apply) words = uniq(right.filter(r => r.apply === stop.apply).map(r => r.itemId));
+  else if (stop.kind === 'words') words = uniq(right.filter(r => r.skill === `blend:L${stop.level}`).map(r => r.itemId));
   else if (stop.gpc) words = uniq(right.filter(r => (r.gpcs ?? []).includes(stop.gpc)).map(r => r.itemId));
   if (words.length) return words.slice(0, 3).map(w => ({ text: w, clip: `word-${w}` }));
   const i = stops.findIndex(s => s.id === stop.id);

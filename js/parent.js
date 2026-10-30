@@ -13,11 +13,13 @@ export function parentSummary(responses, now = Date.now()) {
   const sessions = new Map();
   for (const r of responses) { if (!r.sessionId) continue; const s = sessions.get(r.sessionId) ?? { a: r.timestamp, b: r.timestamp }; s.a = Math.min(s.a, r.timestamp); s.b = Math.max(s.b, r.timestamp); sessions.set(r.sessionId, s); }
   const week = [...sessions.values()].filter(s => s.b >= now - 7 * DAY);
-  const wordsRead = new Set(responses.filter(r => r.skill?.startsWith('blend:') && r.correct).map(r => r.itemId)).size;
+  // v2 V1: words the child read on their own (scored, Kit did not say them first) vs words read with Kit's model
+  const wordsOwn = new Set(responses.filter(r => r.skill?.startsWith('blend:') && r.correct && !r.modelled && r.scored !== false).map(r => r.itemId));
+  const wordsRead = wordsOwn.size, wordsWithKit = new Set(responses.filter(r => r.skill?.startsWith('blend:') && r.correct && !wordsOwn.has(r.itemId)).map(r => r.itemId)).size;
   const cur = map.stops[map.index];
   return {
     stop: cur ? { label: cur.label, index: map.index + 1, of: map.stops.length } : { label: 'all done', index: map.stops.length, of: map.stops.length },
-    sounds, stars, blends, wordsRead,
+    sounds, stars, blends, wordsRead, wordsWithKit,
     sentences: new Set(responses.filter(r => r.skill?.startsWith('sentence:')).map(r => r.itemId)).size,
     sessionsThisWeek: week.length,
     minutesThisWeek: Math.round(week.reduce((t, s) => t + (s.b - s.a), 0) / 6e4),
@@ -33,6 +35,8 @@ export function parentSummary(responses, now = Date.now()) {
 const tileState = (responses, skill, now) => { const st = skillState(responses, skill, now); return st.trials || st.state !== 'new' ? st.state : 'new'; };
 const wordsLike = level => (WORDS[level] ?? []).slice(0, 2).map(e => `“${e.w}”`).join(', ');
 export function describe(stop) {
+  if (stop.kind === 'story') return { kind: 'story', label: stop.label, learning: `reading the story “${stop.title}”`, next: `the story “${stop.title}”` };
+  if (stop.apply) return { kind: 'words', label: stop.label, learning: `reading words with the set ${stop.apply} sounds`, next: `new words with the set ${stop.apply} sounds` };
   if (stop.kind === 'words') return { kind: 'words', label: stop.label, learning: `reading words like ${wordsLike(stop.level)}`, next: `blending words like ${wordsLike(stop.level)}` };
   const g = GPC[stop.gpc]; return { kind: 'sound', label: g.grapheme, learning: `learning “${g.grapheme}”`, next: `the new sound “${g.grapheme}”` };
 }

@@ -9,12 +9,14 @@ export const CONFIG = {
   // spoken sentence. Never at L1 unless checkAtL1 (review R8 / spec open question 1).
   checkPictureWords: true,      // false = never show the check                     (?check=0)
   checkAtL1: false,
+  supportLadder: true, // v2 V2 slider fade-out S4 -> S1 per pattern (js/support.js); ?ladder=0 = always S3; ?support=1..4 forces a level
+  speakBeforeCheck: false, // v2 V1: Kit never says the target word / sentence before a scored pick (?speakBeforeCheck=1 = old model, logged unscored)
   wordCardCheck: true,          // no picture check -> printed minimal-pair word cards so the read is still scored (?cards=0)             //                                                  (?checkL1=1)
   choicesPerCheck: 3,           // 2–3 per spec
   // Distractors (review R8): 'minimal' = differ by exactly one phoneme, contrast position rotates onset/vowel/final.
   // Legacy: 'rhyme' = same rime, first sound differs (hat/mat/cat); 'vowel' = middle vowel first.  (?choices=)
-  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 5: 'minimal', 6: 'minimal' },
-  tapMode: { 1: 'sound', 2: 'nameDot', 3: 'nameDot', 4: 'nameDot', 5: 'nameDot', 6: 'nameDot' }, // until mastery tracking exists (?mode=)
+  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 5: 'minimal', 6: 'minimal', 7: 'minimal' },
+  tapMode: { 1: 'sound', 2: 'nameDot', 3: 'nameDot', 4: 'nameDot', 5: 'nameDot', 6: 'nameDot', 7: 'nameDot' }, // until mastery tracking exists (?mode=)
   markerOpts: { l1: 'dots', l4: 'dots' }, // L1 sound-by-sound (R2); 'bar' = one-bar 'at' (?l1=bar, ?l4=blendBar)
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
@@ -28,7 +30,7 @@ export const CONFIG = {
 export function configFromUrl(search = '') {
   const q = new URLSearchParams(search), c = structuredClone(CONFIG);
   if (q.get('case')) c.tileCase = q.get('case');
-  if (q.get('level')) c.startLevel = Math.min(6, Math.max(1, +q.get('level') || c.startLevel));
+  if (q.get('level')) c.startLevel = Math.min(7, Math.max(1, +q.get('level') || c.startLevel));
   if (q.get('voice')) c.voice = q.get('voice');
   if (q.get('check') === '0') c.checkPictureWords = false;
   if (q.get('checkL1') === '1') c.checkAtL1 = true;
@@ -38,6 +40,10 @@ export function configFromUrl(search = '') {
   if (q.get('due') === '1') c.due = true;
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
   c.sentence = q.get('sentence') || undefined;
+  c.story = q.get('story') || undefined;
+  if (q.get('ladder') === '0') c.supportLadder = false;
+  if (/^[1-4]$/.test(q.get('support') ?? '')) c.support = +q.get('support');
+  if (q.get('speakBeforeCheck')) c.speakBeforeCheck = q.get('speakBeforeCheck') === '1';
   c.pool = q.get('pool')?.split(',').filter(Boolean) || undefined; // letter activities: ?pool=x,qu,sh (GPC ids)
   if (q.get('parent') === '1') c.parent = true;
   if (q.get('reducedMotion') === '1') c.reducedMotion = true;

@@ -5,10 +5,10 @@ const SETS = [
   ['m', 's', 'a', 't'],                          // 1: blending unlocks here (am, at, sat, mat)
   ['p', 'i', 'n'],                               // 2: a/i contrast
   ['o', 'd', 'f'],                               // 3: third vowel; d well before b
-  ['c', 'k', 'e', 'u'],                          // 4
-  ['g', 'r', 'h', 'b', 'l'],                     // 5: b is 9 after d
+  ['c', 'k', 'u'],                               // 4  (v2 V4b: u and e no longer back to back)
+  ['g', 'e', 'r', 'h', 'b', 'l'],                // 5: b well after d
   ['ck', 'ff', 'll', 'ss', 's_z'],               // 6: doubles; s = /z/ (is, as)
-  ['j', 'v', 'w', 'x', 'y', 'z', 'zz', 'qu'],    // 7
+  ['j', 'v', 'x', 'y', 'w', 'z', 'zz', 'qu'],    // 7  (v2 V4c: v and w apart)
   ['sh', 'ch', 'th', 'th_v', 'ng', 'nk'],        // 8
 ];
 const INFO = { // id: [grapheme, phoneme, continuous, vowel]
@@ -29,6 +29,8 @@ export const PROTOTYPE_SET = GPCS.slice(0, PROTOTYPE_SIZE).map(g => g.id);
 export const CONTINUOUS = new Set(GPCS.filter(g => g.continuous).map(g => g.id));
 export const VOWEL_IDS = new Set(GPCS.filter(g => g.vowel).map(g => g.id));
 // Look-alike / sound-alike pairs that must be kept apart (spec §3.3.1). q is introduced as 'qu'.
-export const CONFUSABLE_PAIRS = [['b', 'd'], ['p', 'qu'], ['n', 'u'], ['m', 'w'], ['e', 'i']];
+export const CONFUSABLE_PAIRS = [['b', 'd'], ['p', 'qu'], ['n', 'u'], ['m', 'w'], ['e', 'i'], ['v', 'w']];
 export const MIN_CONFUSABLE_GAP = 5;
+// v2 V4c: v/w share set 7 (low-frequency letters) but are kept >= 3 apart; they still never appear in one round.
+export const PAIR_GAP = { 'v|w': { gap: 3, sameSet: true } };
 export const BLENDING_UNLOCK_ORDER = SETS[0].length; // after set 1

@@ -33,6 +33,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       const b = el('button', `stop ${p.now ? 'current' : p.status}`, isEmoji(p.label) ? `<span class="emoji">${p.label}</span>` : p.label);
       b.style.left = p.x + 'px'; b.style.top = p.y + 'px'; b.setAttribute('aria-label', `${p.label} ${p.now ? '(now)' : p.status}`);
       if (p.status === 'passed') b.append(el('span', 'st emoji', '⭐'));
+      if (p.cue) b.append(el('span', 'cue emoji', p.cue)); // same-spelling stops: a picture tells them apart
       b.onclick = () => tapStop(p); box.append(b);
       const g = groupOf(p);
       if (g && (g !== prevGroup || p.now)) { // parent-facing label (no reading needed by the child)
@@ -52,6 +53,9 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       const kx = p => info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36) : p.low ? p.x : p.x + p.r + 36;
       const ky = p => info.mode === 'portrait' ? p.y - p.r + 10 : p.low ? p.y - p.r - 38 : p.y - 20;
       kit.style.left = kx(from) + 'px'; kit.style.top = ky(from) + 'px'; box.append(kit);
+      // the current stop's cue picture moves to the side away from Kit (Kit left -> top-right; Kit above -> middle-left)
+      const cue = box.querySelector('.stop.current .cue');
+      if (cue) cue.classList.add(info.mode !== 'portrait' && cur.low ? 'ml' : kx(cur) < cur.x ? 'tr' : 'tl');
       if (animate) setTimeout(() => { kit.style.left = kx(cur) + 'px'; kit.style.top = ky(cur) + 'px'; }, 50);
     }
     last = { m, pts };

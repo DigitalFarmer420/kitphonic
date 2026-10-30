@@ -5,6 +5,7 @@ import { configFromUrl } from './config.js';
 import { createStage } from './stage.js';
 import { createAudio } from './audio.js';
 import { createWordScreen } from './word-screen.js';
+import { supportFor } from './support.js';
 import { sessionWords, rng } from './word-logic.js';
 import { WORDS } from './content.js';
 import { createStore, skillState, blendL1Mastered, knownGpcs } from './mastery.js';
@@ -22,7 +23,7 @@ import { createParentScreen } from './parent-screen.js';
 import { createSeen } from './seen.js';
 import { createFamilyScreen } from './family-screen.js';
 import { allFamilies } from './families.js';
-import { allSentences } from './sentences.js';
+import { allSentences, allStories } from './sentences.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -47,8 +48,11 @@ const log = r => store.log({ ...r, sessionId });
 const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mode: no taught-GPC filter on word cards
 
 let session = null; // { plan, i, started, stickers }
+// v2 V2: support level per word — forced (?support / ?speakBeforeCheck), else the ladder in a session (dev direct
+// screens without a session use S3, the scored default)
+const supportLevel = entry => cfg.support ?? (cfg.speakBeforeCheck ? 4 : session && cfg.supportLadder ? supportFor(store.all(), entry, { sessionId }).level : 3);
 const screen = createWordScreen({
-  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(),
+  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel,
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });
@@ -56,7 +60,7 @@ const letters = createLettersScreen({ audio, cfg, rand, stage, settings, seen, r
 const lesson = createLessonScreen({ audio, stage, settings, seen, rand, record: log, onHome: () => goHome() });
 const starScreen = createStarScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
 const familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
-const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome() });
+const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), support: supportLevel });
 
 const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
   onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
@@ -94,7 +98,9 @@ function runNext() {
     letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound,
       onComplete: r => { if (r?.score) session && session.stickers.push('⭐'); runNext(); } });
   } else if (it.type === 'words') {
-    show('word'); screen.start(it.words, it.level, { onDone: st => { session?.stickers.push(...st); runNext(); } });
+    show('word'); screen.start(it.words, it.level, { apply: it.apply, onDone: st => { session?.stickers.push(...st); runNext(); } });
+  } else if (it.type === 'story') {
+    show('sentence'); sentenceScreen.start({ story: it.story, onComplete: () => { session?.stickers.push('📚'); runNext(); } });
   } else if (it.type === 'lesson') {
     show('lesson'); lesson.start({ activity: it.activity, gpc: it.gpc, onComplete: () => { session?.stickers.push(it.activity === 'trace' ? '✏️' : '🔤'); runNext(); } });
   } else if (it.type === 'star') {
@@ -109,6 +115,7 @@ function startActivity(activity) { // dev: one letter game (or ?activity=intro|t
   sessionId ??= `s-${Date.now()}`;
   if (activity === 'star') { show('star'); return starScreen.start({ word: cfg.word ?? 'the', onComplete: () => allDone([]) }); }
   if (activity === 'family') { show('family'); const fs = allFamilies(); return familyScreen.start({ family: fs.find(f => f.rime === cfg.rime) ?? fs[0], onComplete: () => allDone([]) }); }
+  if (activity === 'story') { show('sentence'); const ss = allStories(); return sentenceScreen.start({ story: ss.find(x => x.id === cfg.story) ?? ss[0], onComplete: () => allDone([]) }); }
   if (activity === 'sentence') { show('sentence'); const ss = allSentences(); return sentenceScreen.start({ sentence: ss.find(x => x.id === cfg.sentence) ?? ss[0], onComplete: () => allDone([]) }); }
   if (activity === 'intro' || activity === 'trace') { show('lesson'); return lesson.start({ activity, gpc: cfg.gpc ?? 's', onComplete: () => allDone([]) }); }
   show('letters');

@@ -17,7 +17,7 @@ export const RULES = {
 };
 export const dayKey = t => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`; }; // local calendar day
 // Only first-attempt, unassisted, scored, non-fast responses count toward mastery.
-export const counts = r => r.firstAttempt === true && !r.assisted && !r.fast && r.scored !== false;
+export const counts = r => r.firstAttempt === true && !r.assisted && !r.fast && !r.modelled && r.scored !== false; // v2 V1: modelled reads never count
 // Guess guards: a sweep faster than 250 ms per phoneme isn't scored; a pick < 600 ms after the blend is "fast".
 export const guessGuard = ({ sweepMs, phonemes, pickLatencyMs }) => ({
   scored: sweepMs == null || sweepMs >= RULES.minSweepMsPerPhoneme * phonemes,

@@ -4,11 +4,11 @@ import { GPC, PROTOTYPE_SIZE } from './sequence.js';
 export const parseIds = e => (Array.isArray(e.parse) ? e.parse : e.parse.trim().split(/\s+/));
 export const expand = e => parseIds(e).map(id => [GPC[id]?.grapheme, GPC[id]?.phoneme]); // [[grapheme, phoneme]]
 export const patternOf = ids => ids.map(id => (GPC[id]?.vowel ? 'V' : 'C')).join('');
-export const LEVEL_PATTERNS = { 1: ['VC'], 2: ['CVC'], 3: ['CVC'], 4: ['CCVC'], 5: ['CVCC'], 6: ['CVC', 'CVCC'] }; // 6 = digraph words (sh i p is CVC by sound)
+export const LEVEL_PATTERNS = { 1: ['VC'], 2: ['CVC'], 3: ['CVC'], 4: ['CCVC'], 5: ['CVCC', 'VCC'], 6: ['CVC', 'CVCC'], 7: ['VCC', 'CVCC'] }; // 5: + VCC (and, ant); 7: stem + -s // 6 = digraph words (sh i p is CVC by sound)
 // How far into the sequence each level's words may reach. L2 (onset + rime) stays on the prototype set; L1, L3–L5 grow
 // with sets 3–7 (served only once known); L6 = set 8 digraphs (sh ch th ng nk) and must use one.
 const BEFORE_SET8 = GPC.sh.order - 1;
-export const LEVEL_K = { 1: BEFORE_SET8, 3: BEFORE_SET8, 4: BEFORE_SET8, 5: BEFORE_SET8, 6: GPC.nk.order };
+export const LEVEL_K = { 1: BEFORE_SET8, 3: BEFORE_SET8, 4: BEFORE_SET8, 5: BEFORE_SET8, 6: GPC.nk.order, 7: BEFORE_SET8 };
 export const earliestLegalK = e => Math.max(...parseIds(e).map(id => GPC[id]?.order ?? Infinity));
 
 // Rules 1, 2, 4 (+ pictures). k = sequence position taught so far (prototype: 8).
@@ -22,6 +22,7 @@ export function validateWord(e, { k = LEVEL_K[e.level] ?? PROTOTYPE_SIZE } = {})
   const pat = patternOf(ids), allowed = LEVEL_PATTERNS[e.level];
   if (allowed && !allowed.includes(pat)) bad('pattern', `L${e.level} needs ${allowed.join('/')}, got ${pat}`);
   if (/[A-Z]/.test(e.text)) bad('capital', 'capitals only for names / "I" once taught');
+  if (e.level === 7 && !(ids.at(-1) === 's' || ids.at(-1) === 's_z')) bad('suffix', 'L7 words are stem + -s');
   return errs;
 }
 export function validateContent(words, { k = null, where = () => '' } = {}) {

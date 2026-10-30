@@ -22,9 +22,13 @@ SCENES = [  # name, query, js to run after load
     ('cards', 'skipHello=1&level=1&word=at&seed=1', "kitphonic.screen.debugShow('check')"),
     ('map', 'skipHello=1&progress=5&seed=1', None),
     ('map-start', 'skipHello=1&progress=0&seed=1', None),
-    ('map-end', 'skipHello=1&progress=44&seed=1', None),
-    ('map-L6', 'skipHello=1&progress=38&seed=1', None),
+    ('map-end', 'skipHello=1&progress=56&seed=1', None),
+    ('map-L6', 'skipHello=1&progress=47&seed=1', None),
+    ('map-s', 'skipHello=1&progress=1&seed=1', None),
+    ('map-th', 'skipHello=1&progress=49&seed=1', None),
     ('word-L5', 'skipHello=1&level=5&word=sand&seed=1', "new Promise(r => setTimeout(r, 800))"),
+    ('word-S1', 'skipHello=1&level=2&word=mat&support=1&seed=1', "new Promise(r => setTimeout(r, 900))"),  # v2 V2 read it: check at once + help
+    ('word-S2', 'skipHello=1&level=2&word=mat&support=2&seed=1', "new Promise(r => setTimeout(r, 900))"),  # silent dots
     ('hunt-digraph', 'skipHello=1&activity=hunt&pool=x,y,zz,qu,sh,ck&seed=1', None),
     ('levelup', 'skipHello=1&progress=5&levelup=1&seed=1', "new Promise(r => setTimeout(r, 1800))"),
     ('session', 'skipHello=1&progress=5&seed=1', "document.getElementById('go').click()"),
@@ -37,6 +41,8 @@ SCENES = [  # name, query, js to run after load
     ('star', 'skipHello=1&activity=star&word=the&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('sentence', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 1500))"),
     ('sentence-blend', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 3500)).then(() => document.querySelector('#sn-strip .wd').click()).then(() => new Promise(r => setTimeout(r, 1500)))"),
+    ('story', 'skipHello=1&activity=story&story=king&seed=1', "new Promise(r => setTimeout(r, 1800))"),
+    ('story-ask', 'skipHello=1&activity=story&story=king&seed=1', "new Promise(r => setTimeout(r, 1500)).then(() => { const r = kitphonic.sentenceScreen.run; r.page = r.story.pages.length - 1; kitphonic.sentenceScreen.debugAsk(); }).then(() => new Promise(r => setTimeout(r, 600)))"),
     ('sentence-pick', 'skipHello=1&activity=sentence&sentence=map-mat&seed=1', "new Promise(r => setTimeout(r, 1500)).then(() => kitphonic.sentenceScreen.debugAsk()).then(() => new Promise(r => setTimeout(r, 600)))"),
     ('family', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('family-made', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500)).then(() => { document.querySelector('#fm-tray .ftile').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); }).then(() => new Promise(r => setTimeout(r, 2600)))"),
@@ -62,7 +68,11 @@ MEASURE = r"""() => {
   const ltr = [...root.querySelectorAll('.ltr .tile, .choice, #st-cards .wcard2')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();
   const h = document.getElementById('handle');
-  return { screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  // Uiux r7: a stop's cue picture never covers another stop, a label, Kit or a star
+  const R = e => e.getBoundingClientRect(), hit = (a, b) => a.left + 2 < b.right && b.left + 2 < a.right && a.top + 2 < b.bottom && b.top + 2 < a.bottom;
+  const cueHits = [...scr.querySelectorAll('.stop .cue')].filter(vis).flatMap(c => [...scr.querySelectorAll('.stop, .mlabel, .mkit, .stop .st')]
+    .filter(o => vis(o) && o !== c.parentElement && !o.contains(c) && hit(R(c), R(o))).map(o => `cue ${c.textContent} / ${name(o)}`));
+  return { cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 44  # grown-ups area: adult targets (Apple HIG 44pt); the mockup uses 48px segmented controls
@@ -78,6 +88,7 @@ def check(m, vp, scene):
         if not t.get('scroll') and (t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
         if t['play'] and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
+    errs += [f'overlap {h}' for h in m.get('cueHits', [])]
     k = m['key']
     for i in range(len(k)):
         for j in range(i + 1, len(k)):

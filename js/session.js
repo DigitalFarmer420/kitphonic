@@ -7,18 +7,20 @@
 //   { type: 'star', word, why }   (only when opts.stars: Star Word screen)
 import { GPC, GPCS } from './sequence.js';
 import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked } from './mastery.js';
-import { mapState, activeSounds, servableWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
+import { mapState, activeSounds, servableWords, applyWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
+import { servableStory, allStories } from './sentences.js';
 import { shuffle } from './word-logic.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
 import { servableFamilies } from './families.js';
 
-export const COST = { explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, family: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
+export const COST = { storyPage: 45, explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, family: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;
   if (it.type === 'star') return COST.star;
   if (it.type === 'sentence') return COST.sentence;
+  if (it.type === 'story') return it.story.pages.length * COST.storyPage + 30;
   if (it.type === 'family') return COST.family;
   if (it.type === 'lesson') return COST[it.activity] ?? 40;
   return it.targets ? COST.roundIntro + it.rounds * COST.round : COST.explore;
@@ -47,7 +49,7 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   const push = it => { if (room(it)) { items.push(it); return true; } return false; };
   const pool = letterPool(active.length ? active : [GPCS[0].id]);
   const wordsAt = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? shuffle(ws, rand).slice(0, n) : []; };
-  const passedLevels = map.stops.filter(s => s.kind === 'words' && s.status === 'passed').map(s => s.level);
+  const passedLevels = map.stops.filter(s => s.kind === 'words' && s.level && s.status === 'passed').map(s => s.level);
 
   // 1. Spaced review that is due (oldest first).
   const due = dueItems(responses, now), reviewCap = budget * 0.4; // review never crowds out the current stop
@@ -76,6 +78,20 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
       push(hunt(5));
       if (canTrace && responses.filter(r => r.skill === `trace:${GPC[g].grapheme}`).length < 6) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
     }
+  } else if (cur?.kind === 'words' && cur.apply) { // "new words" stop: words that use this set's sounds, mixed levels
+    const ws = shuffle(applyWords(cur.apply, known, Math.max(...passedLevels, 1)), rand).slice(0, 5);
+    if (ws.length >= MIN_WORDS) push({ type: 'words', level: null, apply: cur.apply, words: ws, why: 'new' });
+    else push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
+  } else if (cur?.kind === 'story') { // tiny decodable story (final map stops)
+    // star words the story (pages + title) needs but the child has not met yet come first (<= 2 per session); the story
+    // itself is served once none is missing, so it always fits the session (a 5-page story is ~4 minutes)
+    const met = new Set(responses.filter(r => r.skill?.startsWith('star:')).map(r => r.skill.slice(5)));
+    const story = allStories(known).find(x => x.id === cur.story);
+    const need = [...new Set([...(story?.pages.flatMap(p => p.stars) ?? []), ...(story?.titleTokens.filter(t => t.kind === 'star').map(t => t.star.w) ?? [])])].filter(w => !met.has(w));
+    for (const w of need.slice(0, 2)) push({ type: 'star', word: w, why: 'new' });
+    const s = !need.length && servableStory(cur.story, known, met);
+    if (s) push({ type: 'story', story: s, why: 'new' });
+    else if (!need.length) push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
   } else if (cur?.kind === 'words') {
     let lv = cur.level, ws = wordsAt(lv, 5);
     if (!ws.length && passedLevels.length) { lv = passedLevels.at(-1); ws = wordsAt(lv, 5); }

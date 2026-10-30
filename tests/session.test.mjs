@@ -13,10 +13,12 @@ import { GPC } from '../js/sequence.js';
 
 const now = Date.UTC(2026, 9, 30, 17);
 test('map stops follow the sound sequence with word levels in between', () => {
-  assert.equal(STOPS.slice(0, 12).map(s => s.label).join(' '), 'm s a t at p mat i n pin o stop');
   assert.equal(STOPS.map(s => s.label).join(' '),
-    'm s a t at p mat i n pin o stop d f sand c k e u g r h b l ck ff ll ss s j v w x y z zz qu sh ship ch th th ng nk');
-  assert.deepEqual(STOPS.filter(s => s.kind === 'words').map(s => s.level), [1, 2, 3, 4, 5, 6]);
+    'm s a t at p mat i n pin o d f dog c k u cup 🍲 g e r h b l bed stop sand ck ff ll ss s duck 🎩 cats j v x y w z zz qu fox 🦊 sh ship ch th th ng nk ring 👑 🧺');
+  assert.deepEqual(STOPS.filter(s => s.kind === 'words' && s.level).map(s => s.level), [1, 2, 3, 4, 5, 7, 6]);
+  assert.deepEqual(STOPS.filter(s => s.apply).map(s => s.apply), [3, 4, 5, 6, 7, 8]); // a "new words" stop after every later set
+  const at = id => STOPS.findIndex(s => s.id === id); // v2 V4a: blends only after l
+  assert.ok(at('words:L4') > at('sound:l') && at('words:L5') === at('words:L4') + 1);
   assert.equal(STOPS.filter(s => s.kind === 'sound').length, 38);
 });
 test('seeded progress N lands on stop N; passed / current / upcoming', () => {
@@ -111,7 +113,7 @@ test('word families open with CVC words: taught letters only, 2-4 words, fixed r
 // skill, and the letter rounds always have exactly one tile that makes the target sound.
 test('normal play reaches every stop through L5 (sand) and L6 (ship): each session works on its current stop', () => {
   const at = id => STOPS.findIndex(s => s.id === id);
-  assert.ok(at('words:L5') > at('sound:f') && at('words:L6') === at('sound:sh') + 1);
+  assert.ok(at('words:L5') > at('sound:l') && at('words:L6') === at('sound:sh') + 1);
   for (let n = 0; n < STOPS.length; n++) {
     const cur = STOPS[n];
     for (const seed of [1, 2, 3]) {
@@ -125,6 +127,19 @@ test('normal play reaches every stop through L5 (sand) and L6 (ship): each sessi
           assert.equal(ls.filter(l => GPC[l].phoneme === GPC[cur.gpc].phoneme).length, 1, `${cur.id}: two tiles say /${GPC[cur.gpc].phoneme}/ (${ls})`);
           assert.equal(new Set(ls.map(l => GPC[l].grapheme)).size, ls.length, `${cur.id}: two tiles look the same (${ls})`);
         }
+      } else if (cur.kind === 'story') {
+        // missing star words are introduced first (<= 2 for the story, plus the usual one new star); after those sessions the story itself is served
+        let q = p, log = seedProgress(n, { now });
+        for (let k = 0; k < 4 && !q.items.some(i => i.type === 'story'); k++) {
+          const intro = q.items.filter(i => i.type === 'star').map(i => i.word); assert.ok(intro.length, `stop ${n} ${cur.id}: no story, no star intro`);
+          log = [...log, ...intro.flatMap(w => [0, 1, 2].map(j => ({ skill: `star:${w}`, itemId: w, correct: true, firstAttempt: true, scored: true, timestamp: now - 864e5 + j, sessionId: `st${k}` })))];
+          q = planSession(log, { now, rand: rng(seed), minutes: 7 });
+        }
+        assert.ok(q.items.some(i => i.type === 'story' && i.story.id === cur.story), `stop ${n} ${cur.id}: no story`);
+      } else if (cur.apply) {
+        const w = p.items.find(i => i.type === 'words' && i.apply === cur.apply && i.why === 'new');
+        assert.ok(w && w.words.length >= 2, `stop ${n} ${cur.id}: no new-words item`);
+        for (const e of w.words) assert.ok(parseIds(e).some(g => GPC[g].set === cur.apply), `${cur.id}: ${e.w} has no set-${cur.apply} sound`);
       } else {
         const w = p.items.find(i => i.type === 'words' && i.level === cur.level && i.why === 'new');
         assert.ok(w && w.words.length >= 2, `stop ${n} ${cur.id}: no L${cur.level} words`);
