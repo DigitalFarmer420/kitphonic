@@ -22,7 +22,7 @@ export function createStage(el, onChange = () => {}) {
     Object.assign(el.style, { width: s.w + 'px', height: s.h + 'px', transform: `translate(-50%,-50%) scale(${s.scale})` });
     for (const m of ['portrait', 'short', 'tall']) el.classList.toggle(m, s.mode === m);
     el.classList.toggle('ptab', s.mode === 'portrait' && s.w >= 600);
-    el.style.setProperty('--dy', '0px'); el.style.setProperty('--h', s.h + 'px'); el.style.setProperty('--w', s.w + 'px');
+    el.style.setProperty('--dy', '0px'); el.style.setProperty('--scale', s.scale); el.style.setProperty('--h', s.h + 'px'); el.style.setProperty('--w', s.w + 'px');
     if (changed) onChange(s);
   };
   addEventListener('resize', fit); fit();

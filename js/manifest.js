@@ -1,3 +1,4 @@
+import { familyClips } from './families.js';
 // Builds audio/manifest.json content from content.js (pure; tools/build-manifest.mjs writes it).
 // Entry: { id, kind, text (what the clip must say, for the voice actor), tts (placeholder speech text),
 //          take (path under audio/ once recorded, else null), placeholder ('tts' | file path), notes? }
@@ -13,9 +14,9 @@ export function buildManifest(takeFiles = []) {
   const clips = [];
   const add = (id, kind, text, tts, extra = {}) => clips.push({ id, kind, text, tts, take: takes.has(id) ? `takes/${takes.get(id)}` : null, placeholder: 'tts', ...extra });
 
-  for (const l of LETTERS) {
+  for (const l of Object.keys(LETTER_INFO)) { // prototype letters + digraphs (digraphs have no letter-name clip)
     const L = LETTER_INFO[l];
-    add(`name-${l}`, 'letter-name', L.name, L.nameTts);
+    if (!L.digraph && !L.noName) add(`name-${l}`, 'letter-name', L.name, L.nameTts);
     add(`snd-${l}`, 'letter-sound', `/${L.sound}/`, L.soundTts, { notes: STRETCHY.has(l) ? 'short, clean' : 'clipped: quick, no trailing "uh"' });
     if (STRETCHY.has(l)) add(`snd-${l}-held`, 'letter-sound-held', `/${L.sound}/ held ~1 s`, L.heldTts, { notes: 'played on a slow slide' });
   }
@@ -36,6 +37,7 @@ export function buildManifest(takeFiles = []) {
     add(`star-${s.w}-sentence`, 'star-sentence', s.say, s.say);
   }
   for (const s of SENTENCES) add(`sent-${s.id}`, 'sentence', s.text, s.text, { notes: 'read smoothly, karaoke pace' });
+  for (const r of familyClips()) if (!clips.some(c => c.id === r.id)) add(r.id, 'rime', r.text, r.tts, { notes: 'word-family rime, said as one chunk' });
   for (const [id, text] of Object.entries(MASCOT)) add(id, 'mascot', text, text.replace('…', ''), { voice: id.endsWith('-upbeat') ? 'upbeat' : 'calm' });
   for (const [id, s] of Object.entries(SFX)) add(id, 'sfx', s.text, null, { placeholder: s.file });
 

@@ -13,7 +13,7 @@ export const CONFIG = {
   choicesPerCheck: 3,           // 2–3 per spec
   // Distractors (review R8): 'minimal' = differ by exactly one phoneme, contrast position rotates onset/vowel/final.
   // Legacy: 'rhyme' = same rime, first sound differs (hat/mat/cat); 'vowel' = middle vowel first.  (?choices=)
-  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal' },
+  choiceStrategy: { 1: 'minimal', 2: 'minimal', 3: 'minimal', 4: 'minimal', 6: 'minimal' },
   tapMode: { 1: 'sound', 2: 'nameDot', 3: 'nameDot', 4: 'nameDot' }, // until mastery tracking exists (?mode=)
   markerOpts: { l1: 'dots', l4: 'dots' }, // L1 sound-by-sound (R2); 'bar' = one-bar 'at' (?l1=bar, ?l4=blendBar)
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
@@ -28,7 +28,7 @@ export const CONFIG = {
 export function configFromUrl(search = '') {
   const q = new URLSearchParams(search), c = structuredClone(CONFIG);
   if (q.get('case')) c.tileCase = q.get('case');
-  if (q.get('level')) c.startLevel = Math.min(4, Math.max(1, +q.get('level') || c.startLevel));
+  if (q.get('level')) c.startLevel = Math.min(6, Math.max(1, +q.get('level') || c.startLevel));
   if (q.get('voice')) c.voice = q.get('voice');
   if (q.get('check') === '0') c.checkPictureWords = false;
   if (q.get('checkL1') === '1') c.checkAtL1 = true;
@@ -39,6 +39,8 @@ export function configFromUrl(search = '') {
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
   c.sentence = q.get('sentence') || undefined;
   if (q.get('parent') === '1') c.parent = true;
+  if (q.get('reducedMotion') === '1') c.reducedMotion = true;
+  c.rime = q.get('rime') || undefined;
   if (q.get('direct') === '1' || ((q.get('word') || q.get('level')) && !c.activity)) c.direct = true; // dev: word screen only
   if (q.get('choices')) for (const k in c.choiceStrategy) c.choiceStrategy[k] = q.get('choices');
   if (q.get('mode')) for (const k in c.tapMode) c.tapMode[k] = q.get('mode');

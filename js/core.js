@@ -1,5 +1,5 @@
 // Kitphonic core logic (spec §3). Pure functions, no DOM, so it's unit-testable.
-import { PROTOTYPE_SET, CONTINUOUS } from './sequence.js';
+import { PROTOTYPE_SET, CONTINUOUS, GPC } from './sequence.js';
 export const LETTERS = PROTOTYPE_SET;   // §3.3.1 / review R1: m s a t p i n o, from js/sequence.js
 export const STRETCHY = CONTINUOUS;     // continuous sounds (held); stop sounds clipped — from js/sequence.js
 
@@ -36,14 +36,23 @@ export function updateTapMode(state) {
 // opts.l4: 'dots' (default, §3.5.3 each blend consonant its own dot) | 'blendBar' (early L4: dot + dot + bar).
 // Each marker carries `stretchy` (can be held while sliding slowly; clipped sounds never stretch).
 const VOWELS = new Set(['a','e','i','o','u']);
-export function markers(word, level, opts = {}) {
+// Grapheme units of a word (words-board 3): with GPC ids ("sh i p") a digraph is ONE unit spanning its letters, so
+// it gets one tile and one slider stop. Without ids every letter is its own unit.
+export function graphemeUnits(word, ids = null) {
   const w = [...word.toLowerCase()];
-  const mk = (type, a, b) => ({ type, text: w.slice(a, b).join(''), start: a, end: b, stretchy: STRETCHY.has(w[a]) });
-  const dots = () => w.map((_, i) => mk('dot', i, i + 1));
-  const v = w.findIndex(c => VOWELS.has(c));
+  if (!ids?.length) return w.map((c, i) => ({ a: i, b: i + 1, id: c, text: c }));
+  const out = []; let i = 0;
+  for (const id of ids) { const g = GPC[id]?.grapheme ?? id; out.push({ a: i, b: i + g.length, id, text: w.slice(i, i + g.length).join('') }); i += g.length; }
+  return i === w.length ? out : w.map((c, k) => ({ a: k, b: k + 1, id: c, text: c })); // parse mismatch: per letter
+}
+export function markers(word, level, opts = {}) {
+  const w = [...word.toLowerCase()], units = graphemeUnits(word, opts.ids);
+  const mk = (type, a, b, id) => ({ type, text: w.slice(a, b).join(''), start: a, end: b, id: id ?? w.slice(a, b).join(''), stretchy: STRETCHY.has(id ?? w[a]), ...(type === 'dot' && b - a > 1 ? { digraph: true } : {}) });
+  const dots = () => units.map(u => mk('dot', u.a, u.b, u.id));
+  const vu = units.findIndex(u => VOWELS.has(w[u.a]) && GPC[u.id]?.vowel !== false), v = vu < 0 ? -1 : units[vu].a;
   const onsetRime = () => { // consonant dots + one rime bar; no vowel -> fall back to dots
     if (v < 0) return dots();
-    const out = []; for (let i = 0; i < v; i++) out.push(mk('dot', i, i + 1));
+    const out = units.slice(0, vu).map(u => mk('dot', u.a, u.b, u.id));
     out.push(mk('bar', v, w.length)); return out;
   };
   if (level === 1) return opts.l1 === 'bar' ? [mk('bar', 0, w.length)] : dots();

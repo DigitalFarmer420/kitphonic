@@ -11,13 +11,15 @@ import { mapState, activeSounds, servableWords, availableStars, STOPS, MIN_WORDS
 import { shuffle } from './word-logic.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
+import { servableFamilies } from './families.js';
 
-export const COST = { explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
+export const COST = { explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, family: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;
   if (it.type === 'star') return COST.star;
   if (it.type === 'sentence') return COST.sentence;
+  if (it.type === 'family') return COST.family;
   if (it.type === 'lesson') return COST[it.activity] ?? 40;
   return it.targets ? COST.roundIntro + it.rounds * COST.round : COST.explore;
 }
@@ -81,6 +83,13 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   }
   if (stars) for (const s of availableStars(responses, now).filter(s => !atLeast(st(`star:${s.w}`), 'secure')).slice(0, 1))
     push({ type: 'star', word: s.w, why: 'new' });
+
+  // Word families (design/words-board 2): once CVC words (L2) are open, one family per session, least-made first.
+  if ((cur?.kind === 'words' && cur.level >= 2) || passedLevels.some(l => l >= 2)) {
+    const made = r => responses.filter(x => x.skill === `family:${r}`).length;
+    const fs = servableFamilies(known).sort((a, b) => made(a.rime) - made(b.rime) || rand() - .5);
+    if (fs.length && blendingUnlocked(responses, now)) push({ type: 'family', family: fs[0], why: made(fs[0].rime) ? 'mixed' : 'new' });
+  }
 
   // Sentences (design/words-board 4): one per session once a sentence decodes with known sounds + introduced stars.
   if (stars) {

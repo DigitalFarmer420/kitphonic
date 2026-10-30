@@ -26,17 +26,24 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
   function intro(g) {
     const pics = LETTER_PICS[g] ?? [], [word, pic] = shuffle(pics, rand)[0] ?? [null, null], gr = GPC[g]?.grapheme ?? g;
     $('intro').hidden = false; $('trace').hidden = true;
-    $('ic-letter').textContent = gr; $('ic-letter').setAttribute('aria-label', `letter ${gr}`);
+    const dg = gr.length > 1; // digraph fusion intro (words-board 3, note 23): s + h slide together into one sky tile
+    $('ic-letter').classList.toggle('dg', dg); $('ic-letter').classList.remove('fused');
+    if (dg) { $('ic-letter').innerHTML = [...gr].map(c => `<span class="fl">${c}</span>`).join(''); if (reduced()) $('ic-letter').classList.add('fused'); }
+    else $('ic-letter').textContent = gr;
+    $('ic-letter').setAttribute('aria-label', dg ? `two letters, one sound: ${gr}` : `letter ${gr}`);
     const P = $('ic-pic'); P.hidden = !word;
     if (word) { P.innerHTML = `<span class="emoji">${pic}</span><span class="pw">${picWordHtml(word, gr)}</span>`; P.setAttribute('aria-label', word); }
     const snd = soundClip(g, audio);
-    const prompt = () => say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd, 'm-tap-it');
+    const prompt = () => dg ? say(`Two letters, one sound: <b>${gr}</b>. Tap it!`, 'm-two-letters', snd, 'm-tap-it')
+      : say(`This letter says <b>${gr}</b>. Tap it!`, 'm-letter-says', snd, 'm-tap-it');
     $('ic-letter').onclick = () => { audio.stop(); audio.play(snd); run.taps++; };
     P.onclick = () => { audio.stop(); audio.play(snd).then(() => word && audio.play(`pic-${word}`)); run.taps++; };
     $('ic-replay').onclick = () => { audio.stop(); prompt(); };
     $('ic-next').onclick = () => { record({ skill: `intro:${g}`, itemId: g, correct: true, firstAttempt: true, scored: false, taps: run.taps }); finish(); };
     $('ls-again').onclick = $('ic-replay').onclick;
-    pebbles(1, 0); prompt();
+    pebbles(1, 0);
+    if (dg && !reduced()) { $('ls-bubble').innerHTML = 'Watch!'; setTimeout(() => { if (!run) return; $('ic-letter').classList.add('fused'); setTimeout(() => run && prompt(), 700); }, 700); }
+    else prompt();
   }
 
   // ---- 1c tracing ----
@@ -66,21 +73,19 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       if (!st.done && st.k > 0) sv('path', { class: 'ink', d: pathD(strokes[st.stroke].slice(0, st.k + 1)) }, inkG);
     }
     const toLetter = e => { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; };
-    function demo() { // ghost dot shows the stroke order once (skipped with reduced motion)
-      if (reduced()) return Promise.resolve();
-      return strokes.reduce((p, P) => p.then(() => new Promise(res => { let i = 0; const step = () => { if (!run) return res(); if (i >= P.length) { ghost.setAttribute('cx', -50); return res(); }
-        ghost.setAttribute('cx', P[i][0]); ghost.setAttribute('cy', P[i][1]); i += 2; requestAnimationFrame(step); }; step(); })), Promise.resolve());
-    }
-    svg.onpointerdown = e => { if (!run || run.busy) return; const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) svg.setPointerCapture?.(e.pointerId); e.preventDefault(); };
+    // Finger guide (Uiux r4): the soft blue dot appears only once a finger is down, riding the ink head — it never
+    // sits on top of the green start dot before the child has touched.
+    const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
+    svg.onpointerdown = e => { if (!run || run.busy) return; const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { svg.setPointerCapture?.(e.pointerId); guide(true); } e.preventDefault(); };
     svg.onpointermove = e => {
       if (!dragging || !run) return; const [x, y] = toLetter(e), st = tracer.move(x, y);
       lanes.forEach((ln, i) => ln.classList.toggle('off', i === st.stroke && !st.onPath));
       if (!st.onPath && !run.offSaid) { run.offSaid = true; say('Back on the dots!', 'm-back-on'); setTimeout(() => run && (run.offSaid = false), 2500); }
       if (st.strokeDone) { dragging = false; drawMarks(); }
-      drawInk();
+      drawInk(); guide(dragging);
       if (st.letterDone) done();
     };
-    svg.onpointerup = svg.onpointercancel = () => { dragging = false; tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
+    svg.onpointerup = svg.onpointercancel = () => { dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
     $('tr-undo').onclick = () => { tracer.undo(); drawInk(); drawMarks(); };
     function done() {
       rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { delayMs: 300 });
@@ -95,9 +100,9 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); // automated play-through only
       return strokes[st.stroke].filter((_, i) => i % 3 === 0 || i === strokes[st.stroke].length - 1).map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]); };
     $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => finish();
-    $('ls-again').onclick = () => { audio.stop(); say('Start at the green dot and follow me!', 'm-trace-start'); };
+    $('ls-again').onclick = () => { audio.stop(); say('Start at the green dot and follow the arrows!', 'm-trace-start'); };
     tray(); drawMarks(); drawInk(); pebbles(TRACE_REPS, 0);
-    run.busy = true; say('Start at the green dot and follow me!', 'm-trace-start').then(demo).then(() => run && (run.busy = false));
+    say('Start at the green dot and follow the arrows!', 'm-trace-start');
   }
 
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }

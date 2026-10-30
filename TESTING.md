@@ -37,6 +37,10 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `activity=star&word=the` | Star Word screen (meet the word, then 3 scored "find it" rounds) |
 | `activity=sentence&sentence=map-mat` | star word in a sentence: tap star chips, slide decodable words, then "Read it all" |
 | `parent=1` | open the Grown-ups area directly (in the app: press and hold the map gear for 2 s) |
+| `activity=family&rime=ap` | word family: tap-to-place or drag onsets in front of a fixed rime |
+| `level=6&word=ship` | digraph word: one joined sky "sh" tile, one slider stop per sound |
+| `activity=intro&gpc=sh` | digraph fusion intro: s + h slide together into one sky tile |
+| `reducedMotion=1` | act as if the device asks for reduced motion (grown-ups setting On/Off still wins) |
 | `minutes=5..10` | session length target (default 7) |
 | `direct=1` | word screen only (implied by `level=` / `word=`) |
 | `cards=0` | no printed word-card check for words without a picture check |

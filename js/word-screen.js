@@ -1,5 +1,5 @@
 // Word screen controller (spec §3.5): tiles + markers + Blend Slider -> picture check -> reveal.
-import { createSweep, attached } from './core.js';
+import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard } from './mastery.js';
 import { wordLayout, layoutFor } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip,
@@ -12,7 +12,7 @@ const picHtml = pic => pic?.startsWith('#') ? `<svg viewBox="0 0 120 100"><use h
 export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {} }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
   let runDone = null, trial = null, sweepStart = null, blendEndAt = 0;
-  let checkTrial = 0, entry, level, ms, layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
+  let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
   const say = (bubbleText, clip) => { $('bubble').textContent = bubbleText; return clip ? audio.play(clip.id, clip) : Promise.resolve(); };
@@ -24,10 +24,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
   }
   function render() {
-    const w = entry.w; ms = markersFor(w, level, cfg.markerOpts); layout = wordLayout(w.length, layoutFor(stage.info));
-    tiles.replaceChildren(...[...w].map((ch, i) => {
-      const t = el('button', 'tile L', caseFor(ch, cfg.tileCase)); t.style.left = layout.tileLeft(i) + 'px'; t.style.width = layout.tileW + 'px'; t.style.fontSize = Math.round(Math.min(92, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
-      t.setAttribute('aria-label', ch); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
+    const w = entry.w, ids = entry.parse?.split(' '); ms = markersFor(w, level, { ...cfg.markerOpts, ids }); layout = wordLayout(w.length, layoutFor(stage.info));
+    units = graphemeUnits(w, ids); // a digraph is one joined sky tile (words-board 3, note 20)
+    tiles.replaceChildren(...units.map((u, i) => {
+      const dg = u.b - u.a > 1, t = el('button', 'tile L' + (dg ? ' dg' : ''), caseFor(u.text, cfg.tileCase));
+      t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
+      t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
     }));
     mk.replaceChildren(...ms.map((m, i) => {
       const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="34" height="34"><use href="#wave"/></svg></div>' : '<div class="bar"></div>');
@@ -47,17 +49,17 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   }
   function light(lit, glowIdx) {
     const litLetters = new Set(lit.flatMap(i => range(ms[i].start, ms[i].end)));
-    [...tiles.children].forEach((t, i) => t.classList.toggle('lit', litLetters.has(i)));
+    [...tiles.children].forEach((t, i) => t.classList.toggle('lit', range(units[i].a, units[i].b).some(k => litLetters.has(k))));
     [...mk.children].forEach((m, i) => { m.classList.toggle('lit', lit.includes(i)); if (i === glowIdx) pulse(m); });
   }
   const range = (a, b) => Array.from({ length: b - a }, (_, i) => a + i);
 
   function tapLetter(i) {
-    const ch = entry.w[i], clip = clipForTap(mode, 'letter', ch); audio.stop(); audio.play(clip.id, clip);
-    const t = tiles.children[i]; pulse(t); caption(audio.byId.get(clip.id)?.text ?? ch, layout.tileLeft(i) + layout.tileW / 2, tiles.offsetTop - 40);
+    const u = units[i], dg = u.b - u.a > 1, clip = dg ? { id: `snd-${u.id}`, rate: 1 } : clipForTap(mode, 'letter', u.text); audio.stop(); audio.play(clip.id, clip); // a digraph never says its letter names
+    const t = tiles.children[i]; pulse(t); caption(audio.byId.get(clip.id)?.text ?? u.text, layout.tileLeft(u.a) + ((u.b - u.a) * layout.cell - layout.gap) / 2, tiles.offsetTop - 40);
   }
   function tapMarker(i) {
-    const m = ms[i], clip = m.type === 'dot' ? clipForTap(mode, 'dot', m.text) : clipForMarker(m, 'normal');
+    const m = ms[i], clip = m.type === 'dot' ? clipForTap(mode, 'dot', m.id ?? m.text) : clipForMarker(m, 'normal');
     audio.stop(); audio.play(clip.id, clip); pulse(mk.children[i]);
     const b = layout.markerBox(m); caption(audio.byId.get(clip.id)?.text ?? m.text, b.left + b.width / 2, tiles.offsetTop - 40);
   }

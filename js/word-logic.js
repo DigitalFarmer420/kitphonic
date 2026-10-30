@@ -15,8 +15,8 @@ export const markersFor = (w, level, opts) => markers(w, level, opts);
 // Which clip a slider marker plays. stretch: 'long'|'normal'|'short'|undefined.
 export function clipForMarker(m, stretch) {
   if (m.type === 'bar') return { id: `rime-${m.text}`, rate: stretch === 'short' ? 1.25 : 1 };
-  const held = stretch === 'long' && m.stretchy && STRETCHY.has(m.text);
-  return { id: held ? `snd-${m.text}-held` : `snd-${m.text}`, rate: stretch === 'short' ? 1.25 : 1 };
+  const id = m.id ?? m.text, held = stretch === 'long' && m.stretchy && STRETCHY.has(id);
+  return { id: held ? `snd-${id}-held` : `snd-${id}`, rate: stretch === 'short' ? 1.25 : 1 };
 }
 export function clipForTap(mode, target, letter) {
   const r = tapResult(mode, target, letter);
@@ -43,7 +43,7 @@ export function reshuffle(arr, rand = Math.random) {
 
 const allPics = () => {
   const m = new Map(PICTURE_POOL.map(p => [p.text, p.pic]));
-  for (const lv of [2, 3, 4]) for (const e of WORDS[lv]) if (e.pic) m.set(e.w, e.pic);
+  for (const [lv, list] of Object.entries(WORDS)) if (+lv >= 2) for (const e of list) if (e.pic) m.set(e.w, e.pic);
   return m;
 };
 const phonemeMap = () => {

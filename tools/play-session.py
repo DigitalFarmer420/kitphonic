@@ -51,6 +51,17 @@ def main():
                     pg.mouse.move(*pts[0]); pg.mouse.down()
                     for x, y in pts[1:]: pg.mouse.move(x, y); pg.wait_for_timeout(12)
                     pg.mouse.up(); pg.wait_for_timeout(250)
+            elif scr == 'family':
+                st = pg.evaluate("() => { const r = kitphonic.familyScreen.run; return r && { busy: !!r.busy, left: [...document.querySelectorAll('#fm-tray .ftile:not(.made)')].length } }")
+                if not st or st['busy'] or not st['left']: pg.wait_for_timeout(300); continue
+                t = pg.locator('#fm-tray .ftile:not(.made)').first
+                if st['left'] % 2:  # alternate: drag, then tap-to-place
+                    ab = t.bounding_box(); z = pg.locator('#fm-slot').bounding_box()
+                    pg.mouse.move(ab['x'] + ab['width'] / 2, ab['y'] + ab['height'] / 2); pg.mouse.down()
+                    for k in range(1, 21): pg.mouse.move(ab['x'] + ab['width'] / 2 + (z['x'] + z['width'] / 2 - ab['x'] - ab['width'] / 2) * k / 20, ab['y'] + ab['height'] / 2 + (z['y'] + z['height'] / 2 - ab['y'] - ab['height'] / 2) * k / 20); pg.wait_for_timeout(20)
+                    pg.mouse.up()
+                else: t.click(); pg.wait_for_timeout(200); pg.locator('#fm-slot').click()
+                pg.wait_for_timeout(800)
             elif scr == 'star':
                 st = pg.evaluate("() => { const r = kitphonic.starScreen.run; return r && { busy: !!r.busy, w: r.star.w, cards: document.querySelectorAll('#st-cards .wcard2').length } }")
                 if not st or st['busy'] or not st['cards']: pg.wait_for_timeout(300); continue
@@ -59,7 +70,7 @@ def main():
                 st = pg.evaluate("() => { const r = kitphonic.sentenceScreen.run; return r && { i: r.i, kind: r.tokens[r.i]?.kind, blend: !!r.ms, read: !document.getElementById('sn-read').disabled, reading: !!r.reading } }")
                 if not st or st['reading']: pg.wait_for_timeout(400); continue
                 if st['read']: pg.locator('#sn-read').click(); pg.wait_for_timeout(800); continue
-                if st['kind'] == 'star': pg.wait_for_timeout(500); pg.locator('#sn-strip .chip').nth(st['i']).click(); pg.wait_for_timeout(900); continue
+                if st['kind'] == 'star': pg.wait_for_timeout(500); pg.locator('#sn-strip .wd').nth(st['i']).click(); pg.wait_for_timeout(900); continue
                 if st['blend'] and pg.locator('#sn-handle').is_visible():
                     hb = pg.locator('#sn-handle').bounding_box(); tb = pg.locator('#sn-tiles .tile').last.bounding_box()
                     y = hb['y'] + hb['height'] / 2; x0 = hb['x'] + hb['width'] / 2; x1 = tb['x'] + tb['width'] + 8

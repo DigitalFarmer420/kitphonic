@@ -4,7 +4,11 @@
 //   3. browser speech  (speechSynthesis, manifest `tts` text) — placeholder voice only
 //   4. soft tone        (Web Audio) when no voice exists (e.g. headless test browsers)
 // Every play is logged to window.__kitAudioLog for tests/debugging.
-export async function createAudio({ base = 'audio/', onClip = () => {} } = {}) {
+// speechRate(): the grown-ups 'Kit's talking speed' (0.85 / 1 / 1.15). It applies to spoken words and sentences
+// (Kit's lines, words, star words, sentences, picture words) but never to letter sounds or the slider's phonemes,
+// whose timing is part of the blending design.
+export const SPOKEN = /^(m-|word-|star-|sent-|pic-)/;
+export async function createAudio({ base = 'audio/', onClip = () => {}, speechRate = () => 1 } = {}) {
   const manifest = await (await fetch(base + 'manifest.json')).json();
   const byId = new Map(manifest.clips.map(c => [c.id, c]));
   const log = (window.__kitAudioLog = []);
@@ -61,6 +65,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {} } = {}) {
     async play(id, { rate = 1, delayMs = 0 } = {}) {
       const my = gen; if (delayMs) await wait(delayMs); if (my !== gen) return;
       const c = byId.get(id); if (!c) { console.warn('unknown clip', id); return; }
+      if (SPOKEN.test(id)) rate *= speechRate();
       const buf = await load(id);
       const via = buf ? (c.take ? 'take' : 'file') : hasSpeech() && c.tts ? 'tts' : 'tone';
       log.push({ id, via, rate, t: Math.round(performance.now()) }); onClip(c, via);

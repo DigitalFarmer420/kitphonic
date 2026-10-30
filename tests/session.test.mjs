@@ -38,6 +38,7 @@ test('every plan: 5–10 minutes, untaught-sound check, targets on offer, review
     assert.equal(planCost(p.items), p.cost);
     for (const it of p.items) {
       if (it.type === 'sentence') for (const t of it.sentence.tokens) if (t.kind === 'word') for (const g of parseIds(t.entry)) assert.ok(known.has(g), `${tag}: sentence ${it.sentence.id} uses untaught ${g}`);
+      if (it.type === 'family') for (const x of it.family.words) for (const g of x.ids) assert.ok(known.has(g), `${tag}: family ${it.family.rime} uses untaught ${g}`);
       if (it.type === 'words') for (const w of it.words) for (const g of parseIds(w)) assert.ok(known.has(g), `${tag}: ${w.w} uses untaught ${g}`);
       if (it.type === 'letters') {
         assert.ok(it.pool.length >= 3 && it.pool.length <= 6, `${tag}: pool ${it.pool}`);
@@ -87,4 +88,16 @@ test('star words are introduced (scored finds) before they appear in sentences',
   const p2 = planSession(met, { now, rand: rng(1), minutes: 10 });
   const sent = p2.items.find(i => i.type === 'sentence'); assert.ok(sent, 'sentence once "the" is introduced');
   assert.ok(sent.sentence.stars.every(w => w === 'the'));
+});
+
+test('word families open with CVC words: taught letters only, 2-4 words, fixed rime', async () => {
+  const { servableFamilies, allFamilies } = await import('../js/families.js');
+  assert.ok(allFamilies().every(f => f.words.every(x => x.w.endsWith(f.rime) && x.w.length === 3)));
+  const known = new Set(['m', 's', 'a', 't']);
+  const fs = servableFamilies(known); assert.deepEqual(fs.map(f => f.rime), ['at']);
+  assert.ok(fs[0].words.every(x => x.ids.every(g => known.has(g))));
+  const late = planSession(seedProgress(STOPS.length, { now }), { now, rand: rng(2), minutes: 10 });
+  assert.ok(late.items.some(i => i.type === 'family'), 'a family once L2 is open');
+  const early = planSession(seedProgress(3, { now }), { now, rand: rng(2), minutes: 10 });
+  assert.ok(!early.items.some(i => i.type === 'family'), 'no families before CVC words');
 });

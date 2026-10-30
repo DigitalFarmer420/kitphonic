@@ -19,6 +19,8 @@ import { createMapScreen } from './map-screen.js';
 import { createLessonScreen } from './lesson-screen.js';
 import { createStarScreen, createSentenceScreen } from './star-screen.js';
 import { createParentScreen } from './parent-screen.js';
+import { createFamilyScreen } from './family-screen.js';
+import { allFamilies } from './families.js';
 import { allSentences } from './sentences.js';
 
 const cfg = configFromUrl(location.search);
@@ -26,12 +28,18 @@ const $ = id => document.getElementById(id);
 const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
-const audio = await createAudio({ base: 'audio/' });
+// ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
+const settings = createSettings(window.localStorage, undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
+const audio = await createAudio({ base: 'audio/', speechRate: () => settings.audioRate() });
+// Reduced motion app-wide: a stage class stops CSS animation/transitions; screens also skip drift, path drawing,
+// confetti, the ghost hand and demos via settings.reducedMotion().
+const applyMotion = () => $('stage').classList.toggle('rm', settings.reducedMotion());
+applyMotion(); settings.onChange(k => (k === 'reducedMotion' || k === '*') && applyMotion());
+globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', applyMotion);
 // Local only (spec §3.9). Dev ?progress=N uses a seeded in-memory log so real progress is never touched.
 const storage = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
 const store = createStore(storage);
 let sessionId = null;
-const settings = createSettings(window.localStorage);
 const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; };
 const log = r => store.log({ ...r, sessionId });
 const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mode: no taught-GPC filter on word cards
@@ -45,6 +53,7 @@ const screen = createWordScreen({
 const letters = createLettersScreen({ audio, cfg, rand, stage, settings, record: log, onHome: () => goHome() });
 const lesson = createLessonScreen({ audio, stage, settings, rand, record: log, onHome: () => goHome() });
 const starScreen = createStarScreen({ audio, rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
+const familyScreen = createFamilyScreen({ audio, stage, settings, rand, cfg, record: log, onHome: () => goHome() });
 const sentenceScreen = createSentenceScreen({ audio, stage, rand, cfg, record: log, onHome: () => goHome() });
 
 const mapScreen = createMapScreen({ audio, stage, settings, getMap: () => mapState(store.all()), getResponses: () => store.all(),
@@ -53,7 +62,7 @@ function showMap(opts) { show('map'); mapScreen.render(opts); }
 const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(),
   onClose: () => showMap(), onReset: () => store.clear() });
 function openParent() { audio.stop(); show('parent'); parent.open(); }
-function goHome() { audio.stop(); letters.stop(); lesson.stop(); session = null; showMap(); }
+function goHome() { audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {
   const before = session?.mapBefore ?? null, after = mapState(store.all());
   session = null;
@@ -88,6 +97,8 @@ function runNext() {
     show('lesson'); lesson.start({ activity: it.activity, gpc: it.gpc, onComplete: () => { session?.stickers.push(it.activity === 'trace' ? '✏️' : '🔤'); runNext(); } });
   } else if (it.type === 'star') {
     show('star'); starScreen.start({ word: it.word, onComplete: () => { session?.stickers.push('⭐'); runNext(); } });
+  } else if (it.type === 'family') {
+    show('family'); familyScreen.start({ family: it.family, onComplete: () => { session?.stickers.push('⭐'); runNext(); } });
   } else if (it.type === 'sentence') {
     show('sentence'); sentenceScreen.start({ sentence: it.sentence, onComplete: () => { session?.stickers.push('📖'); runNext(); } });
   } else runNext();
@@ -95,6 +106,7 @@ function runNext() {
 function startActivity(activity) { // dev: one letter game (or ?activity=intro|trace&gpc=s)
   sessionId ??= `s-${Date.now()}`;
   if (activity === 'star') { show('star'); return starScreen.start({ word: cfg.word ?? 'the', onComplete: () => allDone([]) }); }
+  if (activity === 'family') { show('family'); const fs = allFamilies(); return familyScreen.start({ family: fs.find(f => f.rime === cfg.rime) ?? fs[0], onComplete: () => allDone([]) }); }
   if (activity === 'sentence') { show('sentence'); const ss = allSentences(); return sentenceScreen.start({ sentence: ss.find(x => x.id === cfg.sentence) ?? ss[0], onComplete: () => allDone([]) }); }
   if (activity === 'intro' || activity === 'trace') { show('lesson'); return lesson.start({ activity, gpc: cfg.gpc ?? 's', onComplete: () => allDone([]) }); }
   show('letters');
@@ -120,7 +132,7 @@ $('speaker').onclick = async () => { // sound check + silent-mode tip
 };
 $('done-home').onclick = () => showMap();
 
-window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, get session() { return session; },
+window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, get session() { return session; },
   map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
 if (cfg.parent) openParent(); // dev: ?parent=1 skips the gate
 else if (cfg.levelup) { const m = mapState(store.all()); if (m.index > 0) { show('levelup'); mapScreen.levelUp(m.stops[m.index - 1], { onBack: () => showMap({ drawFrom: m.index - 1 }) }); } else showMap(); } // dev

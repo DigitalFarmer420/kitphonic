@@ -1,10 +1,10 @@
 // Star words (design/words-board 4, review R6). Two screens:
 //  - Star Word: meet a star (tricky) word — the irregular part is marked gold — then find it among printed words.
 //    The finds are scored (star:<w>) so star words get mastery + spaced review like everything else.
-//  - Sentence: a strip of word chips. Star words are gold: tap to hear, no slider. Decodable words use tiles + the
+//  - Sentence: one line of words that wraps like text (tiles only while blending). Star words are gold: tap to hear, no slider. Decodable words use tiles + the
 //    slider (one stop per sound; passed sounds turn sage). "Read it all" unlocks at the end: karaoke + picture.
 import { STAR_WORDS, WORDS } from './content.js';
-import { markers, createSweep } from './core.js';
+import { markers, markerPositions, createSweep, graphemeUnits } from './core.js';
 import { wordLayout, layoutFor } from './layout.js';
 import { clipForMarker, clipForBlend, shuffle, caseFor } from './word-logic.js';
 import { guessGuard } from './mastery.js';
@@ -62,34 +62,30 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   let run = null, dragging = null;
   const say = (t, ...clips) => { $('sn-bubble').innerHTML = t; return clips.reduce((p, c) => p.then(() => run && audio.play(c)), Promise.resolve()); };
   const chips = () => [...$('sn-strip').children];
-  function paint() { chips().forEach((c, i) => { c.classList.toggle('cur', i === run.i); c.classList.toggle('done', i < run.i && run.tokens[i].kind === 'word'); }); }
+  function paint() { chips().forEach((c, i) => { c.classList.toggle('cur', i === run.i); c.classList.toggle('done', i < run.i); }); }
+  // Landscape keeps the sentence on one centred line: shrink the type (not the 72 px tap height) until it fits.
+  function fitLine() {
+    const st = $('sn-strip'); chips().forEach(c => (c.style.fontSize = '')); if (stage.info.mode === 'portrait') return;
+    for (let fs = 44; fs >= 26 && st.scrollWidth > st.clientWidth + 1; fs -= 2) chips().forEach(c => (c.style.fontSize = fs + 'px'));
+  }
+  const blending = on => $('sentence').classList.toggle('blending', on);
   function next() {
     paint(); const t = run.tokens[run.i];
     if (!t) return allRead();
     if (t.kind === 'star') { // gold, tap to hear, no slider
-      $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
+      blending(false); $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
       say('Star word! Tap it.', 'm-star-tap');
     } else blendWord(t);
   }
-  // Never a lone chip on the last row: narrow the strip until the rows balance (or stop if that adds a row).
-  function balanceStrip() {
-    const st = $('sn-strip'); st.style.maxWidth = ''; st.style.marginInline = '';
-    const rows = () => { const m = new Map(); chips().forEach(c => m.set(c.offsetTop, (m.get(c.offsetTop) ?? 0) + 1)); return [...m.values()]; };
-    const even = r => Math.max(...r) - Math.min(...r) <= 1;
-    let r = rows(); if (r.length < 2 || even(r)) return;
-    const n = r.length; st.style.marginInline = 'auto'; let best = '';
-    for (let w = st.offsetWidth - 10; w > 200; w -= 10) { st.style.maxWidth = w + 'px'; r = rows(); if (r.length > n) break; if (even(r)) { best = st.style.maxWidth; break; } }
-    st.style.maxWidth = best;
-  }
   function blendWord(t) {
-    $('sn-bubble').innerHTML = 'Slide to read it!';
-    const w = t.entry.w; run.ms = markers(w, 3); run.layout = wordLayout(w.length, layoutFor(stage.info)); run.sweep = createSweep(run.ms, { gapMs: cfg.sweepGapMs ?? 180 }); run.t0 = null;
+    $('sn-bubble').innerHTML = 'Slide to read it!'; blending(true);
+    const w = t.entry.w, ids = t.entry.parse?.split(' '); run.ms = markers(w, 3, { ids }); run.layout = wordLayout(w.length, layoutFor(stage.info)); run.sweep = createSweep(run.ms, { gapMs: cfg.sweepGapMs ?? 180 }); run.t0 = null;
     const L = run.layout, tiles = $('sn-tiles'); tiles.replaceChildren();
-    [...w].forEach((ch, i) => { const d = el('div', 'tile L', caseFor(ch, cfg.tileCase)); d.style.left = L.tileLeft(i) + 'px'; d.style.width = L.tileW + 'px'; d.style.fontSize = Math.round(Math.min(84, L.tileW * .78)) + 'px'; tiles.append(d); });
+    graphemeUnits(w, ids).forEach(u => { const d = el('div', 'tile L' + (u.b - u.a > 1 ? ' dg' : ''), caseFor(u.text, cfg.tileCase)); d.style.left = L.tileLeft(u.a) + 'px'; d.style.width = (u.b - u.a) * L.cell - L.gap + 'px'; d.style.fontSize = Math.round(Math.min(84, L.tileW * .78)) + 'px'; tiles.append(d); });
     const tr = $('sn-track'), l = Math.max(8, L.track.left - 20), r = Math.min(L.stageW - 34, L.track.left + L.track.width + 20);
     tr.style.left = l + 'px'; tr.style.width = r - l + 'px'; run.trackLeft = l;
     tr.querySelectorAll('.tdot').forEach(d => d.remove());
-    run.ms.forEach((m, i) => { const d = el('div', 'tdot'); d.style.left = (L.xFromFrac((i + .5) / run.ms.length) - l) + 'px'; tr.append(d); });
+    markerPositions(run.ms).forEach(f => { const d = el('div', 'tdot'); d.style.left = (L.xFromFrac(f) - l) + 'px'; tr.append(d); }); // one stop per sound
     $('sn-slider').hidden = false; setKnob(0);
   }
   const setKnob = f => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px'; };
@@ -109,7 +105,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     if (run.ms) setKnob(run.sweep.position);
   }
   function allRead() { // "read it all" unlocks
-    $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; const b = $('sn-read'); b.disabled = false;
+    blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true; const b = $('sn-read'); b.disabled = false;
     say('Now read it all!', 'm-read-all');
   }
   async function readAll() {
@@ -131,15 +127,15 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
       $('sn-card').className = ''; $('sn-card').innerHTML = '<span class="q">?</span>'; $('sn-read').disabled = true;
       $('sn-pebbles').replaceChildren();
       $('sn-strip').replaceChildren(...sentence.tokens.map((t, i) => {
-        const c = el('button', 'chip L' + (t.kind === 'star' ? ' star' : ''), (t.kind === 'star' ? t.w : caseFor(t.w, cfg.tileCase)) + (t.punct ? `<span>${t.punct}</span>` : ''));
+        const c = el('button', 'wd L' + (t.kind === 'star' ? ' star' : ''), (t.kind === 'star' ? t.w : caseFor(t.w, cfg.tileCase)) + (t.punct ? `<span class="p">${t.punct}</span>` : ''));
         c.setAttribute('aria-label', t.w);
         c.onclick = () => { if (!run) return; audio.stop(); audio.play(t.clip); if (i === run.i && t.kind === 'star') { c.classList.add('done'); run.i++; setTimeout(next, 700); } };
         return c;
       }));
-      balanceStrip();
+      blending(false); fitLine();
       say("Let's read it together!", 'm-read-together').then(() => run && next());
     },
     get run() { return run; },
-    relayout() { if (!run) return; balanceStrip(); if (run.ms) blendWord(run.tokens[run.i]); },
+    relayout() { if (!run) return; fitLine(); if (run.ms) blendWord(run.tokens[run.i]); },
   };
 }

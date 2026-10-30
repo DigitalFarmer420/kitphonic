@@ -22,6 +22,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
     const s = parentSummary(getResponses());
     const chip = x => `<span class="pchip ${x.state}" title="${STATE_LABEL[x.state]}">${esc(x.skill.startsWith('sound:') ? (GPC[x.id]?.g ?? x.id) : x.id)}</span>`;
     $('pa-body').innerHTML = `
+      <p class="psum">Stop ${s.stop.index} of ${s.stop.of} · ${s.sessionsThisWeek} session${s.sessionsThisWeek === 1 ? '' : 's'} this week</p>
       <div class="pcard"><h3>Progress</h3>
         <p>On the map: stop <b>${s.stop.index}</b> of ${s.stop.of} (<b>${esc(s.stop.label)}</b>)</p>
         <p>This week: <b>${s.sessionsThisWeek}</b> sessions · about <b>${s.minutesThisWeek}</b> min</p>

@@ -1,0 +1,46 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Andika:wght@400;700&family=Nunito:wght@400;600;700;800&display=swap');
+*{box-sizing:border-box}body{margin:0;background:#fdf6ea;font:15px/1.4 Nunito,sans-serif;color:#3b2f28}
+.wrap{max-width:1000px;margin:0 auto;padding:16px 16px 40px}
+header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+h1{font-size:24px;margin:0;font-weight:800}.x{width:56px;height:56px;border-radius:16px;border:2px solid #eadfcd;background:#fff;font-size:26px;display:grid;place-items:center;color:#6b5a4d}
+.ex{font-size:12px;color:#9a8a7c;margin:-6px 0 12px}
+.cols{display:grid;gap:14px}@media(min-width:760px){.cols{grid-template-columns:1.1fr 1fr}}
+.card{background:#fff;border:2px solid #efe4d3;border-radius:20px;padding:16px}
+h2{font-size:17px;margin:0 0 10px;font-weight:800}h3{font-size:13px;margin:14px 0 6px;color:#7a6a5c;text-transform:uppercase;letter-spacing:.04em}
+.sum{display:flex;align-items:center;gap:14px;background:#fff7e6;border:2px solid #f3d99a}
+.stop{width:64px;height:64px;border-radius:50%;background:#f2b84b;display:grid;place-items:center;font:700 28px Andika;flex:none;box-shadow:0 4px 0 #d79a2a}
+.big{font-size:18px;font-weight:800}.muted{color:#7a6a5c;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.stat{background:#fdf6ea;border-radius:14px;padding:10px;text-align:center}.stat b{display:block;font-size:22px}.stat span{font-size:12px;color:#7a6a5c}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.t{min-width:46px;height:46px;padding:0 10px;border-radius:12px;display:grid;place-items:center;font:700 22px Andika;border:2px solid transparent}
+.practicing{background:#fdf0c4}.secure{background:#dcefd9}.mastered{background:#9cc79a;color:#21401f}.due{background:#f6d2c6;border-color:#e59a83}.none{background:#f4ede2;color:#b9ab9b}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px;font-size:12px;color:#5d4e42}.legend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px}
+.note{margin-top:12px;font-size:14px;background:#fdf6ea;border-radius:12px;padding:10px}
+.row{margin-bottom:14px}.lab{font-size:14px;font-weight:700;margin-bottom:6px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:#f4ede2;border-radius:14px;padding:4px;gap:4px}
+.seg div{height:48px;border-radius:11px;display:grid;place-items:center;font-weight:700;font-size:14px;color:#6b5a4d}
+.seg .on{background:#fff;color:#2f5a2c;box-shadow:0 0 0 2px #8fbf8c inset}
+.reset{margin-top:6px;height:48px;border-radius:14px;border:2px solid #e59a83;color:#b4533a;background:#fff;display:grid;place-items:center;font-weight:700;font-size:14px}
+.hint{font-size:12px;color:#9a8a7c;margin-top:6px}
+</style></head><body><div class="wrap">
+<header><h1>Grown-ups</h1><div class="x">×</div></header>
+<div class="ex">Mockup with example data</div>
+<div class="cols"><div>
+<div class="card sum"><div class="stop">a</div><div><div class="big">Stop 3 of 12 · learning “a”</div><div class="muted">Next: blending words like “sat”, “mat”</div></div></div>
+<div class="stats"><div class="stat"><b>4</b><span>sessions this week</span></div><div class="stat"><b>27</b><span>minutes</span></div><div class="stat"><b>12</b><span>words read</span></div></div>
+<div class="card" style="margin-top:14px"><h2>Sounds</h2>
+<div class="chips"><div class="t mastered">m</div><div class="t secure">s</div><div class="t due">t</div><div class="t practicing">a</div><div class="t none">p</div><div class="t none">i</div><div class="t none">n</div><div class="t none">sh</div></div>
+<h3>Star words</h3><div class="chips"><div class="t practicing">the</div><div class="t none">is</div><div class="t none">a</div></div>
+<div class="legend"><span><i class="practicing"></i>Practicing</span><span><i class="secure"></i>Secure</span><span><i class="mastered"></i>Mastered</span><span><i class="due" style="border:2px solid #e59a83"></i>Review due</span><span><i class="none"></i>Not yet</span></div>
+<div class="note"><b>Try at home:</b> point to things that start with /t/, like “tap” and “top”. Kit will review t next session.</div>
+</div></div>
+<div class="card"><h2>Settings</h2>
+<div class="row"><div class="lab">Session length</div><div class="seg"><div>5 min</div><div class="on">7 min</div><div>10 min</div></div></div>
+<div class="row"><div class="lab">Kit’s talking speed</div><div class="seg"><div>Slower</div><div class="on">Normal</div><div>Faster</div></div></div>
+<div class="row"><div class="lab">Reduce motion</div><div class="seg"><div class="on">Like device</div><div>On</div><div>Off</div></div></div>
+<div class="row"><div class="lab">Floating letters say</div><div class="seg"><div class="on">Sound /m/</div><div>Name “em”</div></div><div class="hint">Sounds first is best for early readers.</div></div>
+<div class="row" style="margin:0"><div class="reset">Reset progress…</div><div class="hint">Asks again before erasing anything.</div></div>
+</div></div></div></body></html>

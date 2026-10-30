@@ -13,6 +13,40 @@ export const LETTER_INFO = {
   i: { name: 'I', nameTts: 'eye', sound: 'i (itch)', soundTts: 'ih', heldTts: 'iiiih' },
   n: { name: 'N', nameTts: 'en',  sound: 'n', soundTts: 'nn',  heldTts: 'nnnnnn' },
   o: { name: 'O', nameTts: 'oh',  sound: 'o (top)', soundTts: 'aw', heldTts: 'awwww' },
+  // sets 3–5 (sequence.js)
+  d: { name: 'D', nameTts: 'dee', sound: 'd', soundTts: 'duh' },
+  f: { name: 'F', nameTts: 'eff', sound: 'f', soundTts: 'ff', heldTts: 'ffffff' },
+  c: { name: 'C', nameTts: 'see', sound: 'c (cat)', soundTts: 'kuh' },
+  k: { name: 'K', nameTts: 'kay', sound: 'k', soundTts: 'kuh' },
+  e: { name: 'E', nameTts: 'ee', sound: 'e (egg)', soundTts: 'eh', heldTts: 'ehhhh' },
+  u: { name: 'U', nameTts: 'you', sound: 'u (up)', soundTts: 'uh', heldTts: 'uhhhh' },
+  g: { name: 'G', nameTts: 'jee', sound: 'g (go)', soundTts: 'guh' },
+  r: { name: 'R', nameTts: 'ar', sound: 'r', soundTts: 'rr', heldTts: 'rrrrrr' },
+  h: { name: 'H', nameTts: 'aitch', sound: 'h', soundTts: 'hh' },
+  b: { name: 'B', nameTts: 'bee', sound: 'b', soundTts: 'buh' },
+  l: { name: 'L', nameTts: 'el', sound: 'l', soundTts: 'll', heldTts: 'llllll' },
+  // set 6: doubles say the same sound as the single letter; s can say /z/ (is, as)
+  ck: { sound: 'ck (duck)', soundTts: 'kuh', digraph: true },
+  ff: { sound: 'ff', soundTts: 'ff', heldTts: 'ffffff', digraph: true },
+  ll: { sound: 'll', soundTts: 'll', heldTts: 'llllll', digraph: true },
+  ss: { sound: 'ss', soundTts: 'ss', heldTts: 'ssssss', digraph: true },
+  s_z: { sound: 's says z (is)', soundTts: 'zz', heldTts: 'zzzzzz', noName: true },
+  // set 7
+  j: { name: 'J', nameTts: 'jay', sound: 'j', soundTts: 'juh' },
+  v: { name: 'V', nameTts: 'vee', sound: 'v', soundTts: 'vv', heldTts: 'vvvvvv' },
+  w: { name: 'W', nameTts: 'double you', sound: 'w', soundTts: 'wuh' },
+  x: { name: 'X', nameTts: 'ex', sound: 'x (box)', soundTts: 'ks' },
+  y: { name: 'Y', nameTts: 'why', sound: 'y (yes)', soundTts: 'yuh' },
+  z: { name: 'Z', nameTts: 'zee', sound: 'z', soundTts: 'zz', heldTts: 'zzzzzz' }, // ⚠️ 'zee' (US) vs 'zed' (UK) awaits the accent decision
+  zz: { sound: 'zz', soundTts: 'zz', heldTts: 'zzzzzz', digraph: true },
+  qu: { sound: 'qu (queen)', soundTts: 'kw', digraph: true },
+  // set 8 digraphs (words-board 3): two letters, one sound — no letter-name clip, never sounded out as /s/-/h/
+  sh: { sound: 'sh', soundTts: 'shh', heldTts: 'shhhhhh', digraph: true },
+  ch: { sound: 'ch', soundTts: 'ch', digraph: true },
+  th: { sound: 'th (thin)', soundTts: 'thh', heldTts: 'thhhhh', digraph: true },
+  th_v: { sound: 'th (that)', soundTts: 'the', heldTts: 'thhhhh', digraph: true },
+  ng: { sound: 'ng (ring)', soundTts: 'ng', heldTts: 'nggggg', digraph: true },
+  nk: { sound: 'nk (pink)', soundTts: 'nk', digraph: true },
 };
 
 // Letter-intro pictures (design/letters-board 1b): words that START with the sound (x: ends), rotated per visit so a
@@ -55,6 +89,12 @@ export const WORDS = {
     W('top', 't o p', { say: 'Top! Spin the top.' }), W('tip', 't i p', { say: 'Tip! The tip of my nose.' }),
     W('not', 'n o t', { say: 'Not! Not now.' }), W('pit', 'p i t', { say: 'Pit! A big pit.' }),
   ],
+  6: [ // digraph sh (sequence set 8; L5 = CVCC final blends is reserved): one joined sky tile, one slider stop per SOUND (ship = 3 stops)
+    W('ship', 'sh i p', { pic: '🚢', say: 'Ship! A big ship.' }), W('shop', 'sh o p', { pic: '🏪', say: 'Shop! A little shop.' }),
+    W('fish', 'f i sh', { pic: '🐟', say: 'Fish! A fish can swim.' }), W('dish', 'd i sh', { pic: '🍽️', say: 'Dish! A dish for dinner.' }),
+    W('cash', 'c a sh', { say: 'Cash! Money to spend.' }), W('shed', 'sh e d', { pic: '🛖', say: 'Shed! A garden shed.' }),
+    W('shut', 'sh u t', { say: 'Shut! Shut the door.' }), W('shot', 'sh o t', { say: 'Shot! What a good shot.' }),
+  ],
   4: [ // CCVC: starting blend; each blend consonant its own dot
     W('stop', 's t o p', { pic: '🛑', say: 'Stop!' }), W('spot', 's p o t', { pic: '🔴', say: 'A red spot!' }), // no minimal-pair pictures yet: reveal without check
     W('snap', 's n a p', { say: 'Snap! Snap your fingers.' }), W('spin', 's p i n', { say: 'Spin! Spin around.' }),
@@ -74,7 +114,8 @@ export const PICTURE_POOL = [
   { text: 'rat', pic: '🐀', ph: 'r a t' }, { text: 'mitt', pic: '🧤', ph: 'm i t' }, { text: 'cap', pic: '🧢', ph: 'c a p' },
   { text: 'fan', pic: '🪭', ph: 'f a n' }, { text: 'van', pic: '🚐', ph: 'v a n' }, { text: 'pen', pic: '🖊️', ph: 'p e n' },
   { text: 'fin', pic: '🦈', ph: 'f i n' }, { text: 'bin', pic: '🗑️', ph: 'b i n' }, { text: 'pig', pic: '🐷', ph: 'p i g' },
-  { text: 'tag', pic: '🏷️', ph: 't a g' }, { text: 'shop', pic: '🏪', ph: 'sh o p' }, { text: 'dot', pic: '⚫', ph: 'd o t' },
+  { text: 'tag', pic: '🏷️', ph: 't a g' }, { text: 'dot', pic: '⚫', ph: 'd o t' },
+  { text: 'chip', pic: '🍟', ph: 'ch i p' }, { text: 'chop', pic: '🪓', ph: 'ch o p' },
 ];
 for (const p of PICTURE_POOL) p.phonemes = p.ph.split(' ').map(id => GPC[id].phoneme);
 
@@ -128,7 +169,11 @@ export const MASCOT = {
   'm-tap-sounds': 'Tap a letter to hear its sound!',
   'm-letter-says': 'This letter says…',
   'm-tap-it': 'Tap it!',
-  'm-trace-start': 'Start at the green dot and follow me!',
+  'm-two-letters': 'Two letters, one sound!',
+  'm-family-pick': 'Pick a letter and put it in front of',
+  'm-family-done': 'You made the whole family!',
+  'm-family-more': 'Make another one!',
+  'm-trace-start': 'Start at the green dot and follow the arrows!',
   'm-back-on': 'Back on the dots!',
   'm-find-sound': 'Find…',
   'm-read-together': "Let's read it together!",

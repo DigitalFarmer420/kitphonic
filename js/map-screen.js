@@ -11,7 +11,7 @@ export const GATE_MS = 2000, LEVELUP_LOCK_MS = 1500;
 
 export function createMapScreen({ audio, stage, settings, getMap, getResponses, onGo, onParent = () => {}, onHome }) {
   let last = null, gateTimer = 0;
-  const reduced = () => settings.reducedMotion?.() || matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const reduced = () => settings.reducedMotion?.(); // 'auto' follows the device; On/Off from the grown-ups area win
 
   function render({ drawFrom = null } = {}) {
     const m = getMap(), info = stage.info, win = mapWindow(m.stops, m.index), pts = mapLayout(win, info);
