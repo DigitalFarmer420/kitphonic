@@ -18,6 +18,7 @@ export const CONFIG = {
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
   sweepGapMs: 180,
+  letterTapMode: undefined,     // Phase 2 letter activities: undefined = automatic (sound -> nameDot after L1 mastery)  (?letterMode=)
 };
 
 export function configFromUrl(search = '') {
@@ -34,5 +35,7 @@ export function configFromUrl(search = '') {
   if (q.get('skipHello') === '1') c.hello.show = false;
   c.seed = q.get('seed') ? +q.get('seed') : undefined;
   c.word = q.get('word') || undefined;
+  c.activity = q.get('activity') || undefined;
+  if (q.get('letterMode')) c.letterTapMode = q.get('letterMode');
   return c;
 }

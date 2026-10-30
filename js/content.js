@@ -90,6 +90,14 @@ export const MASCOT = {
   'm-all-done': 'All done for today. Great reading!',
   'm-demo-rule': 'Now letters say their names, and dots say their sounds!',
   'm-find-letter': 'Can you find…',
+  'm-hunt-sound': 'Find the letter that says…',
+  'm-tap-names': 'Tap a letter to hear its name!',
+  'm-new-letter': 'Here is a new letter!',
+  'm-yes': 'Yes!',
+  'm-find-word': 'Can you find the word…',
+  'm-tricky-part': 'This part is tricky. We learn it by heart.',
+  'm-level-up': 'You did it!',
+  'm-review': "Let's warm up with some sounds you know.",
   'm-thats': "That's…",
 };
 

@@ -1,7 +1,7 @@
 // Word screen controller (spec §3.5): tiles + markers + Blend Slider -> picture check -> reveal.
 import { createSweep, attached } from './core.js';
 import { guessGuard } from './mastery.js';
-import { wordLayout, PORTRAIT_TILES } from './layout.js';
+import { wordLayout, layoutFor } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip,
   makeChoices, reshuffle, needsCheck, caseFor } from './word-logic.js';
 
@@ -17,15 +17,16 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
   const say = (bubbleText, clip) => { $('bubble').textContent = bubbleText; return clip ? audio.play(clip.id, clip) : Promise.resolve(); };
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
-  const setHandle = f => { const x = layout.xFromFrac(f); handle.style.left = x + 'px'; fill.style.width = (x - layout.track.left) + 'px'; };
+  const trackBox = () => { const l = Math.max(8, layout.track.left - 20), r = Math.min(layout.stageW - 34, layout.track.left + layout.track.width + 20); return { left: l, width: r - l }; };
+  const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px'; };
 
   function renderPebbles() {
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
   }
   function render() {
-    const w = entry.w; ms = markersFor(w, level, cfg.markerOpts); layout = wordLayout(w.length, stage.info.portrait ? PORTRAIT_TILES : {});
+    const w = entry.w; ms = markersFor(w, level, cfg.markerOpts); layout = wordLayout(w.length, layoutFor(stage.info));
     tiles.replaceChildren(...[...w].map((ch, i) => {
-      const t = el('button', 'tile L', caseFor(ch, cfg.tileCase)); t.style.left = layout.tileLeft(i) + 'px'; t.style.width = layout.tileW + 'px'; t.dataset.i = i;
+      const t = el('button', 'tile L', caseFor(ch, cfg.tileCase)); t.style.left = layout.tileLeft(i) + 'px'; t.style.width = layout.tileW + 'px'; t.style.fontSize = Math.round(Math.min(92, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
       t.setAttribute('aria-label', ch); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
     }));
     mk.replaceChildren(...ms.map((m, i) => {
@@ -33,8 +34,8 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', `${m.type} ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
     }));
-    track.style.left = (layout.track.left - 20) + 'px'; track.style.width = (layout.track.width + 40) + 'px';
-    fill.style.left = '20px';
+    const tb = trackBox(); track.style.left = tb.left + 'px'; track.style.width = tb.width + 'px';
+    fill.style.left = '0px';
     $('card').className = ''; $('card').innerHTML = '<span class="q">?</span>';
     $('next').hidden = true; $('check').hidden = true;
     sweep = createSweep(ms, { gapMs: cfg.sweepGapMs }); setHandle(0); light([]);
@@ -62,10 +63,10 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
 
   // --- Blend Slider (pointer events; drift tolerance via core.attached) ---
   const toStage = e => stage.toStage(e);
-  const sliderY = () => $('slider').offsetTop + 36; // handle centre, whatever the orientation
+  const sliderY = () => $('slider').offsetTop + $('slider').offsetHeight / 2; // handle centre, whatever the orientation
   function onDown(e) {
     if (state !== 'slide') return;
-    const p = toStage(e), hx = layout.xFromFrac(sweep.position);
+    const p = toStage(e), hx = layout.knobX(sweep.position);
     if (Math.abs(p.x - hx) > 70 || !attached(p.y - sliderY(), 70)) return; // must grab the handle (64pt + padding)
     dragging = { id: e.pointerId }; handle.setPointerCapture?.(e.pointerId); e.preventDefault();
   }
@@ -168,5 +169,8 @@ export function createWordScreen({ audio, cfg, rand, stage, onDone, onHome, reco
     relayout() { if (entry && state === 'slide') render(); },
     start(list, lv) { words = list; level = lv; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
+    debugShow(what) { // automated layout checks only (tools/check-sizes.py)
+      if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }
+      if (what === 'revealed') { reveal(); $('next').hidden = false; } },
   };
 }

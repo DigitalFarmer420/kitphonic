@@ -8,9 +8,9 @@ html,body{margin:0;height:100%;background:#E9E1D5;overflow:hidden;font-family:'N
 .L{font-family:'Andika',sans-serif;font-weight:700;color:var(--ink);line-height:1}
 .emoji{font-family:'Noto Color Emoji','Apple Color Emoji','Segoe UI Emoji',sans-serif;line-height:1}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-.btn{width:64px;height:64px;border-radius:20px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted)}
+.btn{width:72px;height:72px;border-radius:22px;background:#fff;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:30px;color:var(--muted)}
 .btn.coral{color:var(--coral)}
-.top{position:absolute;top:18px;left:22px;right:22px;display:flex;justify-content:space-between;align-items:center;z-index:5}
+.top{position:absolute;top:14px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:center;z-index:5}
 .path{display:flex;gap:10px;align-items:center}.peb{width:22px;height:22px;border-radius:50%;background:var(--line)}
 .peb.on{background:var(--honey)}.peb.now{background:#fff;border:4px solid var(--honey)}
 .bubble{background:#fff;border:2px solid var(--line);border-radius:22px;padding:12px 18px;font-size:20px;font-weight:700;max-width:330px}
@@ -19,20 +19,23 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .pulse{animation:pulse .5s ease-out}
 @keyframes pulse{0%{transform:scale(1)}40%{transform:scale(1.08)}100%{transform:scale(1)}}
 
+/* ---- sizes (stage px). Smallest stage scale is ~0.9, so 72 -> >=64 screen px, knob 90 -> >=80 (usability pass) ---- */
 /* hello */
 #hello{background:radial-gradient(circle at 50% 42%,#fff 0,var(--cream) 62%)}
-#hello .kitwrap{position:absolute;left:50%;top:70px;transform:translateX(-50%);width:220px;height:220px}
+#hello .kitwrap{position:absolute;left:50%;top:calc(var(--h) * .1);transform:translateX(-50%);width:220px;height:220px}
+#hello .kitwrap>svg:first-child{width:100%;height:100%}
 #hello .paw{position:absolute;right:-34px;top:96px;width:76px;height:76px;transform-origin:20% 90%;animation:wave 1.4s ease-in-out infinite}
 @keyframes wave{0%,60%,100%{transform:rotate(0)}15%,45%{transform:rotate(-22deg)}30%{transform:rotate(14deg)}}
-#hello .bubble{position:absolute;left:50%;top:300px;transform:translateX(-50%);font-size:24px;white-space:nowrap}
-#play{position:absolute;left:50%;top:380px;transform:translateX(-50%);width:96px;height:96px;border-radius:50%;background:var(--sage);
-  box-shadow:0 6px 0 var(--saged);display:flex;align-items:center;justify-content:center}
+#hello .bubble{position:absolute;left:50%;top:calc(var(--h) * .1 + 236px);transform:translateX(-50%);font-size:24px;white-space:nowrap}
+#play{position:absolute;left:50%;bottom:calc(var(--h) * .12);transform:translateX(-50%);width:132px;height:132px;border-radius:50%;background:var(--sage);
+  box-shadow:0 7px 0 var(--saged);display:flex;align-items:center;justify-content:center}
+#play svg{width:60px;height:60px}
 #play:active{transform:translateX(-50%) translateY(3px);box-shadow:0 3px 0 var(--saged)}
-#speaker{position:absolute;right:22px;bottom:22px;width:64px;height:64px;border-radius:20px;background:#fff;border:2px solid var(--line);font-size:26px}
-#tip{position:absolute;right:96px;bottom:30px;background:#5B4A40;color:#fff;font-size:14px;font-weight:700;padding:8px 12px;border-radius:12px;max-width:260px}
+#speaker{position:absolute;right:18px;bottom:18px;width:72px;height:72px;border-radius:22px;background:#fff;border:2px solid var(--line);font-size:30px}
+#tip{position:absolute;right:100px;bottom:26px;background:#5B4A40;color:#fff;font-size:14px;font-weight:700;padding:8px 12px;border-radius:12px;max-width:260px}
 
-/* word screen */
-#card{position:absolute;top:92px;left:370px;width:220px;height:150px;border-radius:22px;border:2px solid var(--line);
+/* word screen (base = tall landscape, 960 x 540..760). Mascot + card anchored top, word/markers/slider anchored bottom. */
+#card{position:absolute;top:92px;left:50%;margin-left:-110px;width:220px;height:calc(116px + min(34px, (var(--h) - 540px) * .5));border-radius:22px;border:2px solid var(--line);
   background:linear-gradient(135deg,var(--cream2),#fff,var(--cream2));display:flex;align-items:center;justify-content:center;overflow:hidden}
 #card .q{font-family:'Fredoka';font-size:70px;color:#E3CFAF;animation:shimmer 2.4s ease-in-out infinite}
 @keyframes shimmer{50%{opacity:.55}}
@@ -41,34 +44,34 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 @keyframes pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
 .sparkle{position:absolute;color:var(--honey);font-size:18px;animation:spark .9s ease-out forwards}
 @keyframes spark{0%{opacity:0;transform:translateY(6px) scale(.6)}30%{opacity:1}100%{opacity:0;transform:translateY(-22px) scale(1)}}
-#word-mascot{left:40px;top:96px}
+#word-mascot{left:40px;top:100px}
 #word-mascot .bubble{max-width:215px;font-size:18px}
 #tiles,#markers{position:absolute;left:0;right:0}
-#tiles{top:262px;height:136px}
-.tile{position:absolute;top:0;width:120px;height:136px;border-radius:28px;background:#fff;border:3px solid var(--line);
+#tiles{bottom:198px;height:130px}
+.tile{position:absolute;top:0;width:120px;height:100%;border-radius:28px;background:#fff;border:3px solid var(--line);
   display:flex;align-items:center;justify-content:center;font-size:92px;box-shadow:0 5px 0 var(--line);transition:box-shadow .15s,border-color .15s}
 .tile.lit{border-color:var(--honey);box-shadow:0 5px 0 var(--honey)}
-#markers{top:418px;height:68px}
-.marker{position:absolute;top:0;height:68px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
-.marker .dot{width:68px;height:68px;border-radius:50%;background:var(--sky);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 var(--skyd)}
-.marker .bar{width:100%;height:68px;border-radius:34px;background:var(--sage);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 var(--saged)}
+#markers{bottom:116px;height:72px}
+.marker{position:absolute;top:0;height:72px;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+.marker .dot{width:72px;height:72px;border-radius:50%;background:var(--sky);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 var(--skyd)}
+.marker .bar{width:100%;height:72px;border-radius:36px;background:var(--sage);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 var(--saged)}
 .marker.lit .dot,.marker.lit .bar{box-shadow:0 0 0 7px rgba(242,185,80,.35),0 4px 0 var(--honey)}
 .caption{position:absolute;font-family:'Fredoka';font-weight:600;font-size:26px;color:var(--skyd);transform:translateX(-50%);white-space:nowrap;pointer-events:none;animation:cap 1.2s ease-out forwards}
 @keyframes cap{0%{opacity:0}15%{opacity:1}75%{opacity:1}100%{opacity:0}}
-#slider{position:absolute;top:510px;height:72px;left:0;right:0}
-#track{position:absolute;top:28px;height:16px;border-radius:8px;background:var(--line)}
+#slider{position:absolute;bottom:14px;height:90px;left:0;right:0}
+#track{position:absolute;top:37px;height:16px;border-radius:8px;background:var(--line)}
 #fill{position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:var(--honey);width:0}
 #track::after{content:'▶';position:absolute;right:-26px;top:-7px;color:#CDBBA3;font-size:20px}
-#handle{position:absolute;top:0;width:72px;height:72px;margin-left:-36px;border-radius:50%;background:#fff;border:4px solid var(--honey);
-  box-shadow:0 4px 0 #D9A23C;display:flex;align-items:center;justify-content:center;color:var(--honey);font-size:26px;touch-action:none}
-#handle::before{content:'';position:absolute;inset:-24px} /* invisible padding (spec: 64pt + padding) */
+#handle{position:absolute;top:0;width:90px;height:90px;margin-left:-45px;border-radius:50%;background:#fff;border:5px solid var(--honey);
+  box-shadow:0 5px 0 #D9A23C;display:flex;align-items:center;justify-content:center;color:var(--honey);font-size:32px;touch-action:none}
+#handle::before{content:'';position:absolute;inset:-20px} /* invisible padding (spec: 64pt + padding) */
 #handle.demo{transition:left 1.6s linear}
-#next{position:absolute;right:40px;bottom:30px;width:96px;height:96px;border-radius:50%;background:var(--sage);box-shadow:0 5px 0 var(--saged);
+#next,.next{position:absolute;right:32px;bottom:18px;width:96px;height:96px;border-radius:50%;background:var(--sage);box-shadow:0 5px 0 var(--saged);
   display:flex;align-items:center;justify-content:center;font-size:40px;color:#fff;z-index:6}
-#next[hidden]{display:none}
+#next[hidden],.next[hidden]{display:none}
 
 /* check overlay */
-#check{position:absolute;inset:0;background:rgba(255,248,236,.97);z-index:8;display:flex;flex-direction:column;align-items:center;padding-top:70px;gap:16px}
+#check{position:absolute;inset:0;background:rgba(255,248,236,.97);z-index:8;display:flex;flex-direction:column;align-items:center;padding-top:calc(40px + (var(--h) - 540px) * .3);gap:16px}
 #check[hidden]{display:none}
 #check .cword{font-size:80px;letter-spacing:10px}
 #check .mascot{position:static}
@@ -83,21 +86,76 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #done[hidden]{display:none}
 #done .stickers{font-size:44px;letter-spacing:6px}
 
+/* letter activities: item = tile centred on its point, sound dot below */
+#l-mascot{left:40px;top:96px}
+#l-mascot .bubble{max-width:520px}
+#l-arena{position:absolute;inset:0}
+.ltr{position:absolute;width:0;height:0}
+.ltr .tile{position:absolute;left:-60px;top:-68px;width:120px;height:136px}
+.ltr .ldot{position:absolute;left:-36px;top:80px;width:72px;height:72px;border-radius:50%;background:var(--sky);box-shadow:0 4px 0 var(--skyd);display:flex;align-items:center;justify-content:center}
+.ltr.right .tile{border-color:var(--honey);box-shadow:0 0 0 8px rgba(242,185,80,.35),0 5px 0 var(--honey)}
+
 @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
 .reduced *{animation:none!important;transition:none!important}
 
-/* ---- portrait (phones): 540 wide, content block 880 tall centred by --dy ---- */
-.portrait #hello .kitwrap{top:calc(150px + var(--dy))}
-.portrait #hello .bubble{top:calc(400px + var(--dy))}
-.portrait #play{top:calc(490px + var(--dy))}
-.portrait #word-mascot{left:24px;top:calc(96px + var(--dy))}
-.portrait #word-mascot .bubble{max-width:380px}
-.portrait #card{left:160px;top:calc(200px + var(--dy))}
-.portrait #tiles{top:calc(390px + var(--dy));height:116px}
-.portrait .tile{height:116px;font-size:76px;border-radius:24px}
-.portrait #markers{top:calc(528px + var(--dy))}
-.portrait #slider{top:calc(640px + var(--dy))}
-.portrait #next{right:auto;left:50%;margin-left:-48px;bottom:calc(30px + var(--dy))}
-.portrait #check{padding-top:calc(120px + var(--dy))}
-.portrait #choices{flex-wrap:wrap;justify-content:center;gap:16px;max-width:520px}
-.portrait .choice{width:150px;height:140px}
+
+/* ---- portrait phones: 400 wide, height follows screen (700+). Slider in the thumb zone. ---- */
+.portrait .top{top:14px;left:14px;right:14px}
+.portrait #hello .kitwrap{top:calc(var(--h) * .13)}
+.portrait #hello .bubble{top:calc(var(--h) * .13 + 236px)}
+.portrait #hello .paw{right:-20px}
+.portrait #play{bottom:calc(var(--h) * .18)}
+.portrait #word-mascot{left:14px;top:98px}
+.portrait #word-mascot .bubble{max-width:290px;font-size:17px}
+.portrait #card{top:clamp(170px, calc(170px + (var(--h) - 711px) * .3), 240px);width:200px;height:120px;margin-left:-100px}
+.portrait #tiles{bottom:296px;height:110px}
+.portrait .tile{border-radius:24px}
+.portrait #markers{bottom:212px}
+.portrait #slider{bottom:110px}
+.portrait #next,.portrait .next{right:auto;left:50%;margin-left:-48px;bottom:10px}
+.portrait #check{padding-top:clamp(100px, calc(var(--h) * .15), 200px)}
+.portrait #check .cword{font-size:72px}
+.portrait #choices{flex-wrap:wrap;justify-content:center;gap:14px;max-width:380px}
+.portrait .choice{width:150px;height:130px;font-size:76px}
+.portrait .choice svg{width:110px;height:92px}
+.portrait #l-mascot{left:14px;top:96px}
+.portrait #l-mascot .bubble{max-width:290px;font-size:17px}
+.portrait .ltr .tile{left:-55px;top:-62px;width:110px;height:124px;font-size:80px}
+.portrait .ltr .ldot{top:72px}
+/* portrait tablets: 630 wide (~1.3x at 820) */
+.ptab #word-mascot .bubble{max-width:460px;font-size:19px}
+.ptab #card{width:250px;height:160px;margin-left:-125px;top:clamp(170px, calc(var(--h) * .25), 260px)}
+.ptab #tiles{bottom:310px;height:130px}
+.ptab #markers{bottom:224px}
+.ptab #slider{bottom:120px}
+.ptab #choices{max-width:600px}
+.ptab .choice{width:180px;height:150px}
+.ptab #l-mascot .bubble{max-width:460px}
+.ptab .ltr .tile{left:-60px;top:-68px;width:120px;height:136px}
+.ptab .ltr .ldot{top:80px}
+
+/* ---- short landscape phones: 400 tall, width follows screen. Left column = mascot, card, next. ---- */
+.short .top{top:10px;left:16px;right:16px}
+.short #hello .kitwrap{top:14px;width:150px;height:150px}
+.short #hello .paw{right:-28px;top:62px;width:56px;height:56px}
+.short #hello .bubble{top:172px;font-size:20px}
+.short #play{bottom:22px}
+.short #word-mascot{left:16px;top:90px}
+.short #word-mascot svg{width:56px;height:56px}
+.short #word-mascot .bubble{max-width:180px;font-size:15px;padding:8px 12px}
+.short #card{left:24px;margin-left:0;top:166px;width:180px;height:116px}
+.short #tiles{bottom:194px;height:110px}
+.short #markers{bottom:112px}
+.short #slider{bottom:10px}
+.short #next,.short .next{left:66px;right:auto;bottom:12px}
+.short #check{padding-top:12px;gap:10px}
+.short #check .cword{font-size:62px}
+.short #check .mascot svg{width:48px;height:48px}
+.short .choice{width:160px;height:124px;font-size:76px}
+.short .choice svg{width:110px;height:90px}
+.short #l-mascot{left:16px;top:88px}
+.short #l-mascot svg{width:56px;height:56px}
+.short #l-mascot .bubble{font-size:16px;padding:8px 12px}
+.short .ltr .tile{left:-55px;top:-60px;width:110px;height:120px;font-size:80px}
+.short .ltr .ldot{top:70px}
+.short .next{left:auto;right:16px;bottom:auto;top:92px}

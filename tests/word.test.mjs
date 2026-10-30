@@ -113,17 +113,42 @@ test('manifest picks up recorded takes by filename', () => {
   assert.equal(m.clips.find(c => c.id === 'word-mat').take, 'takes/word-mat.wav');
   assert.equal(m.clips.find(c => c.id === 'snd-s').take, null);
 });
-test('portrait layout: 4-letter word fits a 540 stage and letter centres still match marker positions', async () => {
-  const { PORTRAIT_TILES } = await import('../js/layout.js');
-  const lay = wordLayout(4, PORTRAIT_TILES), pos = markerPositions(markers('stop', 4));
-  assert.ok(lay.track.left - 36 >= 0 && lay.track.left + lay.track.width + 46 <= 540); // handle + end arrow on screen
-  for (let i = 0; i < 4; i++) assert.ok(Math.abs(lay.fracFromX(lay.tileLeft(i) + lay.tileW / 2) - pos[i]) < 1e-9);
-});
-test('stage: portrait for tall screens (phone 390x844, tablet 820x1180), landscape otherwise', async () => {
+// Usability pass: the stage fills the screen and every touch target is >= 64 screen px (knob >= 80) at all target sizes.
+const VIEWPORTS = [[360, 780], [390, 844], [780, 360], [844, 390], [667, 375], [820, 1180], [1180, 820], [1024, 768], [1366, 1024], [1920, 1080]];
+test('stage: modes, fills the screen, no empty band', async () => {
   const { stageFor } = await import('../js/stage.js');
-  const phone = stageFor(390, 844), tab = stageFor(820, 1180), land = stageFor(1180, 820);
-  assert.ok(phone.portrait && tab.portrait && !land.portrait);
-  assert.equal(phone.w, 540); assert.ok(phone.h >= 880 && phone.h <= 1170);
-  assert.ok(phone.w * phone.scale <= 390.01 && phone.h * phone.scale <= 844.01);
-  assert.equal(land.w, 960); assert.ok(Math.abs(land.scale - Math.min(1180 / 960, 820 / 600)) < 1e-9);
+  assert.equal(stageFor(360, 780).mode, 'portrait'); assert.equal(stageFor(820, 1180).mode, 'portrait');
+  assert.equal(stageFor(780, 360).mode, 'short'); assert.equal(stageFor(1180, 820).mode, 'tall');
+  for (const [vw, vh] of VIEWPORTS.slice(0, 7)) { // phones + iPad: stage covers >= 97% of both axes
+    const s = stageFor(vw, vh);
+    assert.ok(s.w * s.scale <= vw + .01 && s.h * s.scale <= vh + .01, `${vw}x${vh} overflows`);
+    assert.ok(s.w * s.scale >= vw * .97 && s.h * s.scale >= vh * .97, `${vw}x${vh} band: ${s.w}x${s.h} @${s.scale.toFixed(2)}`);
+  }
+  assert.ok(Math.abs(stageFor(820, 1180).scale - 1.3) < .03, 'iPad portrait UI ~1.3x');
+});
+test('touch targets >= 64 screen px (knob >= 80) for 1-5 letter words at every viewport', async () => {
+  const { stageFor, MIN_TOUCH, MIN_KNOB } = await import('../js/stage.js');
+  const { layoutFor, MIN_TILE, KNOB } = await import('../js/layout.js');
+  for (const [vw, vh] of VIEWPORTS) {
+    const s = stageFor(vw, vh), L = layoutFor(s);
+    assert.ok(72 * s.scale >= MIN_TOUCH, `${vw}x${vh}: dots/buttons ${72 * s.scale}`);
+    assert.ok(KNOB * s.scale >= MIN_KNOB, `${vw}x${vh}: knob ${KNOB * s.scale}`);
+    for (let n = 1; n <= 5; n++) {
+      const lay = wordLayout(n, L);
+      assert.ok(lay.tileW >= MIN_TILE && lay.tileW * s.scale >= MIN_TOUCH, `${vw}x${vh} n=${n}: tile ${lay.tileW}`);
+      assert.ok(lay.rowLeft >= 0 && lay.rowLeft + lay.rowW <= s.w, `${vw}x${vh} n=${n}: row off stage`);
+      assert.ok(lay.knobX(0) - KNOB / 2 >= 0 && lay.knobX(1) + KNOB / 2 <= s.w, `${vw}x${vh} n=${n}: knob off stage`);
+    }
+  }
+});
+test('phone portrait letter tiles grow to ~90 screen px; letter centres still match marker positions', async () => {
+  const { stageFor } = await import('../js/stage.js'); const { layoutFor } = await import('../js/layout.js');
+  const s = stageFor(360, 780), lay = wordLayout(3, layoutFor(s));
+  assert.ok(lay.tileW * s.scale >= 88, `tile ${lay.tileW * s.scale}`);
+  for (const w of ['map', 'stop']) {
+    const l = wordLayout(w.length, layoutFor(s)), pos = markerPositions(markers(w, w.length === 4 ? 4 : 3));
+    for (let i = 0; i < w.length; i++) assert.ok(Math.abs(l.fracFromX(l.tileLeft(i) + l.tileW / 2) - pos[i]) < 1e-9);
+  }
+  const sh = stageFor(780, 360), ls = wordLayout(4, layoutFor(sh)); // short landscape: row clears the left column
+  assert.ok(ls.rowLeft >= 220);
 });

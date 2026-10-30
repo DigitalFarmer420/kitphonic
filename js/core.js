@@ -3,10 +3,11 @@ import { PROTOTYPE_SET, CONTINUOUS } from './sequence.js';
 export const LETTERS = PROTOTYPE_SET;   // §3.3.1 / review R1: m s a t p i n o, from js/sequence.js
 export const STRETCHY = CONTINUOUS;     // continuous sounds (held); stop sounds clipped — from js/sequence.js
 
-// Tap mode: 'sound' (early Phase 2: letter + dot both play sound) or 'nameDot' (after L1 mastery).
+// Tap mode: 'name' (Phase 1: letters say only their name, no dots), 'sound' (early Phase 2: letter + dot both play
+// the sound) or 'nameDot' (after L1 blending mastery: letter = name, dot = sound).
 export function tapResult(mode, target, letter) {
   if (target === 'dot') return { play: 'sound', letter };
-  return { play: mode === 'nameDot' ? 'name' : 'sound', letter };
+  return { play: mode === 'nameDot' || mode === 'name' ? 'name' : 'sound', letter };
 }
 
 // Mastery (§3.7.1): ~90% across 2 separate sessions.
