@@ -63,7 +63,7 @@ test('spec §3.4.1 / §3.8.4: parent view shows the letter-tap mode and trouble 
   assert.deepEqual(troubleSpots(log.map(r => ({ ...r, timestamp: now - 20 * 864e5 })), now), []); // old misses fade
   assert.equal(parentSummary([], 2).letterMode, 'sounds');
 });
-test('visible version: VERSION file = js/version.js = 1.0.0-rc2', async () => {
+test('visible version: VERSION file = js/version.js = 1.0.0-rc3', async () => {
   const { readFileSync } = await import('node:fs'); const { VERSION } = await import('../js/version.js');
-  assert.equal(readFileSync(new URL('../VERSION', import.meta.url), 'utf8').trim(), VERSION); assert.equal(VERSION, '1.0.0-rc2');
+  assert.equal(readFileSync(new URL('../VERSION', import.meta.url), 'utf8').trim(), VERSION); assert.equal(VERSION, '1.0.0-rc3');
 });

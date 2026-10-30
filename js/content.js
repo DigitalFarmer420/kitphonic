@@ -309,7 +309,7 @@ export const STORIES = [
 ];
 STORIES.forEach(s => s.pages.forEach((p, i) => (p.id = `${s.id}-${i + 1}`)));
 
-// Mascot lines. Two takes of "Let's slide it again": calm (default) and upbeat; neither sounds disappointed.
+// Mascot lines. Two takes of "Let's slide it again": upbeat (default since rc3, owner's pick) and calm (?voice=calm); neither sounds disappointed.
 export const MASCOT = {
   'm-hello': "Hi! I'm Kit. Let's read together!",
   'm-slide-intro': 'Slide your finger under the word.',

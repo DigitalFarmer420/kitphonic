@@ -52,6 +52,7 @@ SCENES = [  # name, query, js to run after load
     ('family', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500))"),
     ('family-made', 'skipHello=1&activity=family&rime=ap&seed=1', "new Promise(r => setTimeout(r, 2500)).then(() => { document.querySelector('#fm-tray .ftile').dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); }).then(() => new Promise(r => setTimeout(r, 2600)))"),
     ('family-made3', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1', MAKE % 3 + ".then(() => new Promise(r => { const t = setInterval(() => !kitphonic.familyScreen.run.busy && (clearInterval(t), r()), 50); }))"),  # several made words: chips vs tray collision
+    ('family-5', 'skipHello=1&activity=family&rime=at&familyMax=5&seed=1', "new Promise(r => setTimeout(r, 2500))"),  # Oct 30: a secure family grows to 5 -> 3 + 2 centred
     ('family-7', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1', "new Promise(r => setTimeout(r, 2500))"),  # Uiux rc1: 7 choices -> balanced 4 + 3
     ('family-done', 'skipHello=1&activity=family&rime=at&seed=1', MAKE % 4 + ".then(() => new Promise(r => { const t = setInterval(() => document.querySelector('.fchip.star') && (clearInterval(t), r()), 50); }))"),
     ('check-plural', 'skipHello=1&level=7&word=cats&seed=1', "kitphonic.screen.debugShow('check')"),  # known issue 6: two-of pictures, singular distractor

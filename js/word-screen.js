@@ -3,7 +3,7 @@ import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard } from './mastery.js';
 import { supportPattern } from './support.js';
 import { wordLayout, layoutFor } from './layout.js';
-import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip,
+import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, needsCheck, caseFor } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
@@ -40,7 +40,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     }));
     mk.replaceChildren(...ms.map((m, i) => {
       const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="30" height="30"><use href="#snd-one"/></svg></div>' : '<div class="bar"><svg width="52" height="32"><use href="#snd-chunk"/></svg></div>');
-      d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', `${m.type} ${m.text}`);
+      d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', m.type === 'dot' ? `play sound ${m.text}` : `play ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
     }));
     const tb = trackBox(); track.style.left = tb.left + 'px'; track.style.width = tb.width + 'px';
@@ -157,7 +157,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     if (c.w === entry.w) { state = 'picked'; btn.classList.add('right'); audio.play('sfx-chime'); setTimeout(reveal, 650); return; }
     // Wrong: gentle replay, reshuffle, never a fail screen.
     state = 'replay'; $('check').hidden = true; showSlider(true); const ct = choices.contrast; choices = reshuffle(choices, rand); choices.contrast = ct;
-    say("Let's slide it again.", slideAgainClip(cfg.voice)).then(demoSweep);
+    say(SLIDE_AGAIN_TEXT[cfg.voice] ?? SLIDE_AGAIN_TEXT.upbeat, slideAgainClip(cfg.voice)).then(demoSweep);
   }
   function demoSweep() { // the slider replays itself once, then hands back to the child (later picks = assisted)
     trial.assisted = true; sweepStart = null;
@@ -212,7 +212,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
 
   return {
     relayout() { if (entry && state === 'slide') render(); },
-    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

@@ -6,7 +6,7 @@
 //   { type: 'words', level, words: [entry], why }
 //   { type: 'star', word, why }   (only when opts.stars: Star Word screen)
 import { GPC, GPCS } from './sequence.js';
-import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor } from './mastery.js';
+import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor, DAY } from './mastery.js';
 import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
@@ -42,7 +42,7 @@ export function letterPool(active, { size = 6, min = 3 } = {}) {
   return pool;
 }
 
-export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = true, familyMax } = {}) {
+export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN, rand = Math.random, stars = true, familyMax = 4, familySecureMax = 5 } = {}) {
   const budget = Math.max(MIN_MIN, Math.min(MAX_MIN, minutes)) * 60, minBudget = MIN_MIN * 60;
   const map = mapState(responses, now), cur = map.current, active = activeSounds(responses, now);
   const known = knownGpcs(responses, now), items = [];
@@ -141,7 +141,12 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // Word families (design/words-board 2): once CVC words (L2) are open, one family per session, least-made first.
   if ((cur?.kind === 'words' && cur.level >= 2) || passedLevels.some(l => l >= 2)) {
     const made = r => responses.filter(x => x.skill === `family:${r}`).length;
-    const fs = servableFamilies(known, familyMax).sort((a, b) => made(a.rime) - made(b.rime) || rand() - .5);
+    // Research + Uiux (Oct 30): a new family starts at familyMax (4) letter choices; only once that family is secure
+    // does it grow to familySecureMax (5). Every choice is still a taught letter (servableFamilies filters by known).
+    // Families are unscored builds, so "secure" here = the whole family made on 2+ different days.
+    const familySecure = r => new Set(responses.filter(x => x.skill === `family:${r}`).map(x => Math.floor(x.timestamp / DAY))).size >= 2;
+    const capFor = r => familySecure(r) ? Math.max(familyMax, familySecureMax) : familyMax;
+    const fs = servableFamilies(known, Math.max(familyMax, familySecureMax)).map(f => ({ ...f, words: f.words.slice(0, capFor(f.rime)) })).sort((a, b) => made(a.rime) - made(b.rime) || rand() - .5);
     if (fs.length && blendingUnlocked(responses, now)) push({ type: 'family', family: fs[0], why: made(fs[0].rime) ? 'mixed' : 'new' });
   }
 

@@ -40,7 +40,8 @@ test('clip routing: dots, held stretchy sounds, bars, fast rate', () => {
   assert.equal(L.clipForTap('nameDot', 'dot', 'm').id, 'snd-m');
   assert.equal(L.clipForTap('sound', 'letter', 'm').id, 'snd-m');
   assert.equal(L.slideAgainClip('upbeat').id, 'm-slide-again-upbeat');
-  assert.equal(L.slideAgainClip().id, 'm-slide-again-calm');
+  assert.equal(L.slideAgainClip().id, 'm-slide-again-upbeat'); // owner chose upbeat (rc3)
+  assert.equal(L.slideAgainClip('calm').id, 'm-slide-again-calm');
 });
 test('R8: every distractor differs from its target by exactly one phoneme (all words, all strategies, many trials)', () => {
   for (const e of all.filter(e => L.needsCheck(e, {}, 2))) for (const strategy of ['minimal', 'rhyme', 'vowel']) for (let t = 0; t < 6; t++) {

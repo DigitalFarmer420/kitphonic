@@ -4,7 +4,7 @@ export const CONFIG = {
   mascot: { name: 'Kit', kind: 'honey kitten' },
   tileCase: 'lower',            // word screen letters: 'lower' | 'upper'            (?case=)
   startLevel: 2,                // (?level=1..4)
-  voice: 'calm',                // "Let's slide it again" take: 'calm' | 'upbeat'    (?voice=)
+  voice: 'upbeat',              // "Let's slide it again" take: 'upbeat' (rc3 default, owner pick Oct 30) | 'calm'  (?voice=)
   // Picture check (§3.5.2): only picturable words with a minimal-pair picture get one; others (sat, top…) get a
   // spoken sentence. Never at L1 unless checkAtL1 (review R8 / spec open question 1).
   checkPictureWords: true,      // false = never show the check                     (?check=0)
@@ -20,6 +20,7 @@ export const CONFIG = {
   markerOpts: { l1: 'dots', l4: 'dots' }, // L1 sound-by-sound (R2); 'bar' = one-bar 'at' (?l1=bar, ?l4=blendBar)
   hello: { show: true, greetingClip: 'm-hello' },                                   // (?skipHello=1)
   silentTip: 'No sound? Turn up the volume and check the silent switch.',
+  familySecureMax: 5,           // choices once a family is secure (Research Oct 30: start 3-4, up to 5 when secure); ?familySecureMax=2..7
   familyMax: 4,                 // word family letter choices per family (Uiux rc1: <= 5 early on); ?familyMax=2..7
   sweepGapMs: 180,
   minutes: 7,                   // session length target, clamped 5–10 (?minutes=)
@@ -50,6 +51,7 @@ export function configFromUrl(search = '') {
   if (q.get('parent') === '1') c.parent = true;
   if (q.get('reducedMotion') === '1') c.reducedMotion = true;
   c.rime = q.get('rime') || undefined;
+  if (q.get('familySecureMax')) c.familySecureMax = Math.min(7, Math.max(2, +q.get('familySecureMax') || c.familySecureMax));
   if (q.get('familyMax')) c.familyMax = Math.min(7, Math.max(2, +q.get('familyMax') || c.familyMax));
   if (q.get('direct') === '1' || ((q.get('word') || q.get('level')) && !c.activity)) c.direct = true; // dev: word screen only
   if (q.get('choices')) for (const k in c.choiceStrategy) c.choiceStrategy[k] = q.get('choices');

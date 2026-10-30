@@ -84,7 +84,7 @@ export function startSession() {
   if (cfg.activity) return startActivity(cfg.activity);
   if (cfg.direct) return startDirect();
   sessionId = `s-${Date.now()}`;
-  const plan = planSession(store.all(), { minutes: cfg.minutesSet ? cfg.minutes : settings.get('sessionMinutes'), rand, familyMax: cfg.familyMax });
+  const plan = planSession(store.all(), { minutes: cfg.minutesSet ? cfg.minutes : settings.get('sessionMinutes'), rand, familyMax: cfg.familyMax, familySecureMax: cfg.familySecureMax });
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index };
   runNext();
 }
@@ -131,7 +131,7 @@ function startDirect() { // dev: word screen at ?level (and ?word first)
 
 // Hello: one big play button; the tap unlocks audio (autoplay policies / iOS) and plays Kit's greeting.
 $('play').onclick = async () => {
-  await audio.unlock();
+  await audio.unlock({ first: [cfg.hello.greetingClip] });
   $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!";
   await audio.play(cfg.hello.greetingClip);
   cfg.activity || cfg.direct ? startSession() : showMap(); // the map is home

@@ -24,7 +24,8 @@ export function clipForTap(mode, target, letter) {
 }
 export const clipForBlend = w => ({ id: `word-${w}`, rate: 1 });
 export const clipForReveal = w => ({ id: `reveal-${w}`, rate: 1 });
-export const slideAgainClip = (voice = 'calm') => ({ id: voice === 'upbeat' ? 'm-slide-again-upbeat' : 'm-slide-again-calm', rate: 1 });
+export const slideAgainClip = (voice = 'upbeat') => ({ id: voice === 'calm' ? 'm-slide-again-calm' : 'm-slide-again-upbeat', rate: 1 });
+export const SLIDE_AGAIN_TEXT = { calm: "Let's slide it again.", upbeat: "Ooh, so close! Let's slide it again!" };
 
 // Seeded RNG (mulberry32) so tests and ?seed= runs are reproducible.
 export function rng(seed = Date.now()) {

@@ -109,6 +109,22 @@ test('word families open with CVC words: taught letters only, 2-4 words, fixed r
   assert.ok(!early.items.some(i => i.type === 'family'), 'no families before CVC words');
 });
 
+test('word families start at 4 choices and grow to 5 only once that family is secure (Research + Uiux, Oct 30)', async () => {
+  const base = seedProgress(STOPS.length, { now });
+  const fam = rs => planSession(rs, { now, rand: rng(2), minutes: 10 }).items.find(i => i.type === 'family');
+  const first = fam(base); assert.ok(first && first.family.words.length <= 4, 'a new family offers at most 4 letters');
+  const { servableFamilies } = await import('../js/families.js');
+  const big = servableFamilies(undefined, 7).filter(f => f.words.length >= 5).map(f => f.rime);
+  assert.ok(big.length, 'some family has 5+ words to grow into');
+  const done = (r, t) => ({ skill: `family:${r}`, itemId: r, correct: true, firstAttempt: true, scored: false, timestamp: t, sessionId: `f${t}` });
+  const once = [...base, ...big.map(r => done(r, now - DAY))]; // made once: still new, still 4
+  const all = servableFamilies(undefined, 7).map(f => f.rime);
+  const onlyBig = rs => [...rs, ...all.filter(r => !big.includes(r)).flatMap(r => [done(r, now - 3 * DAY), done(r, now - 2 * DAY), done(r, now - DAY)])];
+  const f1 = fam(onlyBig(once)); assert.ok(big.includes(f1.family.rime)); assert.equal(f1.family.words.length, 4, 'made on one day only: 4');
+  const twice = onlyBig([...once, ...big.map(r => done(r, now - 2 * DAY))]);
+  const f2 = fam(twice); assert.ok(big.includes(f2.family.rime)); assert.equal(f2.family.words.length, 5, 'made on 2 days: grows to 5');
+});
+
 // Full sequence (sets 1–8): every stop is reachable in normal play — the session at each stop exercises that stop's
 // skill, and the letter rounds always have exactly one tile that makes the target sound.
 test('normal play reaches every stop through L5 (sand) and L6 (ship): each session works on its current stop', () => {

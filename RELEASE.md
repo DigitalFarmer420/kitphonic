@@ -1,22 +1,24 @@
-# Kitphonic 1.0.0-rc2 — release readiness
+# Kitphonic 1.0.0-rc3 — release readiness
 
-Version: `1.0.0-rc2` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc3` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc2:** `npm test` 160/160 · `tools/check-sizes.py` 294/294 (49 scenes × 6 phone / tablet viewports)
+**Gate status at rc3:** `npm test` 166/166 (rc2: 160) · `tools/check-sizes.py` 300/300 (50 scenes × 6 phone / tablet viewports; ~14 min)
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py` end-to-end sessions.
 
-> ⚠️ **Do not playtest with children on this build's audio.** `audio/takes/` holds **0 recorded clips**; every sound,
-> word and line is a browser text-to-speech placeholder (v2 V3). Clipped / held phonemes (spec §3.2) cannot be judged
-> until a voice is recorded (`npm run manifest` lists all 830 clips).
+> ✅ **Recorded voice (rc3).** `audio/takes/` holds **828 recorded takes** (xAI TTS, voice *Eve*, speed 1.0, the
+> owner's **upbeat** style) for every spoken clip in `audio/manifest.json`; the 2 SFX stay synthesized. All takes are
+> trimmed, loudness-normalized (−16 LUFS; voiceless fricatives s ss f ff th sh h at −19), mono 24 kHz 48 kbps MP3
+> (5.8 MB total). Phonemes were re-cut to spec §3.2 / literacy review §5.5 + R15 (no schwa, stops clipped, held
+> ≈ 1.1 s) — see *Audio QA* below. A grown-up must still **listen to the flagged phonemes** before a child playtest.
 >
 > ⚠️ **Pictures are placeholder emoji** (plus 3 drawn SVGs: mat, cat, hat). They must pass the v2 V6 rule (≥ 80 % of
 > 5+ children in the target region name each picture with its target word, unprompted) before release.
 
-## Content at rc2
+## Content at rc3 (unchanged from rc2)
 38 sounds in 8 sets (m s a t · p i n · o d f · c k u · g e r h b l · ck ff ll ss s=/z/ · j v x y w z zz qu ·
 sh ch th th ng nk) · 56 map stops (38 sounds, 7 word levels L1–L7, 6 "new words" stops, 5 stories) · 254 words
 (72 pictured; ≥ 5 at every words stop from L3) · 14 star words · 30 picture-checked sentences · 5 decodable stories (from stop 19) · tracing paths
@@ -28,7 +30,7 @@ for every grapheme.
 |---|---|---|
 | 3.1 | Playable touch-first loop: names, sounds, decoding with the Blend Slider + hidden-picture reward | ✅ |
 | 3.2 | Letter = name / dot = sound (switch after L1 mastery) | ✅ per-child switch + one-time demo; floating letters setting in grown-ups |
-| 3.2 | Clipped vs held sounds | ⚠️ modelled in data (`heldTts`, stretch on slow sweeps); real recordings missing |
+| 3.2 | Clipped vs held sounds | ✅ rc3 recorded takes: stops are burst-only (0.1–0.2 s), continuants 0.45 s, held 1.0–1.15 s (tested); a few need a human ear (Audio QA) |
 | 3.2 | No failure states | ✅ no X / buzzer / timer; wrong pick → "Let's slide it again", replay, reshuffle |
 | 3.2 | Picture = reward, not hint | ✅ picture hidden until after the pick; v2 V1: the target word is never spoken before a scored pick |
 | 3.2 | Audio first | ✅ every prompt spoken; letters, dots, bars, buttons tappable (sentence words: only the current one) |
@@ -59,7 +61,7 @@ for every grapheme.
 | 3.9 | Local saves only | ✅ no network, no accounts |
 
 ## Known issues
-1. **Placeholder audio** (above) — blocks child playtests (V3).
+1. ~~**Placeholder audio**~~ — **resolved in rc3** (828 recorded takes). Remaining audio caveats: see *Audio QA*.
 2. **Placeholder emoji art** — 182 of 254 words have no picture (they get printed word cards). Sentence scenes show two
    pictures side by side, so "in" vs "on" is not depicted; some stand-ins are weak (🟤 mud, 👑 the king, 🧺 lunch). New in
    rc2 and to be checked in the naming test: plurals as two of a picture (two cats look small at 360 px because the
@@ -89,11 +91,37 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Tile / print case (capitals, names like Kit) | lowercase | `?case=upper` |
 | Star-word list | I the is to no into a he go of she you we was | `js/content.js` |
 | Picture check at L1 | off (printed word cards instead) | `?checkL1=1`, `?cards=0` |
-| Voice (recorded actor vs synthesized; accents) | placeholder TTS | `audio/takes/` |
+| Voice (recorded actor vs synthesized; accents) | xAI TTS *Eve*, US, upbeat (rc3) | `audio/takes/`, `tools/gen-tts.mjs` |
+| "Let's slide it again" take | upbeat ("Ooh, so close! Let's slide it again!") — owner's pick, rc3 | `?voice=calm` |
 | Phase 1 / 2 overlap — floating letters say | sounds | grown-ups setting |
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
 
-## Release steps after rc2
-Record the voice (all clips in `audio/manifest.json`), replace emoji with drawn art and run the naming test, playtest
+## Audio QA (rc3)
+Pipeline: `tools/audio_qa/process.py` (trim edges at −40 dB, phoneme cuts below, BS.1770 loudness −16 LUFS with
+peak ≤ −1.5 dBFS, mono MP3). Words / sentences / prompts were checked with a local ASR (faster-whisper small.en, then
+medium.en on every mismatch); phonemes by duration + voicing/frication profile.
+- **All 828 trimmed + normalized** (total speech 1102 s → 883 s; 18 MB → 5.8 MB).
+- **Phonemes re-cut without new credits:** stops t p d c k ck g b j (and glides w y) → burst only, schwa cut off;
+  s ss z zz s=/z/ r n ll short sounds cut from their steady held takes (the 2-letter takes said letter names, "es es");
+  held m n r l ll ss s=/z/ z v capped to 1.1 s (n-held was 4.5 s, r-held 3.2 s); zz-held = s=/z/-held (zz-held said
+  "zee zee"); h cut from the onset of *hat* (take said "aitch"); x = /ks/ cut from the coda of *box*; i = first vowel
+  only, i-held = that vowel stretched to ~1 s (take was broken); sh-held extended to 1.0 s.
+- **Regenerated (28 short xAI calls in total, no full re-run):** ch ("chuh" → frication only), qu ("kwuh" → /kw/),
+  th ("thhhhhhhhin" → /θ/ frication, extended), th=/ð/ short ("thuh" → onset) and held ("ðððððð"), f / ff and held
+  (pooled /f/ frication from "ffffffffff"), ng and held (steady nasal from "sinnnnnnnnng"), nk (that nasal + the /k/
+  burst). Words where the ASR heard the wrong vowel (pre-nasal short a): man, pan (+ pic-pan), and, ant, band, jam,
+  grin, us — regenerated as "Man!" etc. and now transcribe correctly.
+- **Needs a human ear before a child playtest:** snd-th_v / th_v-held (voiced th is the hardest; may sound like a
+  buzz or "z"), snd-ng / ng-held vs n (isolated nasal hum), snd-nk (spliced), snd-qu (short w glide), snd-w / snd-y
+  (glides cannot be fully vowel-free), snd-l / l-held / ll-held (ASR heard "Lola"), snd-r (ASR heard "uhh"), snd-h
+  (quiet breath), f / th (extended frication can sound hissy), and **word-tan** (still heard as "ten" after 2
+  retries — keep or re-record). ASR "mismatches" left on letter names, rimes (nonsense syllables) and homophones
+  (mat/Matt, to/2, past/passed) were judged ASR noise.
+- Loading: only the SFX + greeting gate the hello tap; letter sounds / names and Kit's lines (131 small clips)
+  warm in the background; each words round warms its words, reveals and pictures; anything else loads on first play.
+  Takes always win over browser speech (speech only if a take fails to load).
+
+## Release steps after rc3
+Listen to the flagged phonemes (above), replace emoji with drawn art and run the naming test, playtest
 8–12 children (spec §3.9) and tune thresholds (`RULES`, `SUPPORT_RULES`), then tag 1.0.0.
