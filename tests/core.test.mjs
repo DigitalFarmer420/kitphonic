@@ -1,0 +1,17 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as c from '../js/core.js';
+const t = test;
+t('sound mode: letter plays sound', () => assert.equal(c.tapResult('sound','letter','m').play, 'sound'));
+t('nameDot: letter says name', () => assert.equal(c.tapResult('nameDot','letter','m').play, 'name'));
+t('dot always sound', () => assert.equal(c.tapResult('nameDot','dot','m').play, 'sound'));
+t('mastery needs 2 sessions >=90%', () => { assert.ok(!c.isMastered([{correct:10,total:10}])); assert.ok(c.isMastered([{correct:9,total:10},{correct:10,total:10}])); });
+t('switch + one-time demo', () => { const s={mode:'sound',l1Sessions:[{correct:9,total:10},{correct:9,total:10}]}; assert.deepEqual(c.updateTapMode(s),{mode:'nameDot',showDemo:true}); assert.equal(c.updateTapMode({...s,demoSeen:true}).showDemo,false); });
+t('step back after 2 sessions <60%', () => assert.equal(c.pacing([{correct:5,total:10},{correct:4,total:10}]),'stepBack'));
+t('L2 sat = dot + bar', () => assert.deepEqual(c.markers('sat',2).map(m=>m.type+':'+m.text),['dot:s','bar:at']));
+t('L3 sit = 3 dots', () => assert.equal(c.markers('sit',3).length,3));
+t('L4 stop = 4 dots', () => assert.deepEqual(c.markers('stop',4).map(m=>m.text),['s','t','o','p']));
+t('sweep fires in order then blends', () => { const s=c.createSweep(2); assert.deepEqual(s.move(.3),[{marker:0,kind:'play'}]); const e=s.move(1); assert.equal(e.at(-1).kind,'blend'); assert.ok(s.complete); });
+t('backward replays, not a blend', () => { const s=c.createSweep(3); s.move(.6); const e=s.move(.2); assert.ok(e.every(x=>x.kind==='replay')); assert.ok(!s.complete); });
+t('drift tolerance', () => { assert.ok(c.attached(55)); assert.ok(!c.attached(70)); });
+t('wrong pick = replay, no fail', () => assert.equal(c.revealCheck('mat','map').reveal,false));

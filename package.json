@@ -1,0 +1,10 @@
+{
+  "name": "kitphonic",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "manifest": "node tools/build-manifest.mjs",
+    "start": "node tools/serve.mjs"
+  }
+}

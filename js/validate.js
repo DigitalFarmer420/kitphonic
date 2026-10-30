@@ -1,0 +1,29 @@
+// Decodability validator — literacy review R5. Pure; tests/content.test.mjs runs it in `npm test` (CI-blocking).
+import { GPC, PROTOTYPE_SIZE } from './sequence.js';
+
+export const parseIds = e => (Array.isArray(e.parse) ? e.parse : e.parse.trim().split(/\s+/));
+export const expand = e => parseIds(e).map(id => [GPC[id]?.grapheme, GPC[id]?.phoneme]); // [[grapheme, phoneme]]
+export const patternOf = ids => ids.map(id => (GPC[id]?.vowel ? 'V' : 'C')).join('');
+export const LEVEL_PATTERNS = { 1: ['VC'], 2: ['CVC'], 3: ['CVC'], 4: ['CCVC'], 5: ['CVCC'] };
+export const earliestLegalK = e => Math.max(...parseIds(e).map(id => GPC[id]?.order ?? Infinity));
+
+// Rules 1, 2, 4 (+ pictures). k = sequence position taught so far (prototype: 8).
+export function validateWord(e, { k = PROTOTYPE_SIZE } = {}) {
+  const errs = [], ids = parseIds(e), bad = (rule, msg, gpc) => errs.push({ word: e.text, rule, gpc, msg });
+  for (const id of ids) if (!GPC[id]) bad('parse', `unknown GPC "${id}"`, id);
+  if (errs.length) return errs;
+  const joined = ids.map(id => GPC[id].grapheme).join('');
+  if (joined !== e.text) bad('parse', `parse spells "${joined}", not "${e.text}"`);
+  for (const id of ids) if (GPC[id].order > k) bad('untaught', `GPC "${id}" (/${GPC[id].phoneme}/, order ${GPC[id].order}) not taught by position ${k}`, id);
+  const pat = patternOf(ids), allowed = LEVEL_PATTERNS[e.level];
+  if (allowed && !allowed.includes(pat)) bad('pattern', `L${e.level} needs ${allowed.join('/')}, got ${pat}`);
+  if (/[A-Z]/.test(e.text)) bad('capital', 'capitals only for names / "I" once taught');
+  return errs;
+}
+export function validateContent(words, { k = PROTOTYPE_SIZE, where = () => '' } = {}) {
+  return words.flatMap(e => validateWord(e, { k }).map(x => ({ ...x, where: where(e) })));
+}
+export const formatErrors = errs => errs.map(e => `${e.where ? e.where + ': ' : ''}"${e.word}" [${e.rule}${e.gpc ? ' ' + e.gpc : ''}] ${e.msg}`).join('\n');
+
+// Rule 3 (runtime): serve a word only if every GPC is secure/mastered for this child.
+export const servable = (e, childKnown) => parseIds(e).every(id => childKnown.has(id));
