@@ -92,3 +92,17 @@ export function letterBox(letter, pad = 16) {
   const minW = h * 0.6, cx = x + w / 2; // never narrower than 0.6:1 (keeps i / t comfortable)
   return w < minW ? { x: cx - minW / 2, y, w: minW, h } : { x, y, w, h };
 }
+
+// rc6 (iPad palm / second finger): one stroke = one finger. The finger that starts a stroke owns it; any other pointer
+// (a resting palm, the other hand, a second finger) is ignored until that finger lifts, so it can neither restart
+// the stroke (a down far from the dot used to deactivate it) nor end it (its pointerup used to stop the drag).
+export function strokeOwner() {
+  let id = null;
+  return {
+    get id() { return id; },
+    claim(pid) { if (id !== null && id !== pid) return false; id = pid; return true; },  // a down: may this pointer act?
+    owns(pid) { return id !== null && id === pid; },
+    release(pid) { if (id === null || id !== pid) return false; id = null; return true; }, // an up / cancel of the owner only
+    reset() { id = null; },
+  };
+}

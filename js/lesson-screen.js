@@ -4,7 +4,7 @@ import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { LETTER_PICS, WORDS } from './content.js';
 import { GPC } from './sequence.js';
-import { STROKES, createTracer, resample, pathD, letterBox } from './trace.js';
+import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox } from './trace.js';
 import { shuffle } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
@@ -88,16 +88,19 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     // Finger guide (Uiux r4): the soft blue dot appears only once a finger is down, riding the ink head — it never
     // sits on top of the green start dot before the child has touched.
     const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
-    svg.onpointerdown = e => { hand.hide(); hand.poke(); if (!run || run.busy) return; const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { svg.setPointerCapture?.(e.pointerId); guide(true); } e.preventDefault(); };
+    const owner = strokeOwner(); // rc6: only the finger that started the stroke drives it (iPad palm / second finger)
+    svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return; if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
+      const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { owner.reset(); owner.claim(e.pointerId); svg.setPointerCapture?.(e.pointerId); guide(true); } };
     svg.onpointermove = e => {
-      if (!dragging || !run) return; const [x, y] = toLetter(e), st = tracer.move(x, y);
+      if (!dragging || !run || !owner.owns(e.pointerId)) return;
+      let st; for (const c of (e.getCoalescedEvents?.() ?? []).concat(e)) { const [x, y] = toLetter(c); st = tracer.move(x, y); if (st.strokeDone) break; } // coalesced: smooth fast strokes
       lanes.forEach((ln, i) => ln.classList.toggle('off', i === st.stroke && !st.onPath));
       if (!st.onPath && !run.offSaid) { run.offSaid = true; say('Back on the dots!', 'm-back-on'); setTimeout(() => run && (run.offSaid = false), 2500); }
       if (st.strokeDone) { dragging = false; drawMarks(); }
       drawInk(); guide(dragging);
       if (st.letterDone) done();
     };
-    svg.onpointerup = svg.onpointercancel = () => { dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
+    svg.onpointerup = svg.onpointercancel = e => { if (!owner.release(e.pointerId)) return; dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); }; // cancel keeps the ink: the child resumes from where it paused
     $('tr-undo').onclick = () => { tracer.undo(); drawInk(); drawMarks(); };
     function done() {
       rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { gapMs: 300 }); // rc5: sound after the chime ends (spec §3.3 L1: trace while its sound plays)
@@ -109,6 +112,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
         tracer = createTracer(l, { tol: 17 }); drawInk(); drawMarks();
       }, 1200);
     }
+    run.debugState = () => tracer.state(); // automated checks only
     run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); // automated play-through only
       return strokes[st.stroke].filter((_, i) => i % 3 === 0 || i === strokes[st.stroke].length - 1).map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]); };
     $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => { seen.mark('trace'); finish(); };
@@ -126,8 +130,11 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
 
   // landscape: the undo + stars column sits right next to the (full-height) letter card
   function placeBar() {
-    const bar = $('trace').querySelector('.ibar'); bar.style.left = '';
+    const bar = $('trace').querySelector('.ibar'), card = $('trace').querySelector('.tcard'); bar.style.left = ''; if (card) card.style.maxWidth = '';
     if (stage.info.mode !== 'short') return;
+    // rc6: a wide letter (ss, qu, ng…) must not run under the undo / stars column, or a stroke's start dot sits under
+    // Undo (iPhone landscape): cap the centred card so its right edge + 20 px clears the column (150 px + 16 px margin)
+    if (card) card.style.maxWidth = Math.max(200, stage.info.w - 2 * (150 + 16 + 20)) + 'px';
     requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16, c.offsetLeft + c.offsetWidth / 2 + 20) + 'px'; });
   }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }

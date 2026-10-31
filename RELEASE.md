@@ -1,10 +1,10 @@
-# Kitphonic 1.0.0-rc5 — release readiness
+# Kitphonic 1.0.0-rc6 — release readiness
 
-Version: `1.0.0-rc5` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc6` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc5:** `npm test` 172/172 (rc4: 168) · `tools/check-sizes.py` 300/300 at rc3 (50 scenes × 6 phone / tablet viewports; ~14 min; rc4 and rc5 change no layout — rc5 only adds Kit's nod animation)
+**Gate status at rc6:** `npm test` 177/177 (rc5: 172) · `tools/check-sizes.py` 300/300 at rc6 (50 scenes × 6 phone / tablet viewports) · `tools/trace-touch.py` 37/37 graphemes × 7 iPad / phone profiles
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py --audio` end-to-end sessions with real takes, **0 overlapping sounds** (rc5).
@@ -96,6 +96,32 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Phase 1 / 2 overlap — floating letters say | sounds | grown-ups setting |
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
+
+## Fixed in rc6 (owner: tracing is very hard to drag on iPad, Safari + Chrome; fine on the phone)
+**Root cause 1 — a second touch broke the stroke.** The trace surface handled *every* pointer: a resting palm / the
+other hand / a second finger fired `pointerdown` (→ `tracer.down()` far from the dot → the stroke went inactive) and its
+`pointerup` set `dragging = false`. On the bigger iPad screen a 4–5-year-old's palm rests on the glass far more often.
+Uiux's two-finger repro (`tools/trace-palm-tr2.cjs`, 820×1180 touch): one finger completes, *with palm* did not
+(rc5 `{"done":0}`); rc6 `{"done":1}`. Fix (`js/trace.js` `strokeOwner()`, `js/lesson-screen.js`): the finger that starts a
+stroke owns it — other pointers are ignored until it lifts; up / cancel only count for the owner (not `isPrimary`: when
+the palm lands first, *it* is the primary pointer). `pointercancel` keeps the ink; the child resumes where it paused.
+Moves read `getCoalescedEvents()` where available (smooth fast strokes). Already in place and unchanged:
+`touch-action:none` on html/body + `#tr-svg`, `preventDefault` on down, `setPointerCapture`, `user-select:none`;
+added `-webkit-touch-callout:none` on `#tr-svg`.
+**Root cause 2 — phone landscape: start dots under other controls.** In the short (landscape-phone) layout the top bar
+(its pebbles hidden) swallowed touches on tall letters' start dots (t, m, p, i…), and wide graphemes (ss, qu, ng…) ran
+under the Undo / stars column. Fix: the top bar passes touches through while tracing (its buttons still work) and the
+card is capped to clear the column. `tools/check-sizes.py` 300/300.
+**Tolerances were not the problem:** the lane (17), start dot (20) and look-ahead window are in letter units, so they
+scale with the letter on screen (a lane half-width of 11–17 % of the letter box height on phone and iPad alike); the coordinate mapping uses
+`getScreenCTM()`, which includes the stage's CSS scale and the viewBox letterboxing.
+**Evidence.** `tools/trace-touch.py` (CDP touch, Chromium emulation; iPad profiles with a Mac Safari UA, platform
+MacIntel, maxTouchPoints 5): every grapheme (37) traced with a palm landing mid-stroke, palm-first, and a touchcancel +
+resume; the start dot must be hit-testable and the page must never scroll or zoom. rc5: 17/37 graphemes failed on
+iPad Pro 11 portrait, iPad gen 7 landscape and iPhone 13 portrait. rc6: 37/37 on iPad Pro 11 + iPad gen 7 (portrait +
+landscape), iPhone 13 (portrait + landscape), Pixel 7. Unit tests: `tests/trace-touch.test.mjs`.
+**Not provable in emulation:** real iPadOS gesture recognizers (edge swipe-back, Scribble with a Pencil, the
+multitasking / Stage Manager gestures, palm rejection, Safari's own `pointercancel` timing). Please try on the iPad.
 
 ## Fixed in rc5 (owner + Uiux: overlapping sounds)
 Owner: "on a correct tap play just the one b-bing chime… remove the 'yes' praise voice. One sound is enough." Uiux
