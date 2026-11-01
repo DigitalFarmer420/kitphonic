@@ -1,7 +1,7 @@
 // Grown-ups view data (spec §3.8.4): a plain summary of the local response log. Pure, so it is testable.
 import { errorPatterns } from './patterns.js';
 import { skillState, skills, DAY, blendL1Mastered } from './mastery.js';
-import { mapState, servableWords } from './progress.js';
+import { mapState, servableWords, slippedStops } from './progress.js';
 import { GPC } from './sequence.js';
 import { STAR_WORDS, LETTER_PICS, WORDS } from './content.js';
 
@@ -9,7 +9,9 @@ const STATE_LABEL = { new: 'not yet', practicing: 'practicing', secure: 'secure'
 export { STATE_LABEL };
 export function parentSummary(responses, now = Date.now()) {
   const map = mapState(responses, now), all = skills(responses);
-  const of = prefix => all.filter(s => s.startsWith(prefix)).map(s => ({ id: s.slice(prefix.length), ...skillState(responses, s, now) }));
+  // rc7: a passed sound that slipped below secure shows as "review due" here (never on the child's map)
+  const slipped = new Set(slippedStops(responses, now).map(s => s.skill));
+  const of = prefix => all.filter(s => s.startsWith(prefix)).map(s => { const st = { id: s.slice(prefix.length), ...skillState(responses, s, now) }; return slipped.has(s) && st.state !== 'review-due' ? { ...st, state: 'review-due', slipped: true, due: st.due ?? now } : st; });
   const sounds = of('sound:'), stars = of('star:'), blends = of('blend:');
   const sessions = new Map();
   for (const r of responses) { if (!r.sessionId) continue; const s = sessions.get(r.sessionId) ?? { a: r.timestamp, b: r.timestamp }; s.a = Math.min(s.a, r.timestamp); s.b = Math.max(s.b, r.timestamp); sessions.set(r.sessionId, s); }
@@ -26,7 +28,7 @@ export function parentSummary(responses, now = Date.now()) {
     minutesThisWeek: Math.round(week.reduce((t, s) => t + (s.b - s.a), 0) / 6e4),
     // design/parent-mockup: summary card + tiles
     current: cur ? describe(cur) : null, next: map.stops[map.index + 1] ? describe(map.stops[map.index + 1]) : null,
-    soundTiles: map.stops.filter(x => x.kind === 'sound').map(x => ({ id: x.gpc, text: GPC[x.gpc].grapheme, ex: x.group?.split(' as in ')[1], state: tileState(responses, `sound:${x.gpc}`, now) })), // ex: 'is' / 'thin' / 'that' tells same-looking tiles apart
+    soundTiles: map.stops.filter(x => x.kind === 'sound').map(x => ({ id: x.gpc, text: GPC[x.gpc].grapheme, ex: x.group?.split(' as in ')[1], state: slipped.has(`sound:${x.gpc}`) ? 'review-due' : tileState(responses, `sound:${x.gpc}`, now) })), // ex: 'is' / 'thin' / 'that' tells same-looking tiles apart
     starTiles: STAR_WORDS.slice(0, Math.max(3, stars.length)).map(x => ({ id: x.w, text: x.w, state: tileState(responses, `star:${x.w}`, now) })),
     tryAtHome: tryAtHome(sounds, cur),
     // spec §3.4.1: the parent view shows which tap mode the child is in; §3.8.4: trouble spots

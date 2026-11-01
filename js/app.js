@@ -14,7 +14,7 @@ import { createLettersScreen } from './letters-screen.js';
 import { letterTapMode } from './letter-logic.js';
 import { LETTERS } from './core.js';
 import { planSession } from './session.js';
-import { mapState } from './progress.js';
+import { mapState, progressMarkers } from './progress.js';
 import { seedProgress, memoryStorage } from './dev-seed.js';
 import { createMapScreen } from './map-screen.js';
 import { createLessonScreen } from './lesson-screen.js';
@@ -44,7 +44,16 @@ const store = createStore(storage);
 const seen = createSeen(storage); // ghost-hand demos: first meetings per activity (in-memory in dev ?progress mode)
 let sessionId = null;
 const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; };
-const log = r => store.log({ ...r, sessionId });
+// rc7: map high-water marks — every stop passed at any moment gets a marker, so the map never walks back. Boot replays
+// the whole saved history once (migration for rc1–rc6 progress), then each response only checks what is new.
+let scanned = -Infinity;
+function syncProgress() {
+  const all = store.all(), add = progressMarkers(all, { since: scanned });
+  scanned = Math.max(scanned, ...all.map(r => r.timestamp ?? 0)); if (add.length) store.logMany(add);
+  return add;
+}
+syncProgress();
+const log = r => { const out = store.log({ ...r, sessionId }); syncProgress(); return out; };
 const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mode: no taught-GPC filter on word cards
 
 let session = null; // { plan, i, started, stickers }
@@ -66,11 +75,12 @@ const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => 
   onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
 function showMap(opts) { show('map'); mapScreen.render(opts); }
 const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(),
-  onClose: () => showMap(), onReset: () => { store.clear(); seen.reset(); } });
+  onClose: () => showMap(), onReset: () => { store.clear(); seen.reset(); scanned = -Infinity; },
+  onSkip: () => { const c = mapState(store.all()).current; if (c) store.log({ skill: `stop:${c.id}`, itemId: c.id, marker: true, parent: true, correct: true, firstAttempt: true, scored: false }); } });
 function openParent() { audio.stop(); show('parent'); parent.open(); }
-function goHome() { audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); session = null; showMap(); }
+function goHome() { $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); syncProgress(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {
-  const before = session?.mapBefore ?? null, after = mapState(store.all());
+  $('review-tag').hidden = true; syncProgress(); const before = session?.mapBefore ?? null, after = mapState(store.all());
   session = null;
   if (before != null && after.index > before) { // a stop was passed: level-up moment, then the path draws forward
     show('levelup'); mapScreen.levelUp(after.stops[after.index - 1], { onBack: () => showMap({ drawFrom: before }) }); return;
@@ -92,6 +102,7 @@ function runNext() {
   if (!session) return;
   session.i++;
   const it = session.plan.items[session.i], overTime = performance.now() - session.started > 10 * 60e3; // hard 10-min cap
+  $('review-tag').hidden = !(it && !overTime && it.why === 'review'); // rc7: spaced / slipped review is labelled, never a step back
   if (!it || overTime) return allDone();
   if (it.type === 'letters') {
     show('letters');

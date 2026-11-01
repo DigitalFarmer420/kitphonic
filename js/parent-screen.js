@@ -12,7 +12,7 @@ export const SETTING_UI = [
   { key: 'floatMode', label: 'Floating letters say', opts: [['sound', 'Sound /m/'], ['name', 'Name “em”']], hint: 'Sounds first is best for early readers.' },
 ];
 
-export function createParentScreen({ settings, getResponses, audio, onClose, onReset, tip }) {
+export function createParentScreen({ settings, getResponses, audio, onClose, onReset, onSkip = () => {}, tip }) {
   function seg({ key, label, opts, hint }) {
     const cur = settings.get(key);
     return `<div class="prow"><div class="plabel">${label}</div><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, t]) =>
@@ -44,6 +44,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
       <div class="pcol">
         <div class="pcard"><h2>Settings</h2>${SETTING_UI.map(seg).join('')}
           <div class="pnote ptip">${esc(tip)} <button class="plink" id="pa-test">Play a test sound</button></div>
+          ${c ? `<div id="pa-skip-wrap"><button class="preset" id="pa-skip">Skip this step…</button><div class="phint">If your child already knows “${esc(c.label)}”. Asks first; nothing is erased.</div></div>` : ''}
           <div id="pa-reset-wrap"><button class="preset" id="pa-reset">Reset progress…</button><div class="phint">Asks again before erasing anything.</div></div>
         </div>
         <div class="pfoot" id="pa-version">Kitphonic ${esc(VERSION)} · progress is saved on this device only</div>
@@ -51,6 +52,11 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
     $('pa-body').querySelectorAll('.seg button[data-k]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, v = typeof settings.get(k) === 'number' ? +b.dataset.v : b.dataset.v; settings.set(k, v); render(); });
     $('pa-test').onclick = () => audio.play('sfx-chime');
+    if (c) $('pa-skip').onclick = () => { // rc7: a grown-up can move Kit on one step (e.g. progress lost on an older version)
+      $('pa-skip-wrap').innerHTML = `<div class="pconfirm"><p>Mark “${esc(c.label)}” as done and move Kit on to the next step? Kit still reviews it later.</p>
+        <div class="pconfirm-row"><button class="pcancel" id="pa-skip-no">Stay here</button><button class="perase" id="pa-skip-yes">Skip this step</button></div></div>`;
+      $('pa-skip-no').onclick = render; $('pa-skip-yes').onclick = () => { onSkip(); render(); };
+    };
     $('pa-reset').onclick = () => { // confirm step (design: "Asks again before erasing anything")
       $('pa-reset-wrap').innerHTML = `<div class="pconfirm"><p>Erase all progress saved on this device? Settings are kept.</p>
         <div class="pconfirm-row"><button class="pcancel" id="pa-no">Keep progress</button><button class="perase" id="pa-yes">Erase progress</button></div></div>`;

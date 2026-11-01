@@ -8,7 +8,7 @@
 import { GPC, GPCS } from './sequence.js';
 import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor, DAY } from './mastery.js';
 import { errorPatterns } from './patterns.js';
-import { mapState, activeSounds, servableWords, applyWords, availableStars, STOPS, MIN_WORDS } from './progress.js';
+import { mapState, activeSounds, servableWords, applyWords, availableStars, slippedStops, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
 import { shuffle, minimalPairs, wordCards } from './word-logic.js';
 import { hasStrokes } from './trace.js';
@@ -60,9 +60,15 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // 1. Spaced review that is due (oldest first).
   const due = dueItems(responses, now), reviewCap = budget * 0.4; // review never crowds out the current stop
   const pushReview = it => planCost(items) + itemCost(it) <= reviewCap && push(it);
-  const dueSounds = due.filter(d => d.skill.startsWith('sound:')).map(d => d.skill.slice(6)).filter(g => active.includes(g)).slice(0, 4);
+  // rc7: sounds whose map stop is passed but that slipped below secure (e.g. two misses) get a quick review here,
+  // inside forward progress — the map never walks back to them
+  const slipped = slippedStops(responses, now).filter(s => s.kind === 'sound').map(s => s.gpc);
+  const dueSounds = [...new Set([...due.filter(d => d.skill.startsWith('sound:')).map(d => d.skill.slice(6)).filter(g => active.includes(g)), ...slipped])].slice(0, 4);
   const reviewPool = [...new Set([...dueSounds, ...pool])].slice(0, Math.max(pool.length, dueSounds.length + 2)); // old sounds fall out of the newest-6 pool, so due ones are added back
   if (dueSounds.length) pushReview({ type: 'letters', activity: 'hunt', pool: reviewPool, targets: dueSounds, rounds: Math.max(3, Math.min(6, dueSounds.length)), why: 'review' });
+  for (const lv of [...new Set(slippedStops(responses, now).filter(s => s.kind === 'words' && s.level && !due.some(d => d.skill === s.skill)).map(s => s.level))].slice(0, 1)) {
+    const ws = wordsAt(lv, 2); if (ws.length) pushReview({ type: 'words', level: lv, words: ws, why: 'review' });
+  }
   for (const d of due.filter(d => d.skill.startsWith('blend:'))) {
     const ws = wordsAt(+d.skill.slice(7), 2); if (ws.length) pushReview({ type: 'words', level: +d.skill.slice(7), words: ws, why: 'review' });
   }
@@ -160,7 +166,7 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   }
 
   // 3. Practice: introduced sounds that are not secure yet.
-  const shaky = active.filter(g => pool.includes(g) && !atLeast(st(`sound:${g}`), 'secure') && g !== cur?.gpc);
+  const shaky = active.filter(g => pool.includes(g) && !atLeast(st(`sound:${g}`), 'secure') && g !== cur?.gpc && !(dueSounds.includes(g) && items.some(i => i.why === 'review')));
   if (shaky.length) push({ type: 'letters', activity: 'hunt', pool, targets: shaky, rounds: 4, why: 'practice' });
 
   // 4. Fill to >= 5 minutes with mixed review: words at passed levels, then mixed sound hunts.

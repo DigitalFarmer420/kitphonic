@@ -1,10 +1,10 @@
-# Kitphonic 1.0.0-rc6 — release readiness
+# Kitphonic 1.0.0-rc7 — release readiness
 
-Version: `1.0.0-rc6` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc7` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc6:** `npm test` 177/177 (rc5: 172) · `tools/check-sizes.py` 300/300 at rc6 (50 scenes × 6 phone / tablet viewports) · `tools/trace-touch.py` 37/37 graphemes × 7 iPad / phone profiles
+**Gate status at rc7:** `npm test` 185/185 (rc6: 177) · `tools/check-sizes.py` 300/300 at rc7 (50 scenes × 6 phone / tablet viewports) · `tools/trace-touch.py` 37/37 graphemes × 7 iPad / phone profiles · `tools/map-repro.py` map never moves back
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py --audio` end-to-end sessions with real takes, **0 overlapping sounds** (rc5).
@@ -96,6 +96,35 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Phase 1 / 2 overlap — floating letters say | sounds | grown-ups setting |
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |
 | Slider fade-out ladder | on | `?ladder=0`, `?support=1..4` |
+
+## Fixed in rc7 (owner: after "at" the map went back two steps — redo finished steps)
+**Root cause (a bug, not a design).** The map was recomputed on every visit from *live* mastery: a stop counted as
+passed only while its skill was "secure" right now (≥ 80 % of the last 10 scored answers, js/progress.js
+`stopPassed`), and stops pass strictly in order. Mixed review hunts keep asking for old sounds, so two slips on t
+(5 of 7 → 71 %) un-passed `sound:t`; that also un-passed every later stop, and the cat walked back to t (t + at =
+two steps; stars dropped too). A review lapse (two misses after mastery) did the same. Storage, exit paths, step ids
+and versions were not involved: the key `kitphonic.v1.responses` and the 56 stop ids are identical rc1–rc6, the log is
+written per answer on every exit path; the progress was derived wrongly from it.
+Repro (`tools/map-repro.py`, headless Chrome, fresh storage, one profile, 3 sessions a day, a child who slips 30 % of
+the time, reload after every session): live rc6 went t → m (stars 3 → 0) on day 2 and kept bouncing between m and a.
+rc7 (same seed, plus Home pressed mid-session every 3rd session): never backwards, reached p after "at".
+**Spec.** Combined Spec §3.7.1 / Prototype v1.1 §7.1: spaced repetition "mixed into new lessons"; adaptive pacing gives
+more practice or "steps back to an easier *activity* … quietly, with no 'you failed' message". Nothing asks for
+relocking a passed map stop; the walk-back contradicted the spec.
+**Fix.**
+1. High-water marks: the first time a stop is passed a marker `{ skill: 'stop:<id>', marker: true }` is saved in the same
+   log (`progressMarkers`, synced after every answer, on Home, at the end of a session and at boot). A marked stop stays
+   passed; stars never decrease. The store's size cap never trims markers.
+2. Migration: at boot the whole saved history is replayed once and every stop that was passed at *any* moment is
+   marked — progress from rc1–rc6 (including a rolled-back device) comes back to the furthest stop reached.
+3. A passed sound stays "taught" (words that use it stay open). If it slips, the next session opens with a short
+   review hunt under a small "🔁 Quick review" label, inside forward progress; the session still teaches the next stop.
+   Slipped words levels get a 2-word review the same way.
+4. Grown-ups view: a slipped sound shows **Review due**; never on the child's map. New "Skip this step…" (asks first,
+   erases nothing) moves Kit on one stop if a grown-up knows the child is past it.
+**Tests:** `tests/progress-monotonic.test.mjs` — owner repro (rc6 walks back, rc7 stays), pass + slip in one session,
+exit paths + reload, rc4 / rc5 / rc6 log shapes migrate to the furthest stop, markers earned in order on random logs,
+a 30-day simulation through the real planner (position and stars monotonic), review label + parent state, cap + skip.
 
 ## Fixed in rc6 (owner: tracing is very hard to drag on iPad, Safari + Chrome; fine on the phone)
 **Root cause 1 — a second touch broke the stroke.** The trace surface handled *every* pointer: a resting palm / the

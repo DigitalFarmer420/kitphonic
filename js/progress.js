@@ -5,7 +5,7 @@
 // Untaught-sound check: words / star words are only served when every GPC is known (validate.servable).
 import { GPCS, GPC, VOWEL_IDS } from './sequence.js';
 import { WORDS, STAR_WORDS, MAX_NEW_STAR_PER_LEVEL, LETTER_INFO, STORIES } from './content.js';
-import { skillState, atLeast, knownGpcs, blendingUnlocked } from './mastery.js';
+import { skillState, atLeast, knownGpcs, blendingUnlocked, passedStopIds, isMarker, MARKER } from './mastery.js';
 import { servable, parseIds } from './validate.js';
 
 // Word levels open after these GPCs (and only once the level has >= MIN_WORDS servable words).
@@ -60,22 +60,57 @@ export const STOPS = buildStops();
 // Responses that count for a stop: apply stops read the blend responses tagged with their set.
 export const stopResponses = (responses, stop) => stop.apply
   ? responses.filter(r => r.apply === stop.apply || r.skill === stop.skill).map(r => ({ ...r, skill: stop.skill })) : responses;
-export function stopPassed(responses, stop, now = Date.now()) {
+export function stopPassed(responses, stop, now = Date.now(), marked = passedStopIds(responses)) {
+  return marked.has(stop.id) || stopPassedLive(responses, stop, now);
+}
+// Live rule (the skill evidence right now), used to *earn* a stop. Once earned, a marker keeps it passed (rc7).
+export function stopPassedLive(responses, stop, now = Date.now()) {
   if (stop.kind === 'story') return responses.some(r => r.skill === stop.skill && r.correct && r.firstAttempt); // read it and got the picture right first time
   const ok = atLeast(skillState(stopResponses(responses, stop), stop.skill, now), 'secure');
   return stop.kind === 'words' ? ok && blendingUnlocked(responses, now) : ok;
 }
 // Map: passed (sage + star) / current (one, glowing) / upcoming (sand). Stops are passed strictly in order.
+// rc7: a stop with a marker is always passed (the map never moves the child backwards); stops after the first
+// unpassed one are upcoming even if they have markers (cannot happen through play: markers are earned in order).
 export function mapState(responses, now = Date.now(), stops = STOPS) {
-  let cur = -1;
+  let cur = -1; const marked = passedStopIds(responses);
   const out = stops.map((s, i) => {
-    const passed = cur < 0 && stopPassed(responses, s, now);
+    const passed = cur < 0 && stopPassed(responses, s, now, marked);
     if (!passed && cur < 0) cur = i;
     return { ...s, status: passed ? 'passed' : cur === i ? 'current' : 'upcoming' };
   });
   return { stops: out, current: cur < 0 ? null : out[cur], index: cur < 0 ? stops.length : cur, done: cur < 0 };
 }
 export const starCount = (responses, now) => mapState(responses, now).stops.filter(s => s.status === 'passed').length;
+
+// rc7 high-water marks. Replays the log in time order and returns marker records for every stop that was passed at
+// ANY moment (in map order), not only right now — so a sound that slips after its stop was passed (two misses in a
+// review hunt drop it below 80 %) can no longer walk the map back. Also the migration for saved progress from rc1–rc6
+// (no markers yet): the furthest stop ever reached is rebuilt from the saved response history.
+//   since: only responses after this timestamp are new (the caller keeps a cursor; markers resume the replay).
+export function progressMarkers(responses, { now = Date.now(), stops = STOPS, since = -Infinity } = {}) {
+  const marked = passedStopIds(responses), out = [];
+  let k = 0; while (k < stops.length && marked.has(stops[k].id)) k++;
+  if (k >= stops.length) return out;
+  const rs = responses.filter(r => !isMarker(r)).sort((a, b) => a.timestamp - b.timestamp);
+  const lastMark = Math.max(-Infinity, ...responses.filter(isMarker).map(r => r.timestamp)), from = Math.max(since, lastMark);
+  const pre = [...responses.filter(isMarker)];
+  const mark = (stop, t) => { const m = { skill: MARKER + stop.id, itemId: stop.id, marker: true, correct: true, firstAttempt: true, scored: false, timestamp: t }; out.push(m); pre.push(m); };
+  const relevant = (r, st) => r.skill === st.skill || (st.apply && r.apply === st.apply); // (a sound that unlocks blending later is caught by advance(now))
+  const advance = t => { while (k < stops.length && stopPassedLive(pre, stops[k], t)) { mark(stops[k], t); k++; } };
+  for (const r of rs) {
+    pre.push(r);
+    if (r.timestamp <= from || k >= stops.length || !relevant(r, stops[k])) continue;
+    advance(r.timestamp);
+  }
+  advance(now);
+  return out;
+}
+// A passed stop whose skill is not secure right now: due a quick review (parent view + session planner), never relocked.
+export function slippedStops(responses, now = Date.now(), stops = STOPS) {
+  const marked = passedStopIds(responses);
+  return stops.filter(s => marked.has(s.id) && s.kind !== 'story' && !stopPassedLive(responses, s, now));
+}
 
 // Sounds introduced so far = every sound stop up to and including the current one.
 export function activeSounds(responses, now = Date.now(), stops = STOPS) {

@@ -52,12 +52,19 @@ export const skills = responses => [...new Set(responses.map(r => r.skill))];
 
 // Blending unlock (spec §3.4.3): >= 4 sound:* skills secure or better, including >= 1 vowel.
 export function blendingUnlocked(responses, now = Date.now()) {
-  const ok = skills(responses).filter(s => s.startsWith('sound:')).filter(s => atLeast(skillState(responses, s, now), 'secure')).map(s => s.slice(6));
+  const ok = [...new Set([...skills(responses).filter(s => s.startsWith('sound:')).filter(s => atLeast(skillState(responses, s, now), 'secure')).map(s => s.slice(6)), ...markedSounds(responses)])];
   return ok.length >= 4 && ok.some(g => VOWEL_IDS.has(g));
 }
-// GPCs the child may be served (review R5 rule 3): sound:* at secure or better.
+// rc7: map progress high-water marks. When a map stop is passed, a marker record { skill: 'stop:<stop id>', marker: true }
+// is logged (js/progress.js progressMarkers). A passed stop stays passed even if its skill later slips (spaced review
+// handles the slip inside the next sessions); a passed sound stop also keeps its sound "taught".
+export const MARKER = 'stop:';
+export const isMarker = r => r?.marker === true || (typeof r?.skill === 'string' && r.skill.startsWith(MARKER));
+export const passedStopIds = responses => new Set(responses.filter(isMarker).map(r => r.skill.slice(MARKER.length)));
+const markedSounds = responses => [...passedStopIds(responses)].filter(id => id.startsWith('sound:')).map(id => id.slice(6));
+// GPCs the child may be served (review R5 rule 3): sound:* at secure or better, or a sound stop already passed (rc7).
 export const knownGpcs = (responses, now = Date.now()) =>
-  new Set(skills(responses).filter(s => s.startsWith('sound:') && atLeast(skillState(responses, s, now), 'secure')).map(s => s.slice(6)));
+  new Set([...skills(responses).filter(s => s.startsWith('sound:') && atLeast(skillState(responses, s, now), 'secure')).map(s => s.slice(6)), ...markedSounds(responses)]);
 // Tap-mode switch uses blend:L1 mastered.
 export const blendL1Mastered = (responses, now = Date.now()) => atLeast(skillState(responses, 'blend:L1', now), 'mastered');
 // Per-skill pacing: the spec's 90 / 60–89 / <60 rule over the last sessions of counted trials.
@@ -74,9 +81,12 @@ export const dueItems = (responses, now = Date.now()) =>
 // Local-only store (no network). storage: window.localStorage or any {getItem,setItem,removeItem}.
 export function createStore(storage, key = 'kitphonic.v1.responses', cap = 5000) {
   const read = () => { try { return JSON.parse(storage?.getItem(key) || '[]'); } catch { return []; } };
+  // the cap trims the oldest responses, never the map markers (progress must not roll back on a long-used device)
+  const write = a => { if (a.length > cap) { let drop = a.length - cap; a = a.filter(r => isMarker(r) || drop-- <= 0); } storage?.setItem(key, JSON.stringify(a)); };
   return {
     all: read,
-    log(r) { const a = read(); a.push({ timestamp: Date.now(), ...r }); storage?.setItem(key, JSON.stringify(a.slice(-cap))); return a.at(-1); },
+    log(r) { const a = read(); a.push({ timestamp: Date.now(), ...r }); write(a); return a.at(-1); },
+    logMany(rs) { if (!rs.length) return; const a = read(); for (const r of rs) a.push({ timestamp: Date.now(), ...r }); write(a); },
     clear() { storage?.removeItem(key); },
   };
 }
