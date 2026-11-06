@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Kitphonic rc8 Test</string>
+    <string name="title_activity_main">Kitphonic rc8 Test</string>
+    <string name="package_name">com.digitalfarmer.kitphonic.rc8test</string>
+    <string name="custom_url_scheme">com.digitalfarmer.kitphonic.rc8test</string>
+</resources>
