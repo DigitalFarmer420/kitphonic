@@ -35,6 +35,8 @@ SCENES = [  # name, query, js to run after load
     ('word-S2', 'skipHello=1&level=2&word=mat&support=2&seed=1', "new Promise(r => setTimeout(r, 900))"),  # silent dots
     ('hunt-digraph', 'skipHello=1&activity=hunt&pool=x,y,zz,qu,sh,ck&seed=1', None),
     ('levelup', 'skipHello=1&progress=5&levelup=1&seed=1', "new Promise(r => setTimeout(r, 1800))"),
+    ('practice-end', 'skipHello=1&progress=4&practiceEnd=1&seed=1', None),  # rc8: more practice (continue + break), not the level-up
+    ('practice-break', 'skipHello=1&progress=4&practiceEnd=break&seed=1', None),  # rc8: take a break, all-done line, home only
     ('session', 'skipHello=1&progress=5&seed=1', "document.getElementById('go').click()"),
     ('reveal', 'skipHello=1&level=2&word=mat&seed=1', "kitphonic.screen.debugShow('revealed')"),
     ('letters-hunt', 'skipHello=1&activity=hunt&seed=1', None),
@@ -79,7 +81,7 @@ MEASURE = r"""() => {
   const targets = [...root.querySelectorAll('button, #handle, #sn-handle, .stop, .ear, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
     .filter(vis).filter(e => !(e.classList.contains('marker'))) // a marker button's visible shape is its .dot/.bar
     .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body'), adult: !!e.closest('#parent'), ...box(e) }));
-  const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, #sn-strip .wd, .top .path .peb, #fm-card, #fm-slot, #fm-rime, .fchip, .ftile, #sn-tiles .tile, #sn-handle, #sn-read, #sn-choices .pc, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot')]
+  const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, #sn-strip .wd, .top .path .peb, #fm-card, #fm-slot, #fm-rime, .fchip, .ftile, #sn-tiles .tile, #sn-handle, #sn-read, #sn-choices .pc, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot, #done-kit, #done-bubble, #done-stop, #stickers, #done-again, #done-home')]
     .filter(vis).map(e => ({ name: name(e), ...box(e) }));
   const ltr = [...root.querySelectorAll('.ltr .tile, .choice, #st-cards .wcard2')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();

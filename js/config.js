@@ -41,6 +41,7 @@ export function configFromUrl(search = '') {
   if (q.get('progress')) c.progress = +q.get('progress');
   if (q.get('due') === '1') c.due = true;
   if (q.get('levelup') === '1') c.levelup = true; // dev: show the level-up moment for the last passed stop
+  if (q.get('practiceEnd')) c.practiceEnd = q.get('practiceEnd'); // dev: '1' practice-again, 'break' the take-a-break line
   c.sentence = q.get('sentence') || undefined;
   c.story = q.get('story') || undefined;
   if (q.get('reread') === '1') c.reread = true; // dev: ?activity=story&story=pot&reread=1

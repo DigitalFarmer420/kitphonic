@@ -172,5 +172,18 @@ window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceSc
   map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
 if (cfg.parent) openParent(); // dev: ?parent=1 skips the gate
 else if (cfg.levelup) { const m = mapState(store.all()); if (m.index > 0) { show('levelup'); mapScreen.levelUp(m.stops[m.index - 1], { onBack: () => showMap({ drawFrom: m.index - 1 }) }); } else showMap(); } // dev
+else if (cfg.practiceEnd) { // dev: the session-end screen, with the same copy the child gets (layout gate)
+  const cur = mapState(store.all()).current;
+  $('stickers').textContent = '⭐ ⭐ ⭐ ⭐ ⭐ ⭐ ⭐ ⭐';
+  if (cfg.practiceEnd === 'break') {
+    $('done').dataset.kind = 'break'; $('done-again').hidden = true; $('done-stop').hidden = true;
+    $('done-bubble').textContent = MASCOT['m-all-done'];
+  } else {
+    $('done').dataset.kind = 'practice'; $('done-again').hidden = false;
+    $('done-bubble').textContent = MASCOT['m-read-again'];
+    $('done-stop').hidden = !cur; if (cur) $('done-stop').textContent = cur.label;
+  }
+  show('done');
+}
 else if (!cfg.hello.show) cfg.activity || cfg.direct ? startSession() : showMap();
 else show('hello');
