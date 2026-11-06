@@ -21,15 +21,23 @@ const CONFUSABLE = new Set(['bd', 'pq', 'bp', 'dq', 'mn', 'nu', 'mw', 'ft', 'il'
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
 // Repeat a short pool (L1 is only "at" and "am") up to n trials, never the same word twice in a row.
 export function fillWordList(list, n, rand = Math.random) {
-  if (list.length >= n) return shuffle(list, rand).slice(0, n);
-  const out = []; let bag = [];
-  while (out.length < n) {
-    if (!bag.length) bag = shuffle(list, rand);
+  const src = Array.isArray(list) ? list.filter(Boolean) : [];
+  if (!(n > 0) || !src.length) return [];
+  if (src.length === 1) return Array.from({ length: n }, () => src[0]);
+  if (src.length >= n) return shuffle(src, rand).slice(0, n);
+  const out = []; let bag = []; let guard = 0;
+  while (out.length < n && guard++ < n * 4) {
+    if (!bag.length) bag = shuffle(src, rand);
+    if (!bag.length) break;
     let i = bag.length - 1;
-    if (out.length && bag[i].w === out.at(-1).w) { const j = bag.findIndex(e => e.w !== out.at(-1).w); if (j >= 0) i = j; }
-    out.push(bag.splice(i, 1)[0]);
+    if (out.length && bag[i]?.w === out.at(-1)?.w) { const j = bag.findIndex(e => e?.w !== out.at(-1)?.w); if (j >= 0) i = j; }
+    const e = bag.splice(i, 1)[0]; if (!e) break; out.push(e);
   }
   return out;
+}
+// Session end is not a passed stop. 'unlocked' is the level-up; anything else is more practice, and the child may stop.
+export function sessionOutcome(beforeIndex, afterIndex) {
+  return beforeIndex != null && afterIndex > beforeIndex ? 'unlocked' : 'practice';
 }
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;

@@ -13,7 +13,7 @@ import { createSettings } from './settings.js';
 import { createLettersScreen } from './letters-screen.js';
 import { letterTapMode } from './letter-logic.js';
 import { LETTERS } from './core.js';
-import { planSession } from './session.js';
+import { planSession, sessionOutcome } from './session.js';
 import { mapState, progressMarkers } from './progress.js';
 import { seedProgress, memoryStorage } from './dev-seed.js';
 import { createMapScreen } from './map-screen.js';
@@ -24,6 +24,7 @@ import { createSeen } from './seen.js';
 import { createFamilyScreen } from './family-screen.js';
 import { servableFamilies } from './families.js';
 import { allSentences, allStories } from './sentences.js';
+import { MASCOT } from './content.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -82,10 +83,15 @@ function goHome() { $('review-tag').hidden = true; audio.stop(); letters.stop();
 function allDone(stickers = session?.stickers ?? []) {
   $('review-tag').hidden = true; syncProgress(); const before = session?.mapBefore ?? null, after = mapState(store.all());
   session = null;
-  if (before != null && after.index > before) { // a stop was passed: level-up moment, then the path draws forward
+  if (sessionOutcome(before, after.index) === 'unlocked') { // the stop was passed: this is the only step-complete celebration
     show('levelup'); mapScreen.levelUp(after.stops[after.index - 1], { onBack: () => showMap({ drawFrom: before }) }); return;
   }
-  $('stickers').textContent = stickers.join(' '); show('done'); audio.play('m-all-done');
+  // More practice next. Not a failure, and not "you did it": the child can go again or take a break.
+  $('done').dataset.kind = 'practice';
+  $('done-bubble').textContent = MASCOT['m-read-again'];
+  const cur = after.current; $('done-stop').hidden = !cur; if (cur) $('done-stop').textContent = cur.label;
+  $('done-again').hidden = false;
+  $('stickers').textContent = stickers.join(' '); show('done'); audio.play('m-read-again');
 }
 const tapModeFor = activity => letterTapMode(activity, { blendL1Mastered: blendL1Mastered(store.all()), override: cfg.letterTapMode, floatMode: cfg.floatModeSet ? cfg.floatTapMode : settings.get('floatMode') });
 
@@ -154,7 +160,13 @@ $('speaker').onclick = async () => { // sound check + silent-mode tip
   await audio.unlock(); audio.play('sfx-chime');
   const tip = $('tip'); tip.textContent = cfg.silentTip; tip.hidden = !tip.hidden;
 };
-$('done-home').onclick = () => showMap();
+$('done-again').onclick = () => { audio.stop(); startSession(); }; // more practice, same stop until it is actually passed
+$('done-home').onclick = () => { // take a break. The recorded session-end line matches the caption, then the map.
+  if ($('done').dataset.kind === 'break') { audio.stop(); showMap(); return; }
+  $('done').dataset.kind = 'break'; $('done-again').hidden = true; $('done-stop').hidden = true;
+  $('done-bubble').textContent = MASCOT['m-all-done'];
+  audio.stop(); audio.play('m-all-done').then(() => { if ($('done').dataset.kind === 'break') showMap(); });
+};
 
 window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, get session() { return session; },
   map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks

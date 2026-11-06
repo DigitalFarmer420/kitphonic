@@ -5,13 +5,13 @@
 // completions never moved the map. Standards stay: flings and fast picks do not pass the stop.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { planSession } from '../js/session.js';
+import { planSession, fillWordList, sessionOutcome } from '../js/session.js';
 import { mapState, progressMarkers, starCount, slippedStops } from '../js/progress.js';
-import { createStore, skillState, guessGuard, RULES } from '../js/mastery.js';
+import { createStore, skillState, guessGuard, RULES, counts } from '../js/mastery.js';
 import { supportFor, patternSupport, supportPattern, S } from '../js/support.js';
 import { memoryStorage } from '../js/dev-seed.js';
 import { wordCards } from '../js/word-logic.js';
-import { sweepOutcome } from '../js/word-screen.js';
+import { sweepOutcome, checkDelayMs } from '../js/word-screen.js';
 
 const KEY = 'kitphonic.v1.responses';
 const T0 = new Date(2026, 10, 2, 10, 0, 0).getTime();
@@ -144,6 +144,43 @@ test('fast slides and fast picks never open the next stop; a later real session 
   assert.equal(c.map().current.id, 'words:L1');
   c.t += 3600e3; playSession(c, { sessionId: 'read-after' });
   assert.equal(c.map().current.id, 'sound:p');
+});
+
+test('fillWordList finishes on an empty pool and on a single word', () => {
+  assert.deepEqual(fillWordList([], 6), []);
+  assert.deepEqual(fillWordList(null, 4), []);
+  assert.deepEqual(fillWordList([{ w: 'at' }], 0), []);
+  const one = fillWordList([{ w: 'at' }], 6);
+  assert.equal(one.length, 6); assert.ok(one.every(w => w.w === 'at'));
+  const two = fillWordList([{ w: 'at' }, { w: 'am' }], 5, () => 0);
+  assert.equal(two.length, 5);
+  assert.ok(two.every((w, i) => !i || w.w !== two[i - 1].w));
+});
+
+test('a slow slide and a correct pick under 600 ms does not pass at', () => {
+  const c = child(); passSounds(c);
+  playSession(c, { sessionId: 'model' }); // six modelled sweeps; the stop stays put
+  assert.equal(sessionOutcome(4, c.map().index), 'practice');
+  c.t += 3600e3;
+  // Cards used to open ~450 ms after the blend. A correct tap then is under the 600 ms guard.
+  playSession(c, { sweepMs: 1800, pickLatencyMs: 450, sessionId: 'quick' });
+  assert.equal(c.map().current.id, 'words:L1');
+  const quick = c.store.all().filter(r => r.sessionId === 'quick');
+  assert.ok(quick.length >= 5 && quick.every(r => r.correct && r.fast && !counts(r)));
+  assert.equal(skillState(c.store.all(), 'blend:L1', c.t).trials, 0);
+  assert.equal(sessionOutcome(4, c.map().index), 'practice');
+  c.t += 3600e3;
+  playSession(c, { sweepMs: 1800, pickLatencyMs: 1500, sessionId: 'counted' });
+  assert.equal(c.map().current.id, 'sound:p');
+  assert.equal(sessionOutcome(4, c.map().index), 'unlocked');
+});
+
+test('the check stays shut until the 600 ms guess window, so the first possible tap can count', () => {
+  assert.equal(checkDelayMs(450), 600); // the old ~450 ms open is what made a quick correct tap unscored
+  assert.equal(checkDelayMs(451), 600);
+  assert.equal(checkDelayMs(800), 800); // a longer sound pause is not shortened
+  assert.equal(guessGuard({ sweepMs: 1500, phonemes: 2, pickLatencyMs: 451 }).fast, true);
+  assert.equal(guessGuard({ sweepMs: 1500, phonemes: 2, pickLatencyMs: checkDelayMs(451) }).fast, false);
 });
 
 test('a sweep under 250 ms per sound does not open the check; a real slide does', () => {

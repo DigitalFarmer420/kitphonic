@@ -168,11 +168,15 @@
     <button id="lv-next" aria-label="Back to the map" disabled>➜</button>
   </section>
 
-  <section id="done" class="screen" hidden aria-label="All done">
+  <section id="done" class="screen" hidden aria-label="More practice">
     <svg width="160" height="160"><use href="#kit"/></svg>
-    <div class="bubble">All done for today. Great reading!</div>
+    <div class="bubble" id="done-bubble">Let's read it again.</div>
+    <div class="L" id="done-stop" hidden></div>
     <div class="stickers emoji" id="stickers"></div>
-    <button class="btn" id="done-home" aria-label="Home">⌂</button>
+    <div class="done-actions">
+      <button id="done-again" aria-label="Practice again">▶</button>
+      <button class="btn" id="done-home" aria-label="Take a break">⌂</button>
+    </div>
   </section>
 </div>
 <script type="module" src="js/app.js"></script>

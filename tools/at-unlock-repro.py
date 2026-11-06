@@ -37,9 +37,9 @@ def slide(pg, steps, step_ms):
     pg.mouse.up()
 
 
-def play_words(pg, timeout, slow=True):
-    """Drive the word screen until it goes away. Returns screens seen."""
-    t0, seen = time.time(), []
+def play_words(pg, timeout, slow=True, limit=None):
+    """Drive the word screen until it goes away, or until `limit` words have been finished."""
+    t0, seen, finished = time.time(), [], 0
     while time.time() - t0 < timeout:
         scr = pg.evaluate("() => [...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id")
         if scr != 'word':
@@ -56,6 +56,8 @@ def play_words(pg, timeout, slow=True):
             pg.locator(f".choice[data-w='{wd}']").first.click()
             pg.wait_for_timeout(900)
         elif state == 'revealed' and pg.locator('#next').is_visible():
+            finished += 1
+            if limit and finished >= limit: return seen
             pg.locator('#next').click(); pg.wait_for_timeout(400)
         else:
             pg.wait_for_timeout(250)
@@ -66,6 +68,65 @@ def home(pg):
     btn = [x for x in pg.locator('.screen:not([hidden]) .top button[aria-label="Home"]').all() if x.is_visible()]
     if not btn: raise SystemExit('no Home button')
     btn[0].click(); pg.wait_for_timeout(700)
+
+
+def instant_correct_tap(pg, base):
+    """Slow valid slide, then the correct card the instant it exists. Returns the logged read."""
+    pg.goto(base + '?skipHello=1&direct=1&level=1&word=at&seed=3&support=3', wait_until='networkidle')
+    pg.wait_for_timeout(700)
+    pg.evaluate('kitphonic.audio.unlock()')
+    pg.evaluate("""() => {
+      window.__tap = null;
+      const check = document.getElementById('check');
+      new MutationObserver(() => {
+        if (check.hidden || window.__tap) return;
+        const w = kitphonic.screen.entry.w;
+        const btn = document.querySelector('#choices .choice[data-w="' + w + '"]');
+        if (!btn) return;
+        window.__tap = {visibleAt: performance.now()};
+        btn.click();
+        window.__tap.clickedAt = performance.now();
+      }).observe(check, {attributes: true, childList: true, subtree: true});
+    }""")
+    slide(pg, 40, 45)
+    pg.wait_for_timeout(1500)
+    return pg.evaluate("""() => {
+      const r = kitphonic.store.all().filter(x => (x.skill || '').startsWith('blend:')).at(-1);
+      return {tap: window.__tap, state: kitphonic.screen.state,
+        logged: r && {correct: r.correct, scored: r.scored, fast: !!r.fast, modelled: !!r.modelled, latencyMs: r.latencyMs, sweepMs: r.sweepMs}};
+    }""")
+
+
+def drive_until_end(pg, timeout):
+    """Play the open session until the practice screen or the level-up. Returns which one."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        scr = pg.evaluate("() => [...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id")
+        if scr in ('done', 'levelup'): return scr
+        if scr == 'word':
+            state = pg.evaluate("() => kitphonic.screen.state")
+            if state == 'slide': slide(pg, 40, 45); pg.wait_for_timeout(300)
+            elif state == 'check':
+                pg.wait_for_timeout(200); wd = pg.evaluate("() => kitphonic.screen.entry.w")
+                pg.locator(f".choice[data-w='{wd}']").first.click(); pg.wait_for_timeout(700)
+            elif state == 'revealed' and pg.locator('#next').is_visible():
+                pg.locator('#next').click(); pg.wait_for_timeout(250)
+            else: pg.wait_for_timeout(200)
+        elif scr == 'star':
+            st = pg.evaluate("() => { const r = kitphonic.starScreen.run; return r && { busy: !!r.busy, w: r.star.w, cards: document.querySelectorAll('#st-cards .wcard2').length } }")
+            if not st or st['busy'] or not st['cards']: pg.wait_for_timeout(250); continue
+            pg.locator(f"#st-cards .wcard2[data-w='{st['w']}']").click(); pg.wait_for_timeout(900)
+        elif scr == 'letters':
+            st = pg.evaluate("() => { const r = kitphonic.letters.run; return r && { scored: !!r.def.scored, target: r.target, busy: !!r.busy } }")
+            if not st or st['busy']: pg.wait_for_timeout(200); continue
+            if st['scored']:
+                pg.wait_for_timeout(400); pg.locator(f".ltr[data-l='{st['target']}'] .tile").first.click(force=True); pg.wait_for_timeout(600)
+            else:
+                for t in pg.locator('.ltr .tile').all()[:3]: t.click(force=True); pg.wait_for_timeout(120)
+                if pg.locator('#l-next').is_visible(): pg.locator('#l-next').click()
+        else:
+            pg.wait_for_timeout(200)
+    raise SystemExit('session did not end')
 
 
 def main():
@@ -80,6 +141,12 @@ def main():
                               args=['--no-sandbox', '--autoplay-policy=no-user-gesture-required', '--window-position=20,20'])
         ctx = b.new_context(viewport={'width': 820, 'height': 1180}, has_touch=True)
         pg = ctx.new_page()
+        quick = instant_correct_tap(pg, a.base)
+        print('instant correct tap', quick)
+        logged = quick['logged'] or {}
+        if not (logged.get('correct') and logged.get('scored') and not logged.get('fast') and logged.get('sweepMs', 0) >= 500 and logged.get('latencyMs', 0) >= 600):
+            raise SystemExit(f'a tap at the moment the cards appear did not count: {quick}')
+        if quick['state'] not in ('revealed', 'picked'): raise SystemExit(f'correct tap did not finish the word: {quick}')
         pg.goto(a.base + '?skipHello=1', wait_until='networkidle')
         pg.evaluate(SEED); pg.goto(a.base + '?skipHello=1', wait_until='networkidle'); pg.wait_for_timeout(600)
         pg.evaluate('kitphonic.audio.unlock()')
@@ -90,52 +157,53 @@ def main():
         pg.locator('#go').click(); pg.wait_for_timeout(400)
         plan = pg.evaluate("() => kitphonic.session.plan.items.map(i => i.type + ':' + (i.why||'') + (i.words ? '['+i.words.map(w=>w.w).join(',')+']' : ''))")
         print('session1 plan', plan)
-        play_words(pg, 180)
-        print('after words', pg.evaluate(BLENDS))
-        home(pg)
-        mid = pg.evaluate(MAP); print('home mid session 1', mid)
-        shot(pg, f'{a.shots}/02-home-still-at.png')
-        if mid['id'] != 'words:L1': raise SystemExit(f"modelled session moved the map to {mid}")
+        # Modelled session: finish it. The end screen must offer more practice, not the step-complete celebration.
+        end1 = drive_until_end(pg, 180)
+        practice = pg.evaluate("""() => ({
+          screen: [...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id,
+          kind: document.getElementById('done').dataset.kind,
+          bubble: document.getElementById('done-bubble').textContent,
+          stop: document.getElementById('done-stop').textContent,
+          again: !document.getElementById('done-again').hidden,
+          home: !document.getElementById('done-home').hidden,
+          levelup: !document.getElementById('levelup').hidden,
+        })""")
+        print('session 1 end', end1, practice)
+        shot(pg, f'{a.shots}/02-practice-again.png')
+        if end1 != 'done' or practice['kind'] != 'practice' or practice['bubble'] != "Let's read it again." or practice['stop'] != 'at':
+            raise SystemExit(f'modelled session looked like a passed stop: {practice}')
+        if not practice['again'] or not practice['home'] or practice['levelup']: raise SystemExit(f'continue/break missing: {practice}')
+        # Break: the recorded "all done for today" line, then the map, still on at.
+        pg.locator('#done-home').click()
+        pg.wait_for_selector('#map:not([hidden])', timeout=8000)
+        mid = pg.evaluate(MAP); print('break after modelled session', mid)
+        shot(pg, f'{a.shots}/02b-break-still-at.png')
+        if mid['id'] != 'words:L1' or mid['stars'] != before['stars']: raise SystemExit(f'break moved the map: {mid}')
         pg.goto(a.base + '?skipHello=1&reload=1', wait_until='networkidle'); pg.wait_for_timeout(500)
         rel1 = pg.evaluate(MAP); print('reload after session 1', rel1)
         if rel1['id'] != 'words:L1' or rel1['stars'] < before['stars']: raise SystemExit(f'reload lost or moved: {rel1}')
+        # Home in the middle of the scored session must not pass the stop.
+        pg.locator('#go').click(); pg.wait_for_timeout(500)
+        play_words(pg, 120, limit=2)
+        home(pg)
+        mid2 = pg.evaluate(MAP); print('home mid scored session', mid2, pg.evaluate(BLENDS))
+        if mid2['id'] != 'words:L1': raise SystemExit(f'home mid-session passed the stop: {mid2}')
+        pg.goto(a.base + '?skipHello=1&reload=1b', wait_until='networkidle'); pg.wait_for_timeout(400)
+        if pg.evaluate(MAP)['id'] != 'words:L1': raise SystemExit('reload after partial scored session moved the map')
         pg.locator('#go').click(); pg.wait_for_timeout(400)
-        # second session: independent reads. Drive every screen until level-up or all-done.
-        t0, seen = time.time(), []
-        while time.time() - t0 < 240:
-            scr = pg.evaluate("() => [...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id")
-            if scr == 'levelup':
-                seen.append('levelup'); pg.wait_for_timeout(1600); shot(pg, f'{a.shots}/03-levelup.png')
-                pg.locator('#lv-next').click(); pg.wait_for_timeout(800); break
-            if scr == 'done':
-                seen.append('done'); shot(pg, f'{a.shots}/03-done.png'); break
-            if scr == 'word':
-                state = pg.evaluate("() => kitphonic.screen.state")
-                if state == 'slide': slide(pg, 40, 45); pg.wait_for_timeout(400)
-                elif state == 'check':
-                    pg.wait_for_timeout(700); wd = pg.evaluate("() => kitphonic.screen.entry.w")
-                    pg.locator(f".choice[data-w='{wd}']").first.click(); pg.wait_for_timeout(800)
-                elif state == 'revealed' and pg.locator('#next').is_visible():
-                    pg.locator('#next').click(); pg.wait_for_timeout(300)
-                else: pg.wait_for_timeout(200)
-            elif scr == 'star':
-                st = pg.evaluate("() => { const r = kitphonic.starScreen.run; return r && { busy: !!r.busy, w: r.star.w, cards: document.querySelectorAll('#st-cards .wcard2').length } }")
-                if not st or st['busy'] or not st['cards']: pg.wait_for_timeout(250); continue
-                pg.locator(f"#st-cards .wcard2[data-w='{st['w']}']").click(); pg.wait_for_timeout(1000)
-            elif scr == 'letters':
-                st = pg.evaluate("() => { const r = kitphonic.letters.run; return r && { scored: !!r.def.scored, target: r.target, busy: !!r.busy } }")
-                if not st or st['busy']: pg.wait_for_timeout(200); continue
-                if st['scored']:
-                    pg.wait_for_timeout(500); pg.locator(f".ltr[data-l='{st['target']}'] .tile").first.click(force=True); pg.wait_for_timeout(700)
-                else:
-                    for t in pg.locator('.ltr .tile').all()[:3]: t.click(force=True); pg.wait_for_timeout(150)
-                    if pg.locator('#l-next').is_visible(): pg.locator('#l-next').click()
-            else:
-                pg.wait_for_timeout(200)
-        after = pg.evaluate(MAP); print('after session 2', after, 'screens', seen)
+        end2 = drive_until_end(pg, 240)
+        if end2 != 'levelup':
+            done = pg.evaluate("() => document.getElementById('done-bubble') && document.getElementById('done-bubble').textContent")
+            raise SystemExit(f'scored session ended on {end2} ({done}) not the unlock')
+        pg.wait_for_timeout(400); shot(pg, f'{a.shots}/03-levelup.png')
+        up = pg.evaluate("() => ({say: document.querySelector('#levelup .lv-say').textContent, levelup: !document.getElementById('levelup').hidden})")
+        print('level up', up)
+        if up['say'] != 'You did it!': raise SystemExit(f'unlock copy changed: {up}')
+        pg.locator('#lv-next').click(); pg.wait_for_timeout(800)
+        after = pg.evaluate(MAP); print('after session 2', after)
         print('blends', pg.evaluate(BLENDS))
         shot(pg, f'{a.shots}/04-map-p.png')
-        if after['id'] != 'sound:p': raise SystemExit(f"next stop did not open: {after} seen={seen}")
+        if after['id'] != 'sound:p': raise SystemExit(f"next stop did not open: {after}")
         if after['stars'] < mid['stars']: raise SystemExit('stars dropped')
         pg.goto(a.base + '?skipHello=1&reload=2', wait_until='networkidle'); pg.wait_for_timeout(400)
         rel2 = pg.evaluate(MAP); print('reload after unlock', rel2)

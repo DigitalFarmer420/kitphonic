@@ -1,6 +1,6 @@
 // Word screen controller (spec §3.5): tiles + markers + Blend Slider -> picture check -> reveal.
 import { createSweep, attached, graphemeUnits } from './core.js';
-import { guessGuard } from './mastery.js';
+import { guessGuard, RULES } from './mastery.js';
 import { supportPattern } from './support.js';
 import { wordLayout, layoutFor } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
@@ -9,6 +9,10 @@ import { MASCOT } from './content.js';
 // A sweep faster than 250 ms per sound is not a blend (guess guard). It must not open the check: that used to
 // look like a finished word while the log stored a fling, so the "at" stop never collected a counted read.
 export const sweepOutcome = (sweepMs, phonemes) => (guessGuard({ sweepMs, phonemes }).scored ? 'check' : 'reslide');
+// The check used to open ~450 ms after the blend, while a pick under 600 ms is unscored. A correct tap in that
+// gap finished the word and never counted. Open only once the guess window has elapsed (never earlier than the
+// existing pause that lets the sounds finish).
+export const checkDelayMs = (pauseMs, guardMs = RULES.fastPickMs) => Math.max(0, pauseMs || 0, guardMs);
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -126,8 +130,9 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
         // No check possible (no picture / cards), or ?speakBeforeCheck=1: Kit models the word and the trial is unscored.
         // v2 V2: S4 (model) speaks the word too — modelled, never scored
         const model = !choices || trial.support === 4; trial.modelled = !!choices && model; blendEndAt = performance.now();
-        if (model) { const c = clipForBlend(entry.w); audio.play(c.id, { delayMs: (ev.delayMs || 0) + 350 }).then(afterBlend); }
-        else setTimeout(afterBlend, (ev.delayMs || 0) + 450);
+        const pause = (ev.delayMs || 0) + (model ? 350 : 450);
+        if (model) { const c = clipForBlend(entry.w); audio.play(c.id, { delayMs: pause }).then(() => setTimeout(afterBlend, Math.max(0, blendEndAt + RULES.fastPickMs - performance.now()) + 16)); }
+        else setTimeout(afterBlend, checkDelayMs(pause) + 16); // one frame past the guard, so the first tap is not still inside it
         light(ms.map((_, i) => i));
       }
     }
@@ -153,8 +158,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     else audio.play('m-which-pic'); // "Which picture?" — the word is printed, never spoken, before the pick
   }
   function pick(c, btn) {
-    if (state !== 'check') return; audio.stop();
-    const t = performance.now(), latencyMs = Math.round(t - (blendEndAt || checkAt)), first = trial.picks++ === 0;
+    if (state !== 'check') return;
+    const t = performance.now(), latencyMs = Math.round(t - (blendEndAt || checkAt));
+    // Still inside the guess window: the tap does not count and does not finish the word. The question stays up.
+    if (blendEndAt && guessGuard({ pickLatencyMs: latencyMs }).fast) return;
+    audio.stop();
+    const first = trial.picks++ === 0;
     record({ ...tag, skill: `blend:L${level}`, itemId: entry.w, gpcs: entry.parse?.split(' ') ?? [...entry.w], correct: c.w === entry.w,
       firstAttempt: first, assisted: !first || trial.assisted, scored: trial.scored && !trial.modelled, ...(trial.modelled ? { modelled: true } : {}), fast: guessGuard({ pickLatencyMs: latencyMs }).fast,
       latencyMs, sweepMs: Math.round(trial.sweepMs ?? 0), contrast: (c.w !== entry.w && c.contrast) || choices.contrast || null, // a miss logs the position the picked word differed in
