@@ -1,10 +1,30 @@
-# Kitphonic 1.0.0-rc7 — release readiness
+# Kitphonic 1.0.0-rc8 — release readiness
 
-Version: `1.0.0-rc7` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc8` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc7:** `npm test` 185/185 (rc6: 177) · `tools/check-sizes.py` 300/300 at rc7 (50 scenes × 6 phone / tablet viewports) · `tools/trace-touch.py` 37/37 graphemes × 7 iPad / phone profiles · `tools/map-repro.py` map never moves back
+**Gate status at rc8:** `npm test` 191/191 (rc7: 185) · `tools/at-unlock-repro.py` on headless Chrome (iPad-sized 820×1180, plus a phone-sized old-history load): two legitimate "at" sessions open **p**, Home and reload keep it, a fast slide does not open the check, an old fling log stays on "at". rc7 size / trace gates were not re-run (no layout or tracing change).
+
+## Fixed in rc8 (owner: finishing "at" never opens the next step)
+
+**Symptom.** On the map, "at" is the words stop after m, s, a, t (the third pebble in the window the child sees: a, t, **at**). The next stop is the letter **p**. The owner could finish the "at" lesson over and over — all-done, back to the map — and Kit stayed on "at". This is not the rc7 walk-back: nothing was passed and then revoked. The stop never became passed.
+
+**What "finishing" was actually recording.** Only **at** and **am** are readable with m, s, a, t. The planner asked for 5 word trials and then kept 2. The first blends are modelled (S4): Kit says the word, the pick is unscored, and it takes **6** slow sweeps to leave the model. A stop passes when `blend:L1` is **secure** (5 counted reads, at least 80% of the last 10) — not when the session ends, and not the 2-day "mastered" bar (that one only schedules review). Counted means first try, unassisted, sweep at least 250 ms per sound, pick at least 600 ms after the blend, and Kit did not say the word first. So a careful child needed 3 sessions of 2 modelled words and then 3 more of 2 scored words: **six** all-done screens before p. A faster slide still opened the check, played the reward, and stored a fling, which never counts toward the 6 or the 5. Those completions can repeat forever and the map does not move.
+
+**Before (node replay of the rc7 planner and the word-screen log, perfect picks).** The lesson contained 2 words. Slow slides: still on "at" after 5 sessions, **p** only on session 6. Slides under 500 ms: still on "at" after 8 sessions, support stuck at S4, zero counted reads. The check still opened, so the lesson looked finished.
+
+**After.** While "at" is still modelled, the lesson repeats at/am for 6 trials (no new words, never the same word twice in a row). The next session has 5 trials with the word not said first. Two legitimate sessions open p. A slide under 250 ms per sound does not open the check; Kit says "Let's slide slowly, so we hear every sound." and the handle returns to the start. Thresholds are unchanged. The parent's Skip button is not involved.
+
+**Browser, fresh profile, iPad-sized Chrome** (`tools/at-unlock-repro.py`, real pointer slides, audio unlocked):
+- Boot on "at", 4 stars. Session 1 logged `am/at` ×3 as modelled, unscored, sweeps 1266–1500 ms. Home mid-session and reload: still "at", 4 stars.
+- Session 2 logged five scored reads (`amS`, `atS`, …). Level-up ("You did it!", chips am / at), then the map on **p** with 5 stars. Reload: still p, 5 stars. Home during the p lesson: still p, 5 stars.
+- A fast slide left the check closed and the slider at the start. A slow slide opened "Which word did you read?".
+- An older log of 10 finished modelled flings was kept and still showed "at" (phone-sized window). Nothing was erased.
+
+**This device's save.** rc8 does not reset site data and does not mark "at" passed from flings or from modelled reads. If the saved log already has 6 non-fling modelled sweeps and 5 counted reads, the existing rc7 marker replay would already have opened p — a device that is still on "at" does not have that evidence. Clean modelled sweeps already in the log still count, so the next careful session can be the scored one. Fast slides already stored stay unscored. The map moves on the next sessions that meet the same bar, including two sessions on the same day. "Mastered" (about 90% on two different days) is still only the review schedule, not the gate for p.
+
+**Not proved on a real iPad.** Headless Chrome does not run iPadOS gesture recognizers, Safari's `pointercancel`, palm rejection on the slider, or the child's actual sweep speed and audio. A slide that stays under 500 ms for "at" will keep asking them to slide slowly; only the device can show whether a given child clears that bar. rc5 (one sound at a time, chime-only letter feedback) and rc6 (tracing finger ownership) were not changed.
 (child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py --audio` end-to-end sessions with real takes, **0 overlapping sounds** (rc5).

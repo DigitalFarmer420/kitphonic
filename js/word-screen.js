@@ -5,6 +5,10 @@ import { supportPattern } from './support.js';
 import { wordLayout, layoutFor } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, needsCheck, caseFor } from './word-logic.js';
+import { MASCOT } from './content.js';
+// A sweep faster than 250 ms per sound is not a blend (guess guard). It must not open the check: that used to
+// look like a finished word while the log stored a fling, so the "at" stop never collected a counted read.
+export const sweepOutcome = (sweepMs, phonemes) => (guessGuard({ sweepMs, phonemes }).scored ? 'check' : 'reslide');
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -111,10 +115,13 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
         if (trial.support !== 2 || trial.assisted) { heardWord(ms[ev.marker]); audio.play(clip.id, { rate: clip.rate, delayMs: ev.delayMs, gapMs: 0 }); } // S2: the dots light silently; rc5: phonemes join end-to-start, never overlap
         light(sweep.lit, ev.marker);
       } else if (ev.kind === 'blend') {
-        state = 'blending'; dragging = null; hand.stop();
         const sweepMs = performance.now() - (sweepStart ?? performance.now());
-        if (trial.picks === 0) Object.assign(trial, { sweepMs, scored: guessGuard({ sweepMs, phonemes: ms.length }).scored && !trial.wordHeard });
-        if (!guessGuard({ sweepMs, phonemes: ms.length }).scored) audio.play('m-slide-slowly'); // gentle prompt; not scored
+        if (sweepOutcome(sweepMs, ms.length) === 'reslide') { // finger is still down: drop it so the end of the fling can't instantly blend again
+          dragging = null; hand.stop(); sweep.reset(); setHandle(0); light([]); sweepStart = null; state = 'slide';
+          audio.stop(); say(MASCOT['m-slide-slowly'], { id: 'm-slide-slowly' }); continue;
+        }
+        state = 'blending'; dragging = null; hand.stop();
+        if (trial.picks === 0) Object.assign(trial, { sweepMs, scored: !trial.wordHeard });
         // v2 V1: before a scored check the whole word is NOT spoken — the child blends the sounds; it plays after the pick.
         // No check possible (no picture / cards), or ?speakBeforeCheck=1: Kit models the word and the trial is unscored.
         // v2 V2: S4 (model) speaks the word too — modelled, never scored
