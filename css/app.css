@@ -94,7 +94,16 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* done */
 #done{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px}
 #done[hidden]{display:none}
-#done .stickers{font-size:44px;letter-spacing:6px}
+#done .stickers{font-size:44px;letter-spacing:6px;max-width:90%;text-align:center}
+#done-stop{font-size:80px;line-height:1}
+#done .done-actions{display:flex;gap:28px;align-items:center}
+#done-again{width:160px;height:72px;border-radius:36px;background:var(--coral);color:#fff;font-size:32px;box-shadow:0 5px 0 #c96a4f}
+.short #done{gap:8px}
+.short #done-kit{width:72px;height:72px}
+.short #done .bubble{font-size:16px;padding:8px 12px;max-width:92%}
+.short #done-stop{font-size:48px}
+.short #done .stickers{font-size:28px;letter-spacing:3px}
+.short #done-again,.short #done-home{height:72px}
 
 /* letter activities: item = tile centred on its point, sound dot below */
 #l-mascot{left:40px;top:96px}

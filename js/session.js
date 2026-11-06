@@ -11,6 +11,7 @@ import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, slippedStops, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
 import { shuffle, minimalPairs, wordCards } from './word-logic.js';
+import { patternSupport, SUPPORT_RULES, S } from './support.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
 import { servableFamilies } from './families.js';
@@ -18,6 +19,26 @@ import { servableFamilies } from './families.js';
 export const COST = { storyPage: 45, explore: 40, roundIntro: 10, round: 12, word: 35, star: 50, sentence: 70, family: 70, intro: 30, trace: 60 }; // seconds (estimates; tune in playtest)
 const CONFUSABLE = new Set(['bd', 'pq', 'bp', 'dq', 'mn', 'nu', 'mw', 'ft', 'il', 'hn']); // letter pairs that look alike
 export const MIN_MIN = 5, MAX_MIN = 10, DEFAULT_MIN = 7;
+// Repeat a short pool (L1 is only "at" and "am") up to n trials, never the same word twice in a row.
+export function fillWordList(list, n, rand = Math.random) {
+  const src = Array.isArray(list) ? list.filter(Boolean) : [];
+  if (!(n > 0) || !src.length) return [];
+  if (src.length === 1) return Array.from({ length: n }, () => src[0]);
+  if (src.length >= n) return shuffle(src, rand).slice(0, n);
+  const out = []; let bag = []; let guard = 0;
+  while (out.length < n && guard++ < n * 4) {
+    if (!bag.length) bag = shuffle(src, rand);
+    if (!bag.length) break;
+    let i = bag.length - 1;
+    if (out.length && bag[i]?.w === out.at(-1)?.w) { const j = bag.findIndex(e => e?.w !== out.at(-1)?.w); if (j >= 0) i = j; }
+    const e = bag.splice(i, 1)[0]; if (!e) break; out.push(e);
+  }
+  return out;
+}
+// Session end is not a passed stop. 'unlocked' is the level-up; anything else is more practice, and the child may stop.
+export function sessionOutcome(beforeIndex, afterIndex) {
+  return beforeIndex != null && afterIndex > beforeIndex ? 'unlocked' : 'practice';
+}
 export function itemCost(it) {
   if (it.type === 'words') return it.words.length * COST.word;
   if (it.type === 'star') return COST.star;
@@ -51,6 +72,11 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   const push = it => { if (room(it)) { items.push(it); return true; } return false; };
   const pool = letterPool(active.length ? active : [GPCS[0].id]);
   const wordsAt = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? shuffle(ws, rand).slice(0, n) : []; };
+  // The current stop asks for 5 reads (secure needs 5). L1 can only serve at/am, and the first blends are
+  // modelled (unscored) until 6 slow sweeps — so one session has to finish that model, or the next stop
+  // cannot open on the following session's independent reads. Review lists stay as they are.
+  const wordsForStop = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? (ws.length >= n ? shuffle(ws, rand).slice(0, n) : fillWordList(ws, n, rand)) : []; };
+  const wordRounds = lv => (lv === 1 && patternSupport(responses, 'VC', now).level === S.MODEL) ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5;
   const stepBack = skill => pacingFor(responses, skill) === 'stepBack';
   // an easy pool for a step-back round: the sound + two secure letters that sound and look different
   const easyPool = g => { const far = x => x !== g && GPC[x]?.phoneme !== GPC[g]?.phoneme && !CONFUSABLE.has([g, x].sort().join(''));
@@ -109,7 +135,7 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
     if (s) push({ type: 'story', story: s, why: 'new' });
     else if (!need.length) push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
   } else if (cur?.kind === 'words') {
-    let lv = cur.level, ws = wordsAt(lv, 5), easier = false;
+    let lv = cur.level, ws = wordsForStop(lv, wordRounds(lv)), easier = false;
     if (!ws.length && passedLevels.length) { lv = passedLevels.at(-1); ws = wordsAt(lv, 5); }
     if (ws.length && stepBack(`blend:L${lv}`)) { // §3.7.1 step back: the last easier level passed, S3+ support and the hand demo
       const down = passedLevels.filter(l => l < lv).at(-1), dws = down ? wordsAt(down, 4) : [];
