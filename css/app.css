@@ -27,7 +27,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #hello .kitwrap>svg:first-child{width:100%;height:100%}
 #hello .paw{position:absolute;right:-34px;top:96px;width:76px;height:76px;transform-origin:20% 90%;animation:wave 1.4s ease-in-out infinite}
 @keyframes wave{0%,60%,100%{transform:rotate(0)}15%,45%{transform:rotate(-22deg)}30%{transform:rotate(14deg)}}
-#hello .bubble{position:absolute;left:50%;top:calc(var(--h) * .1 + 236px);transform:translateX(-50%);font-size:24px;white-space:nowrap}
+#hello .bubble{position:absolute;left:50%;top:calc(var(--h) * .1 + 236px);transform:translateX(-50%);font-size:24px;width:max-content;white-space:normal;height:auto;text-wrap:balance} /* wraps in the 330px cap; max-content keeps the short hello snug */
 #play{position:absolute;left:50%;bottom:calc(var(--h) * .12);transform:translateX(-50%);width:132px;height:132px;border-radius:50%;background:var(--sage);
   box-shadow:0 7px 0 var(--saged);display:flex;align-items:center;justify-content:center}
 #play svg{width:60px;height:60px}
@@ -254,7 +254,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* ---- portrait phones: 400 wide, height follows screen (700+). Slider in the thumb zone. ---- */
 .portrait .top{top:14px;left:14px;right:14px}
 .portrait #hello .kitwrap{top:calc(var(--h) * .13)}
-.portrait #hello .bubble{top:calc(var(--h) * .13 + 236px)}
+.portrait #hello .bubble{top:calc(var(--h) * .13 + 228px)} /* 8px higher: a 1.5x greeting still clears Play on a 710-tall stage */
 .portrait #hello .paw{right:-20px}
 .portrait #play{bottom:calc(var(--h) * .18)}
 .portrait #word-mascot{left:14px;top:98px}
@@ -290,7 +290,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short .top{top:10px;left:16px;right:16px}
 .short #hello .kitwrap{top:14px;width:150px;height:150px}
 .short #hello .paw{right:-28px;top:62px;width:56px;height:56px}
-.short #hello .bubble{top:172px;font-size:20px}
+.short #hello .bubble{top:172px;font-size:20px;max-width:calc(var(--w) - 48px)} /* larger type can stay one line above Play */
 .short #play{bottom:22px}
 .short #word-mascot{left:16px;top:90px}
 .short #word-mascot svg{width:56px;height:56px}
