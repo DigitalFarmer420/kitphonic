@@ -27,7 +27,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #hello .kitwrap>svg:first-child{width:100%;height:100%}
 #hello .paw{position:absolute;right:-34px;top:96px;width:76px;height:76px;transform-origin:20% 90%;animation:wave 1.4s ease-in-out infinite}
 @keyframes wave{0%,60%,100%{transform:rotate(0)}15%,45%{transform:rotate(-22deg)}30%{transform:rotate(14deg)}}
-#hello .bubble{position:absolute;left:50%;top:calc(var(--h) * .1 + 236px);transform:translateX(-50%);font-size:24px;width:max-content;white-space:normal;height:auto;text-wrap:balance} /* wraps in the 330px cap; max-content keeps the short hello snug */
+#hello .bubble{position:absolute;left:50%;top:calc(var(--h) * .1 + 236px);transform:translateX(-50%);font-size:24px;width:max-content;white-space:normal;height:auto;text-align:center;text-wrap:balance} /* wraps in the 330px cap; max-content keeps the short hello snug */
 #play{position:absolute;left:50%;bottom:calc(var(--h) * .12);transform:translateX(-50%);width:132px;height:132px;border-radius:50%;background:var(--sage);
   box-shadow:0 7px 0 var(--saged);display:flex;align-items:center;justify-content:center}
 #play svg{width:60px;height:60px}

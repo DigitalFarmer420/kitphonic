@@ -32,6 +32,7 @@ test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
   assert.match(bubble, /height:auto/);
   assert.match(bubble, /width:max-content/);
   assert.match(bubble, /text-wrap:balance/);
+  assert.match(bubble, /text-align:center/);
   assert.equal(bubble.includes('nowrap'), false);
   assert.equal(/height:\d/.test(bubble), false);
   assert.equal(bubble.includes('max-height'), false);
@@ -53,10 +54,12 @@ test('portrait and short hello bubbles do not cap lines or shrink type', () => {
   const [short] = decls('.short #hello .bubble');
   assert.match(portrait, /top:calc\(var\(--h\) \* \.13 \+ 228px\)/);
   assert.equal(portrait.includes('font-size'), false);
+  assert.equal(portrait.includes('text-align'), false);
   assert.equal(portrait.includes('nowrap'), false);
   assert.equal(portrait.includes('max-height'), false);
   assert.match(short, /font-size:20px/);
   assert.match(short, /max-width:calc\(var\(--w\) - 48px\)/);
+  assert.equal(short.includes('text-align'), false);
   assert.equal(short.includes('nowrap'), false);
   assert.equal(short.includes('max-height'), false);
   assert.equal(/height:\d/.test(short), false);
