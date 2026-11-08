@@ -25,6 +25,7 @@ import { createFamilyScreen } from './family-screen.js';
 import { servableFamilies } from './families.js';
 import { allSentences, allStories } from './sentences.js';
 import { MASCOT } from './content.js';
+import { createHelloGate } from './hello-gate.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -146,15 +147,24 @@ function startDirect() { // dev: word screen at ?level (and ?word first)
   show('word'); screen.start(list, lv);
 }
 
-// Hello: one big play button; the tap unlocks audio (autoplay policies / iOS) and plays Kit's greeting.
+// Hello: one big play button; the tap unlocks audio (autoplay policies / iOS) and plays Kit's greeting once.
 // rc4: the tap registers instantly (pressed button, Kit waves, bubble text) before any audio work.
+// A second tap used to enqueue another greeting; that one kept playing after the map appeared.
+const helloGate = createHelloGate();
+const acceptHello = () => {
+  $('play').classList.add('going'); $('play').setAttribute('aria-disabled', 'true'); $('play').setAttribute('aria-busy', 'true');
+  $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!";
+};
+const releaseHello = () => { $('play').classList.remove('going'); $('play').removeAttribute('aria-disabled'); $('play').removeAttribute('aria-busy'); };
 $('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
-$('play').onclick = async () => {
-  $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; // keyboard / no pointerdown
-  await audio.unlock({ first: [cfg.hello.greetingClip] });
-  await audio.play(cfg.hello.greetingClip);
-  cfg.activity || cfg.direct ? startSession() : showMap(); // the map is home
+$('play').onclick = () => {
+  acceptHello(); // keyboard activation has no pointerdown
+  helloGate.start({
+    unlock: () => audio.unlock({ first: [cfg.hello.greetingClip] }), // still inside this gesture, before the first await
+    play: () => audio.play(cfg.hello.greetingClip),
+    go: () => { cfg.activity || cfg.direct ? startSession() : showMap(); },
+  }).catch(releaseHello); // a failed unlock/play can be tried again; a success stays accepted
 };
 $('speaker').onclick = async () => { // sound check + silent-mode tip
   await audio.unlock(); audio.play('sfx-chime');
