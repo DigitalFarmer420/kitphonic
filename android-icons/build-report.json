@@ -1,0 +1,149 @@
+{
+  "favicon32_yellow_sides": [
+    4,
+    4
+  ],
+  "favicon48_yellow_sides": [
+    15,
+    15
+  ],
+  "adaptive_yellow_inside_72dp_circle": true,
+  "splash_icon": "drawable-nodpi/splash_icon.png uses the same safe circle as the adaptive foreground. Theme.SplashScreen on API 31 reads windowSplashScreenAnimatedIcon, not android:background.",
+  "background": "#FFF8E6",
+  "splash_note": "Full master contained and centered. No crop. No system-bar padding.",
+  "master_sha256": "4a45274b45d588c5b697b72a7d16e4aeb36c05afdd72e9bfac64f393c8204871",
+  "master_bytes": 439220,
+  "code4_wrapper_sha256": "a47a486e784dbf1868c0cd7c9b66691815db93aaf3fb4bf998405f78defba3e0",
+  "content_bbox": [
+    181,
+    160,
+    841,
+    846
+  ],
+  "outputs": {
+    "icons/favicon-32.png": {
+      "bytes": 1490,
+      "sha256": "31af79208aa975e797b96e277987f5cd5aec0b9248aa96339f889e9e1a30fb35"
+    },
+    "icons/favicon-48.png": {
+      "bytes": 2913,
+      "sha256": "2db6df3c2db80c69a1c805dc334d0c24dcacff317dc86ea362fdc2cd35f0f91c"
+    },
+    "icons/apple-touch-180.png": {
+      "bytes": 31200,
+      "sha256": "aa7abcd774194ebabc064043e696a44a122a8ab328123178372331d4cbf9cd1a"
+    },
+    "android-icons/res/mipmap-mdpi/ic_launcher.png": {
+      "bytes": 2913,
+      "sha256": "2db6df3c2db80c69a1c805dc334d0c24dcacff317dc86ea362fdc2cd35f0f91c"
+    },
+    "android-icons/res/mipmap-mdpi/ic_launcher_round.png": {
+      "bytes": 3231,
+      "sha256": "2985cc2dbd86256d7218e88e82f8064aef48b37570d6d74067354e6e6582bd9a"
+    },
+    "android-icons/res/mipmap-mdpi/ic_launcher_foreground.png": {
+      "bytes": 7556,
+      "sha256": "fe465632239fe89f02cd6f41894ab1f8ae468e54c20a499a953b2bb62f750f18"
+    },
+    "android-icons/res/mipmap-hdpi/ic_launcher.png": {
+      "bytes": 5863,
+      "sha256": "b1750712a94226ca628a0af86d6ad73a8e34c6ef5682ba3201b80da322e4c75f"
+    },
+    "android-icons/res/mipmap-hdpi/ic_launcher_round.png": {
+      "bytes": 6335,
+      "sha256": "905ee74c039402699c20a3d1b7d4e8a6cebb918673d94d0421f5e1a84468edae"
+    },
+    "android-icons/res/mipmap-hdpi/ic_launcher_foreground.png": {
+      "bytes": 15755,
+      "sha256": "d7ca82dbf7f5c7e1ba8f53edb4102ce00903f805b36454daa22c028038631a30"
+    },
+    "android-icons/res/mipmap-xhdpi/ic_launcher.png": {
+      "bytes": 9996,
+      "sha256": "1f403e19d5fbc8b50372565a3884c91109c3de285d485aa9001747b5bc609e31"
+    },
+    "android-icons/res/mipmap-xhdpi/ic_launcher_round.png": {
+      "bytes": 10649,
+      "sha256": "fd9351275a4d444090af1eebc7b3041c4706880e336964552c7de140f53011a3"
+    },
+    "android-icons/res/mipmap-xhdpi/ic_launcher_foreground.png": {
+      "bytes": 26247,
+      "sha256": "9670ca14dc75b4873b8a6b9f853dfa610b716653a09bc9e079b6993e17d531f8"
+    },
+    "android-icons/res/mipmap-xxhdpi/ic_launcher.png": {
+      "bytes": 20848,
+      "sha256": "c75ddc7201b8b58f1a51d406f21b3f3bb0a1b1adf083f7883bee999fe62f51d5"
+    },
+    "android-icons/res/mipmap-xxhdpi/ic_launcher_round.png": {
+      "bytes": 21838,
+      "sha256": "972ee859a4b6b95e09365d377a00aecf1377d3019c9592187a263066d877c822"
+    },
+    "android-icons/res/mipmap-xxhdpi/ic_launcher_foreground.png": {
+      "bytes": 54241,
+      "sha256": "0d67fb24b53f00a224e2cb83c2022feb31fd0af50d7495359a2f348e3c329633"
+    },
+    "android-icons/res/mipmap-xxxhdpi/ic_launcher.png": {
+      "bytes": 35243,
+      "sha256": "9a6725d482b75380257999448b88b6f0aecf1197e59d008977384eb7767f7d05"
+    },
+    "android-icons/res/mipmap-xxxhdpi/ic_launcher_round.png": {
+      "bytes": 36606,
+      "sha256": "8a3397c88d440927295c9bc0772468dcb024d6baa1aabf9c37bf8cedaad7c0ea"
+    },
+    "android-icons/res/mipmap-xxxhdpi/ic_launcher_foreground.png": {
+      "bytes": 92284,
+      "sha256": "c95c0c4fab3595786d665bd176c28e98629f6569bae68bfdaa6e89324041e430"
+    },
+    "android-icons/res/drawable-nodpi/splash_icon.png": {
+      "bytes": 92284,
+      "sha256": "c95c0c4fab3595786d665bd176c28e98629f6569bae68bfdaa6e89324041e430"
+    },
+    "android-icons/res/values/ic_launcher_background.xml": {
+      "bytes": 121,
+      "sha256": "99c822505787b39fe3cc7e9c9244b02bc93cc081cdcdc55a7e84cd222a52cb91"
+    },
+    "android-icons/res/drawable/splash.png": {
+      "bytes": 83300,
+      "sha256": "cbe719af1c58c372be993707b2f89be99e36f5388b75a27e96d9432e05d2d79a"
+    },
+    "android-icons/res/drawable-land-mdpi/splash.png": {
+      "bytes": 83300,
+      "sha256": "cbe719af1c58c372be993707b2f89be99e36f5388b75a27e96d9432e05d2d79a"
+    },
+    "android-icons/res/drawable-land-hdpi/splash.png": {
+      "bytes": 161705,
+      "sha256": "72595f3949cf179c3cc15e7a3fffefac4c2cb21c2a4d3eeae8b6edebd74262d7"
+    },
+    "android-icons/res/drawable-land-xhdpi/splash.png": {
+      "bytes": 315247,
+      "sha256": "022bba0fc8ebac985109725a8b4e42f00386c3081972e612a935b1f21c0a878b"
+    },
+    "android-icons/res/drawable-land-xxhdpi/splash.png": {
+      "bytes": 467352,
+      "sha256": "bb8ce069e3f01e487a7f8c801804a70a6d232117a005e4aad9e6db535286b78f"
+    },
+    "android-icons/res/drawable-land-xxxhdpi/splash.png": {
+      "bytes": 638721,
+      "sha256": "c50776e7ffea65dd48111f4d81b5a413a9022f102598eaa758d5a166fa4b92aa"
+    },
+    "android-icons/res/drawable-port-mdpi/splash.png": {
+      "bytes": 81280,
+      "sha256": "470dd99e33d5fd6473684ef556a082b4f57317146511d05d85cda80b7c4c17bd"
+    },
+    "android-icons/res/drawable-port-hdpi/splash.png": {
+      "bytes": 157534,
+      "sha256": "89a632f09afa348b28cf71595e46d153e19de9ab35c028506763c88f21e891cf"
+    },
+    "android-icons/res/drawable-port-xhdpi/splash.png": {
+      "bytes": 306365,
+      "sha256": "837c0a5afdeb7fab41cec960fd8228952b4c322862bb893588d318517142ca6a"
+    },
+    "android-icons/res/drawable-port-xxhdpi/splash.png": {
+      "bytes": 454268,
+      "sha256": "6da892cbffca02db5417f36b14a08116fec4b447d3b39628d9824f542ec28b6f"
+    },
+    "android-icons/res/drawable-port-xxxhdpi/splash.png": {
+      "bytes": 624279,
+      "sha256": "c0c8134e08815397cee4da6e16fbdb9ec43d7941350873c8315b2cf0122880d0"
+    }
+  }
+}
