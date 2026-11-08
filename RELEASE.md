@@ -1,10 +1,22 @@
-# Kitphonic 1.0.0-rc8 — release readiness
+# Kitphonic 1.0.0-rc9 — release readiness
 
-Version: `1.0.0-rc8` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
+Version: `1.0.0-rc9` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc8:** source snapshot `df77d462de33489a6fe4cad9f02dbfb8aebb200a` (`VERSION.txt`; the tested functional tree, not the evidence commit and not a deployment). `npm test` 194/194 (rc7: 185) · `tools/check-sizes.py` 312/312 (52 scenes × 6 viewports: 360×780, 780×360, 390×844, 844×390, 820×1180, 1180×820), including `practice-end` and `practice-break` — continue and break targets 65–94 px, nothing cut off, no overlap · `tools/at-unlock-repro.py` on headless Chrome (iPad-sized 820×1180, plus a phone-sized old-history load): a slow slide's first possible correct tap counts (617 ms, not fast), the modelled session ends on "Let's read it again." with practice / break and stays on **at**, two scored reads then Home stay on **at**, the scored session then level-ups to **p**, reload and Home keep it, a fast slide does not open the check, an old fling log stays on "at". Trace gate was not re-run (tracing code unchanged).
+**Gate status at rc9:** recorded in `VERSION.txt` after the functional commit (that file names the tested app tree, not the evidence commit and not the deployment). See *Fixed in rc9* for the startup Play evidence. rc8 gate remains below.
+
+## Fixed in rc9 (owner: Play queues the welcome on every tap)
+
+**Live at the report:** `1.0.0-rc8`, `VERSION.txt` `df77d462de33489a6fe4cad9f02dbfb8aebb200a`, remote `main` `82b4dd6`. The next candidate is `1.0.0-rc9`.
+
+**What happened.** `#play` called `audio.unlock` and then `audio.play('m-hello')` on every click. `play` appends to the one-at-a-time queue. Eight synchronous clicks on rc8 started three greetings within 9 seconds (at 1151, 4315, and 7475 ms). The map was already up and audio was still busy.
+
+**Now.** The first tap owns unlock, one welcome, and one transition (`js/hello-gate.js`). The button takes a pressed, non-hitting state immediately (`going`, `aria-busy`). Further taps do not queue another greeting. If unlock or playback throws, the button is tappable again. A reload is a new visit and plays the welcome once. Lesson audio is unchanged.
+
+**Checks.** `tests/hello-gate.test.mjs` (one owner under a delayed unlock, in-flight taps, failure then retry). `tools/hello-once.py` on phone 390×844 and iPad 820×1180: instrumented burst clicks with Chromium's autoplay bypass, and separately real Playwright click, touch, and Enter under default autoplay (no `no-user-gesture-required`). `tools/at-unlock-repro.py` still opens **p** and keeps it across Home and reload.
+
+**Not in this check.** Headless Chrome is not a physical iPad or Safari, and it does not prove the speaker or the silent switch. The gesture run uses Playwright's real click, touch, and Enter with Chromium's default autoplay policy. The burst-click run uses `no-user-gesture-required` and is a separate instrumented check.
 
 ## Fixed in rc8 (owner: finishing "at" never opens the next step)
 
@@ -31,7 +43,8 @@ The cards now stay shut until the 600 ms window has passed (and at least the old
 **Session end is not a passed stop.** "You did it!" (the existing level-up take) plays only when the map actually moves, including to **p**. When the stop is still ahead — the modelled first session, or a session whose counted reads are not enough — the screen says the existing line "Let's read it again.", shows the stop (**at**), and offers ▶ practice again and ⌂ take a break. Break says the existing "All done for today. Great reading!" and returns to the map on the same stop. No new recordings. Neither screen is a failure message, and nothing starts the next session by itself.
 
 **Not proved on a real iPad.** Headless Chrome does not run iPadOS gesture recognizers, Safari's `pointercancel`, palm rejection on the slider, or the child's actual sweep speed and audio. A slide that stays under 500 ms for "at" will keep asking them to slide slowly; only the device can show whether a given child clears that bar. rc5 (one sound at a time, chime-only letter feedback) and rc6 (tracing finger ownership) were not changed.
-(child targets ≥ 64 px, knob ≥ 80, grown-ups ≥ 44, no overlaps, no blank buttons) · `tools/check-scored-audio.py`
+
+`tools/check-scored-audio.py`
 10/10 (no target audio before a scored pick; S1/S2/S4 behave; a whole-word marker before the pick = help, unscored;
 re-reads logged separately) · `tools/play-session.py --audio` end-to-end sessions with real takes, **0 overlapping sounds** (rc5).
 
