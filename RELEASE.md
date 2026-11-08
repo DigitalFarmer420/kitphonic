@@ -4,7 +4,7 @@ Version: `1.0.0-rc9` (`VERSION`, `js/version.js`, shown in the grown-ups footer)
 modules, no network calls, progress in `localStorage`). Spec: *Phonics Reader App — Combined Spec v1.0*, §3.
 Reviews folded in: literacy review v1 (R1–R11) and v2 (V1–V10), Uiux r1–r8 and rc1.
 
-**Gate status at rc9:** recorded in `VERSION.txt` after the functional commit (that file names the tested app tree, not the evidence commit and not the deployment). See *Fixed in rc9* for the startup Play evidence. rc8 gate remains below.
+**Gate status at rc9:** source snapshot `49ccaf4d56e80008411b213e19e881b429166453` (`VERSION.txt`; the tested functional tree, not the evidence commit and not a deployment). `npm test` 197/197. `tools/hello-once.py` phone 390×844 and iPad 820×1180: instrumented burst (autoplay bypass) and real touch/click/Enter under default autoplay each start exactly one `m-hello`, then the map, with no further greeting; a reload plays it once. `tools/at-unlock-repro.py` still opens **p** and keeps it across Home and reload. Headless Chrome is not a physical iPad or Safari. rc8 gate remains below.
 
 ## Fixed in rc9 (owner: Play queues the welcome on every tap)
 
