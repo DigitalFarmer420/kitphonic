@@ -180,7 +180,7 @@
       "id": "snd-o",
       "kind": "letter-sound",
       "text": "/o (top)/",
-      "tts": "aw",
+      "tts": "ah",
       "take": "takes/snd-o.mp3",
       "placeholder": "tts",
       "notes": "short, clean"
@@ -189,7 +189,7 @@
       "id": "snd-o-held",
       "kind": "letter-sound-held",
       "text": "/o (top)/ held ~1 s",
-      "tts": "awwww",
+      "tts": "ahhh",
       "take": "takes/snd-o-held.mp3",
       "placeholder": "tts",
       "notes": "played on a slow slide"

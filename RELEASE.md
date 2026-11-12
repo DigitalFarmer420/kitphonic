@@ -144,7 +144,7 @@ a family is done, family choices capped (`familyMax`, default 4, `?familyMax=`),
 | Tile / print case (capitals, names like Kit) | lowercase | `?case=upper` |
 | Star-word list | I the is to no into a he go of she you we was | `js/content.js` |
 | Picture check at L1 | off (printed word cards instead) | `?checkL1=1`, `?cards=0` |
-| Voice (recorded actor vs synthesized; accents) | xAI TTS *Eve*, US, upbeat (rc3) | `audio/takes/`, `tools/gen-tts.mjs` |
+| Voice (recorded actor vs synthesized; accents) | xAI TTS *Eve*, energetic and upbeat, British accent (rc3) | `audio/takes/`, `tools/gen-tts.mjs` |
 | "Let's slide it again" take | upbeat ("Ooh, so close! Let's slide it again!") — owner's pick, rc3 | `?voice=calm` |
 | Phase 1 / 2 overlap — floating letters say | sounds | grown-ups setting |
 | Speak the word before the check (old model) | off (scored reads) | `?speakBeforeCheck=1` |

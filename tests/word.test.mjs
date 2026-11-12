@@ -55,8 +55,8 @@ test('R8: contrastPosition classifies onset / vowel / final, rejects non-minimal
   assert.equal(L.contrastPosition(ph('m æ t'), ph('h æ t')), 'onset');
   assert.equal(L.contrastPosition(ph('m æ t'), ph('m ɪ t')), 'vowel');
   assert.equal(L.contrastPosition(ph('m æ t'), ph('m æ p')), 'final');
-  assert.equal(L.contrastPosition(ph('s t ɒ p'), ph('s t ɛ p')), 'vowel');
-  assert.equal(L.contrastPosition(ph('m æ t'), ph('m ɒ p')), null);
+  assert.equal(L.contrastPosition(ph('s t ɑ p'), ph('s t ɛ p')), 'vowel');
+  assert.equal(L.contrastPosition(ph('m æ t'), ph('m ɑ p')), null);
   assert.equal(L.contrastPosition(ph('m æ t'), ph('æ t')), null);
 });
 test('R8: over 9 trials every contrast position leads at least twice (pin: bin / pan, pen / pig), vowel >= 1 in 3', () => {
