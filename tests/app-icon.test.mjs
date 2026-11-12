@@ -23,7 +23,7 @@ test('favicon links replace the empty icon and do not add a service worker', () 
   assert.equal(html.includes('serviceWorker'), false);
   assert.equal(html.includes('manifest.webmanifest'), false);
   assert.match(html, /id="kit"/);
-  assert.equal(read('VERSION').trim(), '1.0.0-rc10');
+  assert.equal(read('VERSION').trim(), '1.0.0-rc11');
 });
 
 test('launch theme points the system splash at the safe-fit icon', () => {
