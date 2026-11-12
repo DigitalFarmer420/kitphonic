@@ -1811,8 +1811,8 @@
     {
       "id": "reveal-tap",
       "kind": "reveal",
-      "text": "A tap!",
-      "tts": "A tap!",
+      "text": "Tap, tap!",
+      "tts": "Tap, tap!",
       "take": "takes/reveal-tap.mp3",
       "placeholder": "tts",
       "level": 2,
@@ -1951,8 +1951,8 @@
     {
       "id": "reveal-tin",
       "kind": "reveal",
-      "text": "Tin! A tin can.",
-      "tts": "Tin! A tin can.",
+      "text": "Tin! A can.",
+      "tts": "Tin! A can.",
       "take": "takes/reveal-tin.mp3",
       "placeholder": "tts",
       "level": 2,
@@ -2571,8 +2571,8 @@
     {
       "id": "reveal-can",
       "kind": "reveal",
-      "text": "Can! A tin can.",
-      "tts": "Can! A tin can.",
+      "text": "Can! A can.",
+      "tts": "Can! A can.",
       "take": "takes/reveal-can.mp3",
       "placeholder": "tts",
       "level": 3,
