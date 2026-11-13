@@ -85,17 +85,17 @@ export const WORDS = {
     W('off', 'o ff', { say: 'Off! Lights off.' }), W('is', 'i s_z', { say: 'Is! It is fun.' }), W('as', 'a s_z', { say: 'As! As big as a bus.' }),
   ],
   2: [ // CVC (display: onset + rime by default — ⚠️ L2 blend style awaits user decision)
-    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', {}),
+    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', { say: 'Tap, tap!' }),
     W('pan', 'p a n', { pic: '🍳' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }),
-    W('sip', 's i p', { say: 'Sip! Take a sip.' }), W('tin', 't i n', { say: 'Tin! A tin can.' }),
+    W('sip', 's i p', { say: 'Sip! Take a sip.' }), W('tin', 't i n', { say: 'Tin! A can.' }),
     W('pat', 'p a t', { say: 'Pat! Pat the dog.' }), W('sap', 's a p', { say: 'Sap! Sticky tree sap.' }),
   ],
   3: [ // CVC, all phonemes. map/pan re-read sound-by-sound (spec L3 examples)
     // v2 V8: >= 12 words at the L3 stop (m s a t p i n): the L2 words re-read sound by sound, plus nip / tan
-    W('mat', 'm a t', { pic: '#mat' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }), W('tap', 't a p', { say: 'Tap! Tap the drum.' }),
+    W('mat', 'm a t', { pic: '#mat' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }), W('tap', 't a p', { say: 'Tap, tap!' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }), W('sip', 's i p', { say: 'Sip! Take a sip.' }),
-    W('tin', 't i n', { say: 'Tin! A tin can.' }), W('nip', 'n i p', { say: 'Nip! The crab can nip.' }), W('tan', 't a n', { say: 'Tan! A tan dog.' }),
+    W('tin', 't i n', { say: 'Tin! A can.' }), W('nip', 'n i p', { say: 'Nip! The crab can nip.' }), W('tan', 't a n', { say: 'Tan! A tan dog.' }),
     W('pot', 'p o t', { pic: '🍲' }), W('mop', 'm o p', {}), W('map', 'm a p', { pic: '🗺️' }), W('pan', 'p a n', { pic: '🍳' }),
     W('sit', 's i t', { say: 'Sit! Sit down.' }), W('pop', 'p o p', { say: 'Pop! Pop the bubble.' }),
     W('top', 't o p', { say: 'Top! Spin the top.' }), W('tip', 't i p', { say: 'Tip! The tip of my nose.' }),
@@ -107,7 +107,7 @@ export const WORDS = {
     // set 4: c k e u
     W('cat', 'c a t', { pic: '#cat', say: 'Cat! The cat sat.' }), W('cap', 'c a p', { pic: '🧢', say: 'Cap! A red cap.' }), W('cup', 'c u p', { say: 'Cup! A cup of milk.' }),
     W('pen', 'p e n', { pic: '🖊️', say: 'Pen! Write with a pen.' }), W('net', 'n e t', { say: 'Net! In the net.' }), W('nut', 'n u t', { pic: '🥜', say: 'Nut! A crunchy nut.' }),
-    W('sun', 's u n', { pic: '☀️', say: 'Sun! The hot sun.' }), W('can', 'c a n', { pic: '🥫', say: 'Can! A tin can.' }), W('kid', 'k i d', { say: 'Kid! A happy kid.' }),
+    W('sun', 's u n', { pic: '☀️', say: 'Sun! The hot sun.' }), W('can', 'c a n', { pic: '🥫', say: 'Can! A can.' }), W('kid', 'k i d', { say: 'Kid! A happy kid.' }),
     W('kit', 'k i t', { say: 'Kit! That is me!' }), W('ten', 't e n', { say: 'Ten! Count to ten.' }), W('pet', 'p e t', { say: 'Pet! A pet cat.' }), W('cut', 'c u t', { say: 'Cut! Cut the paper.' }),
     W('mud', 'm u d', { say: 'Mud! Muddy boots.' }), W('fun', 'f u n', { say: 'Fun! That was fun.' }), W('den', 'd e n', { say: 'Den! The fox is in its den.' }),
     // set 5: g r h b l
