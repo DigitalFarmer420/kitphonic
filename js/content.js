@@ -85,7 +85,7 @@ export const WORDS = {
     W('off', 'o ff', { say: 'Off! Lights off.' }), W('is', 'i s_z', { say: 'Is! It is fun.' }), W('as', 'a s_z', { say: 'As! As big as a bus.' }),
   ],
   2: [ // CVC (display: onset + rime by default — ⚠️ L2 blend style awaits user decision)
-    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', { say: 'Tap, tap!' }),
+    W('mat', 'm a t', { pic: '#mat' }), W('map', 'm a p', { pic: '🗺️' }), W('tap', 't a p', { pic: '#tap', say: 'Tap, tap!' }),
     W('pan', 'p a n', { pic: '🍳' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }),
     W('sip', 's i p', { say: 'Sip! Take a sip.' }), W('tin', 't i n', { say: 'Tin! A can.' }),
@@ -93,7 +93,7 @@ export const WORDS = {
   ],
   3: [ // CVC, all phonemes. map/pan re-read sound-by-sound (spec L3 examples)
     // v2 V8: >= 12 words at the L3 stop (m s a t p i n): the L2 words re-read sound by sound, plus nip / tan
-    W('mat', 'm a t', { pic: '#mat' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }), W('tap', 't a p', { say: 'Tap, tap!' }),
+    W('mat', 'm a t', { pic: '#mat' }), W('man', 'm a n', { pic: '👨' }), W('pin', 'p i n', { pic: '📌' }), W('tap', 't a p', { pic: '#tap', say: 'Tap, tap!' }),
     W('sat', 's a t', { say: 'Sat! The cat sat.' }), W('nap', 'n a p', { say: 'Nap! Time for a nap.' }), W('sip', 's i p', { say: 'Sip! Take a sip.' }),
     W('tin', 't i n', { say: 'Tin! A can.' }), W('nip', 'n i p', { say: 'Nip! The crab can nip.' }), W('tan', 't a n', { say: 'Tan! A tan dog.' }),
     W('pot', 'p o t', { pic: '🍲' }), W('mop', 'm o p', {}), W('map', 'm a p', { pic: '🗺️' }), W('pan', 'p a n', { pic: '🍳' }),
