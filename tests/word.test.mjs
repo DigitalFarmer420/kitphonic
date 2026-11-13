@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as L from '../js/word-logic.js';
-import { WORDS, PICTURE_POOL, LETTER_INFO } from '../js/content.js';
+import { WORDS, PICTURE_POOL, LETTER_INFO, SENTENCES, STORIES } from '../js/content.js';
 import { LETTERS, STRETCHY, markers, markerPositions } from '../js/core.js';
 import { GPC } from '../js/sequence.js';
 import { wordLayout } from '../js/layout.js';
@@ -29,6 +29,30 @@ test('pictures are unique per word (no two words share a picture)', () => {
   const m = new Map(); for (const [w, p] of [...all.filter(e => e.pic).map(e => [e.w, e.pic]), ...PICTURE_POOL.map(p => [p.text, p.pic])]) {
     if (m.has(p)) assert.equal(m.get(p), w, `${p} used by ${m.get(p)} and ${w}`); m.set(p, w);
   }
+});
+test('every #pic in content has a matching <symbol> in index.html', () => {
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const ids = new Set([...html.matchAll(/<symbol id="([^"]+)"/g)].map(m => m[1]));
+  const refs = new Set();
+  const add = p => {
+    if (typeof p !== 'string') return;
+    for (const part of p.replace(/^2x/, '').split('+')) if (part.startsWith('#')) refs.add(part.slice(1));
+  };
+  const walk = v => {
+    if (!v) return;
+    if (typeof v === 'string') return add(v);
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === 'object') {
+      if ('pic' in v) add(v.pic);
+      for (const x of Object.values(v)) walk(x);
+    }
+  };
+  walk(Object.values(WORDS).flat());
+  walk(PICTURE_POOL);
+  walk(SENTENCES);
+  walk(STORIES);
+  assert.ok(refs.has('tap'), 'tap word should use #tap');
+  for (const id of refs) assert.ok(ids.has(id), `missing <symbol id="${id}"> in index.html`);
 });
 test('clip routing: dots, held stretchy sounds, bars, fast rate', () => {
   const [m, at] = markers('mat', 2);

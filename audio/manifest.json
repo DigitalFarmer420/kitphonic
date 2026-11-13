@@ -1816,7 +1816,7 @@
       "take": "takes/reveal-tap.mp3",
       "placeholder": "tts",
       "level": 2,
-      "picture": false
+      "picture": true
     },
     {
       "id": "word-pan",
