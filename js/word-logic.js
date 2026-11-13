@@ -61,7 +61,7 @@ export function contrastPosition(target, other) {
   const v = target.findIndex(p => VOWEL_PHONEMES.has(p)), i = diff[0];
   return i < v ? 'onset' : i === v ? 'vowel' : 'final';
 }
-const VOWEL_PHONEMES = new Set(['æ', 'ɪ', 'ɒ', 'ɛ', 'ʌ']);
+const VOWEL_PHONEMES = new Set(['æ', 'ɪ', 'ɒ', 'ɑ', 'ɛ', 'ʌ']);
 // Picturable minimal-pair distractors for a target word, tagged by contrast position.
 export function minimalPairs(word) {
   const e = targetEntry(word); if (!e?.pic) return [];

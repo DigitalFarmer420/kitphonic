@@ -13,7 +13,7 @@ export const LETTER_INFO = {
   p: { name: 'P', nameTts: 'pee', sound: 'p', soundTts: 'puh' },
   i: { name: 'I', nameTts: 'eye', sound: 'i (itch)', soundTts: 'ih', heldTts: 'iiiih' },
   n: { name: 'N', nameTts: 'en',  sound: 'n', soundTts: 'nn',  heldTts: 'nnnnnn' },
-  o: { name: 'O', nameTts: 'oh',  sound: 'o (top)', soundTts: 'aw', heldTts: 'awwww' },
+  o: { name: 'O', nameTts: 'oh',  sound: 'o (top)', soundTts: 'ah', heldTts: 'ahhh' },
   // sets 3–5 (sequence.js)
   d: { name: 'D', nameTts: 'dee', sound: 'd', soundTts: 'duh' },
   f: { name: 'F', nameTts: 'eff', sound: 'f', soundTts: 'ff', heldTts: 'ffffff' },
