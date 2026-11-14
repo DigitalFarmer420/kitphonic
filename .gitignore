@@ -1,2 +1,12 @@
 screenshots/sizes/
 __pycache__/
+node_modules/
+www/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/app/src/main/assets/public/
+*.keystore
+*.jks

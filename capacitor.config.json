@@ -1,0 +1,13 @@
+{
+  "appId": "com.digitalfarmer.kitphonic.rc8test",
+  "appName": "Kitphonic rc8 Test",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https",
+    "hostname": "localhost"
+  },
+  "android": {
+    "allowMixedContent": false,
+    "captureInput": false
+  }
+}
