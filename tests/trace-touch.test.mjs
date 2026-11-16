@@ -111,7 +111,7 @@ test('trace screen wiring: pointer ownership, coalesced events, cancel and lost 
   assert.match(src, /screenToLetter\(svg\.getScreenCTM\(\)/);
   assert.doesNotMatch(src, /owner\.reset\(\)/);
   assert.match(src, /onpointerup = svg\.onpointercancel = endStroke/);
-  assert.match(src, /onlostpointercapture = e => scheduleLostCaptureOnSelf\(e, pid => owner\.owns\(pid\), \(\) => endStroke\(e\)\)/);
+  assert.match(src, /onlostpointercapture = e => \{[^\n]*traceHold\([^\n]*=== 'hold'\) held = true;\s*scheduleLostCaptureOnSelf\(e, pid => owner\.owns\(pid\), \(\) => endStroke\(e\)\)/); // a touch pauses at once; mouse / pen still end next turn
   assert.doesNotMatch(src, /onlostpointercapture = endStroke/);
   assert.match(src, /addEventListener\('pointercancel', endStroke\)/);
   const endAt = src.indexOf('const endStroke');
@@ -122,4 +122,18 @@ test('trace screen wiring: pointer ownership, coalesced events, cancel and lost 
   assert.match(src, /tracelog=1/);
   const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.match(css, /#tr-svg\{[^}]*touch-action:none/); assert.match(css, /\.short #lesson\.tracing \.top\{pointer-events:none\}/); assert.match(css, /html,body\{[^}]*touch-action:none/);
+});
+
+test('two-stroke letters after an iOS cancel: the finished stroke is released when its finger lifts (PR #18 Uiux)', () => {
+  const src = readFileSync(new URL('../js/lesson-screen.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+  // drawMarks() replaces the start dot under the finger when a stroke finishes: no child may be a touch target.
+  assert.match(css, /#tr-svg \*\{pointer-events:none\}/);
+  assert.doesNotMatch(css, /#tr-svg [^{]*\{[^}]*pointer-events:(auto|all|visible)/);
+  // a lift ends a held stroke, and a stroke already finished by touchmoves (no pointerup will come)
+  assert.match(src, /if \(mine && \(held \|\| !dragging\)\) finishStroke\(\)/);
+  // a new finger releases a finished stroke whose bound touch has lifted, held or not
+  assert.match(src, /held \? \(touchId == null \|\| !live\.has\(touchId\)\) : \(touchId != null && !live\.has\(touchId\)\)\)\) finishStroke\(\)/);
+  // a touchend that never reached the svg cannot leave a stale finger in `live`
+  assert.match(src, /for \(const id of \[\.\.\.live\.keys\(\)\]\) if \(!on\.has\(id\)\) live\.delete\(id\)/);
 });

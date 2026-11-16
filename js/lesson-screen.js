@@ -152,6 +152,8 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     const finishStroke = () => { if (owner.id != null) owner.release(owner.id); held = false; dragging = false; touchId = null; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
     const onTouchStart = e => {
       if (run && !$('trace').hidden) e.preventDefault();
+      // e.touches lists every finger on the screen: drop any whose touchend never reached the svg.
+      if (e.touches) { const on = new Set([...e.touches].map(t => t.identifier)); for (const id of [...live.keys()]) if (!on.has(id)) live.delete(id); }
       for (const t of e.changedTouches) live.set(t.identifier, [t.clientX, t.clientY]);
       // pointerdown usually fires before touchstart: bind the stroke to the new touch at the pointerdown position.
       if (dragging && touchId == null && downClient) touchId = nearTouch(downClient, [...e.changedTouches].map(t => [t.identifier, [t.clientX, t.clientY]]));
@@ -169,7 +171,9 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     const onTouchEnd = e => {
       const mine = touchId != null && [...e.changedTouches].some(t => t.identifier === touchId);
       for (const t of e.changedTouches) live.delete(t.identifier);
-      if (mine && held) finishStroke(); // a paused (cancelled) stroke ends when its own finger lifts; a live one ends on pointerup
+      // A paused (cancelled) stroke ends when its own finger lifts; a live one ends on pointerup. A stroke finished
+      // by touchmoves after a cancel (held and dragging are already false) gets no pointerup, so its lift releases it too.
+      if (mine && (held || !dragging)) finishStroke();
     };
     svg.addEventListener('touchstart', onTouchStart, { passive: false });
     svg.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -180,7 +184,8 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       // strokeDone clears `dragging` while this finger may still be down. Do not reset the owner:
       // a palm or second finger must not start the next stroke until this one lifts.
       // A cancelled stroke whose finger has already lifted no longer blocks a new touch (iOS: cancel, lift, touch again).
-      if (held && owner.id !== null && !owner.owns(e.pointerId) && (touchId == null || !live.has(touchId))) finishStroke();
+      // A finished stroke (held false) is released the same way once its bound touch is known to have lifted.
+      if (owner.id !== null && !owner.owns(e.pointerId) && (held ? (touchId == null || !live.has(touchId)) : (touchId != null && !live.has(touchId)))) finishStroke();
       if (owner.id !== null && !owner.owns(e.pointerId)) return;
       if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
       const p = toLetter(e); if (!p) return; const [x, y] = p; const st = tracer.down(x, y); dragging = st.active;
@@ -201,7 +206,10 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       if (!owner.release(e.pointerId)) return; held = false; dragging = false; touchId = null; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off'));
     }; // a real lift keeps the ink: resume where it paused
     svg.onpointerup = svg.onpointercancel = endStroke;
-    svg.onlostpointercapture = e => scheduleLostCaptureOnSelf(e, pid => owner.owns(pid), () => endStroke(e));
+    // A touch that loses capture on the svg itself pauses at once (the touchmoves that follow continue it); the
+    // scheduled check below still ends a mouse or pen stroke whose capture was stolen.
+    svg.onlostpointercapture = e => { if (e.target === svg && owner.owns(e.pointerId) && traceHold({ type: e.type, target: e.target, svg, pointerType: e.pointerType || 'touch' }) === 'hold') held = true;
+      scheduleLostCaptureOnSelf(e, pid => owner.owns(pid), () => endStroke(e)); };
     // Capture can fail. A cancel or lift that never reaches the svg (finger already outside) still has to drop the owner.
     window.addEventListener('pointerup', endStroke); window.addEventListener('pointercancel', endStroke);
     detachTrace = () => { window.removeEventListener('pointerup', endStroke); window.removeEventListener('pointercancel', endStroke);

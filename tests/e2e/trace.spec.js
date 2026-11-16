@@ -137,3 +137,54 @@ test('a lostpointercapture mid-stroke lets the same finger finish the letter', a
   test.fixme(stillTheUnfixedCancel(data), PENDING_LOST);
   expect(strokeProgressed(data), JSON.stringify(data)).toBe(true);
 });
+
+// PR #18 Uiux review: a two-stroke letter deadlocked after an iOS cancel. Stroke 1 finishes
+// through touchmoves, drawMarks() swaps the start dot under the finger, the lift is lost,
+// and stroke 2 can never start. Events go to the element a real touch would target (the one
+// hit at touchstart), so an event on a node removed from the DOM never reaches the svg.
+// tools/ipad-trace-cancel.py runs the same sequence on four iPad sizes.
+async function twoStrokeAfterCancel(page, cancel) {
+  return page.evaluate(async (cancel) => {
+    const svg = document.getElementById('tr-svg');
+    const run = window.kitphonic.lesson.run;
+    const hit = (x, y) => document.elementFromPoint(x, y) || svg;
+    const P = (type, target, id, x, y, buttons) => target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, buttons,
+    }));
+    const T = (type, target, ident, x, y) => {
+      const t = { identifier: ident, clientX: x, clientY: y };
+      const ev = new Event(type, { bubbles: true, cancelable: true });
+      ev.touches = type === 'touchend' ? [] : [t];
+      ev.changedTouches = [t];
+      target.dispatchEvent(ev);
+    };
+    let pts = run.debugPoints();
+    const a = pts[0], t1 = hit(a[0], a[1]);
+    P('pointerdown', t1, 2, a[0], a[1], 1); T('touchstart', t1, 1, a[0], a[1]);
+    const cut = Math.max(2, Math.floor(pts.length / 3));
+    for (let i = 1; i <= cut; i++) P('pointermove', t1, 2, pts[i][0], pts[i][1], 1);
+    P(cancel, cancel === 'lostpointercapture' ? svg : t1, 2, pts[cut][0], pts[cut][1], 0);
+    await new Promise((r) => setTimeout(r, 0));
+    for (let i = cut + 1; i < pts.length; i++) T('touchmove', t1, 1, pts[i][0], pts[i][1]);
+    const s1 = run.debugState();
+    const last = pts[pts.length - 1];
+    T('touchend', t1, 1, last[0], last[1]);
+    pts = run.debugPoints();
+    const b = pts[0] || [0, 0], t2 = hit(b[0], b[1]);
+    P('pointerdown', t2, 4, b[0], b[1], 1); T('touchstart', t2, 3, b[0], b[1]);
+    for (let i = 1; i < pts.length; i++) P('pointermove', t2, 4, pts[i][0], pts[i][1], 1);
+    const end = run.debugState();
+    const z = pts[pts.length - 1] || b;
+    P('pointerup', t2, 4, z[0], z[1], 0); T('touchend', t2, 3, z[0], z[1]);
+    return { s1, end, target: t1.tagName, stars: document.querySelectorAll('#tr-tray .emoji:not(.off)').length };
+  }, cancel);
+}
+
+for (const cancel of ['pointercancel', 'lostpointercapture']) {
+  test(`two-stroke t: a ${cancel} in stroke 1 does not block stroke 2`, async ({ page }) => {
+    await openTrace(page, 't');
+    const data = await twoStrokeAfterCancel(page, cancel);
+    expect(data.s1.stroke, JSON.stringify(data)).toBe(1);
+    expect(data.end.done || data.stars >= 1, JSON.stringify(data)).toBe(true);
+  });
+}

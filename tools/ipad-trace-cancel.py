@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """iPad Safari touch: pointercancel, then touchmoves. Exit 0 only if every case inks.
 
-Prints SKIP and exits 0 when Playwright or WebKit is not installed.
+Also two-stroke letters (default `t`): stroke 1 is interrupted by a pointercancel or a lostpointercapture on the
+svg, finishes through touchmoves, the finger lifts, and a new finger traces stroke 2. The letter must finish
+(PR #18 Uiux review: it deadlocked when drawMarks() removed the start digit under the finger). Every event goes to
+the element a real browser would target: the one hit at touchstart / pointerdown (implicit touch capture), so an
+event on a node removed from the DOM never reaches the svg.
 
-  python3 tools/ipad-trace-cancel.py --base http://127.0.0.1:8080/
+Prints SKIP and exits 0 when Playwright or the browser is not installed.
+
+  python3 tools/ipad-trace-cancel.py --base http://127.0.0.1:8080/ [--browser webkit|chromium|all] [--two t]
 """
 import argparse, sys
 
@@ -55,6 +61,48 @@ INJECT = r"""(mode) => {
     vw: innerWidth, vh: innerHeight };
 }"""
 
+TWO = r"""async (cancel) => {
+  const svg = document.getElementById('tr-svg');
+  const run = kitphonic.lesson.run;
+  const hit = (x, y) => document.elementFromPoint(x, y) || svg; // a real touch targets what it lands on, for its lifetime
+  const P = (type, target, id, x, y, buttons) => target.dispatchEvent(new PointerEvent(type, {
+    bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, buttons }));
+  const T = (type, target, ident, x, y) => {
+    const t = { identifier: ident, clientX: x, clientY: y };
+    const ev = new Event(type, { bubbles: true, cancelable: true });
+    ev.touches = type === 'touchend' || type === 'touchcancel' ? [] : [t];
+    ev.changedTouches = [t];
+    target.dispatchEvent(ev);
+  };
+  // Stroke 1: Touch.identifier 1 / pointerId 2 (Chrome-style mapping), cancelled a third of the way in.
+  let pts = run.debugPoints(); const a = pts[0]; const t1 = hit(a[0], a[1]); const t1name = t1.tagName + '.' + (t1.className?.baseVal ?? '');
+  P('pointerdown', t1, 2, a[0], a[1], 1); T('touchstart', t1, 1, a[0], a[1]);
+  const cut = Math.max(2, Math.floor(pts.length / 3));
+  for (let i = 1; i <= cut; i++) P('pointermove', t1, 2, pts[i][0], pts[i][1], 1);
+  P(cancel, cancel === 'lostpointercapture' ? svg : t1, 2, pts[cut][0], pts[cut][1], 0);
+  await new Promise(r => setTimeout(r, 0)); // iOS delivers the touchmoves in later tasks
+  const cancelled = run.debugState();
+  for (let i = cut + 1; i < pts.length; i++) T('touchmove', t1, 1, pts[i][0], pts[i][1]);
+  const s1 = run.debugState(); const t1attached = t1.isConnected;
+  const last = pts[pts.length - 1]; T('touchend', t1, 1, last[0], last[1]);
+  const lifted = { owner: typeof run.debugOwner === 'function' ? run.debugOwner() : 'n/a' };
+  // Stroke 2: a new finger, Touch.identifier 3 / pointerId 4.
+  pts = run.debugPoints(); const b = pts[0] || [0, 0]; const t2 = hit(b[0], b[1]);
+  P('pointerdown', t2, 4, b[0], b[1], 1); T('touchstart', t2, 3, b[0], b[1]);
+  const down2 = run.debugState();
+  for (let i = 1; i < pts.length; i++) P('pointermove', t2, 4, pts[i][0], pts[i][1], 1);
+  const end = run.debugState();
+  const z = pts[pts.length - 1] || b; P('pointerup', t2, 4, z[0], z[1], 0); T('touchend', t2, 3, z[0], z[1]);
+  return { cancelled, s1, lifted, down2, end, t1: t1name, t1attached, stars: document.querySelectorAll('#tr-tray .emoji:not(.off)').length };
+}"""
+
+def two_line(view, letter, cancel, d):
+    ok = d['cancelled']['active'] and d['s1']['stroke'] >= 1 and (d['end']['done'] or d['end']['letterDone'] or d['stars'] >= 1)
+    return (0 if ok else 1,
+            f"{'PASS' if ok else 'FAIL'} {view} two-stroke {letter} {cancel} target={d['t1']} attachedAfterStroke1={d['t1attached']} "
+            f"s1 stroke={d['s1']['stroke']} ownerAfterLift={d['lifted']['owner']} down2 active={d['down2']['active']} "
+            f"end stroke={d['end']['stroke']} k={d['end']['k']} done={d['end']['done']} stars={d['stars']}")
+
 def line(view, mode, data):
     end, cancel = data['end'], data['cancelled']
     progressed = (end['done'] or end['stroke'] > cancel['stroke'] or end['k'] > cancel['k']) and cancel['active']
@@ -81,6 +129,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', default='http://127.0.0.1:8080/')
     ap.add_argument('--letter', default='s')
+    ap.add_argument('--two', default='t', help='comma-separated two-stroke letters ("" to skip)')
+    ap.add_argument('--browser', default='webkit', choices=['webkit', 'chromium', 'all'])
     args = ap.parse_args()
     try:
         from playwright.sync_api import sync_playwright
@@ -91,7 +141,9 @@ def main():
     failed = False
     try:
         with sync_playwright() as p:
-            browser = p.webkit.launch()
+          for bname in (['webkit', 'chromium'] if args.browser == 'all' else [args.browser]):
+            browser = getattr(p, bname).launch()
+            print(f'== {bname}')
             for name, w, h, dpr in VIEWS:
                 ctx = browser.new_context(viewport={'width': w, 'height': h}, device_scale_factor=dpr, has_touch=True, user_agent=UA, is_mobile=True)
                 page = ctx.new_page()
@@ -104,12 +156,19 @@ def main():
                     failed = failed or code != 0
                     if name == 'land-1376' and mode == 'early':
                         print(tol_line(data))
+                for two in [x for x in args.two.split(',') if x]:
+                    for cancel in ('pointercancel', 'lostpointercapture'):
+                        page.goto(args.base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={two}', wait_until='domcontentloaded')
+                        page.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+                        code, text = two_line(name, two, cancel, page.evaluate(TWO, cancel))
+                        print(text)
+                        failed = failed or code != 0
                 ctx.close()
             browser.close()
     except Exception as e:
         msg = str(e)
-        if 'Executable doesn' in msg or ('webkit' in msg.lower() and 'install' in msg.lower()):
-            print('SKIP playwright webkit is not installed')
+        if 'Executable doesn' in msg or ('install' in msg.lower() and ('webkit' in msg.lower() or 'chrom' in msg.lower())):
+            print('SKIP playwright browser is not installed')
             return 0
         print('FAIL', msg.splitlines()[-1] if msg else type(e).__name__)
         return 1
