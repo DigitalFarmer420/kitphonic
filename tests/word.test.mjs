@@ -275,3 +275,18 @@ test('no check ever has an undefined pic, and no duplicate picture choices', () 
   assert.notEqual(dup.kind, 'pics');
   assert.equal(dup.kind, 'cards');
 });
+
+test('reshuffle keeps named flags', () => {
+  const a = [{ w: 'am' }, { w: 'at' }, { w: 'an' }];
+  a.cards = true;
+  a.contrast = 'vowel';
+  a.extra = 'keep-me';
+  a.ok = true;
+  Object.defineProperty(a, 'hiddenFlag', { value: 7, enumerable: false });
+  const b = L.reshuffle(a, L.rng(11));
+  assert.notDeepEqual(b.map(x => x.w), a.map(x => x.w));
+  assert.deepEqual(b.map(x => x.w).sort(), a.map(x => x.w).sort());
+  const names = Object.getOwnPropertyNames(a).filter(k => k !== 'length' && !/^\d+$/.test(k));
+  assert.ok(names.includes('cards') && names.includes('contrast') && names.includes('extra') && names.includes('ok') && names.includes('hiddenFlag'));
+  for (const k of names) assert.equal(b[k], a[k], k);
+});
