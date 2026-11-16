@@ -14,7 +14,7 @@ export function createSettings(storage, key = 'kitphonic.v1.settings', media = g
   const listeners = new Set();
   const api = {
     get: k => s[k], all: () => ({ ...s }),
-    set(k, v) { if (!(k in DEFAULT_SETTINGS)) throw new Error(`unknown setting ${k}`); s[k] = v; storage?.setItem(key, JSON.stringify(s)); listeners.forEach(f => f(k, v)); },
+    set(k, v) { if (!(k in DEFAULT_SETTINGS)) throw new Error(`unknown setting ${k}`); s[k] = v; try { storage?.setItem(key, JSON.stringify(s)); } catch { /* full storage: keep the in-memory value so the UI proceeds */ } listeners.forEach(f => f(k, v)); },
     onChange: f => (listeners.add(f), () => listeners.delete(f)),
     reducedMotion: () => s.reducedMotion === 'on' || (s.reducedMotion === 'auto' && !!media?.('(prefers-reduced-motion: reduce)')?.matches),
     audioRate: () => AUDIO_RATES[s.audioSpeed] ?? 1,
