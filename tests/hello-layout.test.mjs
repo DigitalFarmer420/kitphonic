@@ -35,8 +35,8 @@ test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
   assert.match(bubble, /text-align:center/);
   assert.equal(bubble.includes('nowrap'), false);
   assert.equal(/height:\d/.test(bubble), false);
-  assert.equal(bubble.includes('max-height'), false);
-  assert.equal(bubble.includes('overflow'), false);
+  assert.match(bubble, /max-height:calc\(var\(--h\) \* \.78 - 376px\)/);
+  assert.match(bubble, /overflow-y:auto/);
 });
 
 test('shared bubble chrome is unchanged', () => {
@@ -56,11 +56,11 @@ test('portrait and short hello bubbles do not cap lines or shrink type', () => {
   assert.equal(portrait.includes('font-size'), false);
   assert.equal(portrait.includes('text-align'), false);
   assert.equal(portrait.includes('nowrap'), false);
-  assert.equal(portrait.includes('max-height'), false);
+  assert.match(portrait, /max-height:calc\(var\(--h\) \* \.69 - 372px\)/);
   assert.match(short, /font-size:20px/);
   assert.match(short, /max-width:calc\(var\(--w\) - 48px\)/);
   assert.equal(short.includes('text-align'), false);
   assert.equal(short.includes('nowrap'), false);
-  assert.equal(short.includes('max-height'), false);
+  assert.match(short, /max-height:calc\(var\(--h\) - 334px\)/);
   assert.equal(/height:\d/.test(short), false);
 });
