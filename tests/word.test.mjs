@@ -192,3 +192,102 @@ test('phone portrait letter tiles grow to ~90 screen px; letter centres still ma
   const sh = stageFor(780, 360), ls = wordLayout(4, layoutFor(sh)); // short landscape: row clears the left column
   assert.ok(ls.rowLeft >= 220 * sh.u - 1);
 });
+
+test('reshuffle keeps non-index tags such as cards and contrast', () => {
+  const r = L.rng(5), a = ['a', 'b', 'c']; a.cards = true; a.contrast = 'onset';
+  for (let k = 0; k < 50; k++) {
+    const b = L.reshuffle(a, r);
+    assert.notDeepEqual([...b], [...a]);
+    assert.deepEqual([...b].sort(), ['a', 'b', 'c']);
+    assert.equal(b.cards, true);
+    assert.equal(b.contrast, 'onset');
+  }
+  const one = ['only']; one.cards = true; one.contrast = 'final';
+  const s = L.reshuffle(one, r);
+  assert.deepEqual([...s], ['only']);
+  assert.equal(s.cards, true);
+  assert.equal(s.contrast, 'final');
+});
+// Mirrors word-screen.js: after a miss, choices = reshuffle(choices); choices.contrast = ct; then showCheck.
+function renderCheck(choices, tileCase = 'lower') {
+  const view = L.presentCheck(choices);
+  if (view.kind === 'skip') return view;
+  const cards = view.kind === 'cards';
+  return {
+    kind: view.kind,
+    bubble: cards ? 'Which word did you read?' : 'Which picture?',
+    labels: view.choices.map(c => cards ? L.caseFor(c.w, tileCase) : (c.pic ?? '⭐')),
+    usedPicHtml: !cards,
+  };
+}
+test('a word-card check stays word cards after a miss and replay', () => {
+  const cards = L.wordCards('am', { rand: L.rng(1) });
+  assert.ok(cards && cards.cards && cards.length >= 2 && cards.some(c => c.w === 'am'));
+  const ct = cards.contrast;
+  const replayed = L.reshuffle(cards, L.rng(2));
+  replayed.contrast = ct;
+  assert.equal(replayed.cards, true);
+  assert.equal(replayed.contrast, ct);
+  const view = renderCheck(replayed);
+  assert.equal(view.kind, 'cards');
+  assert.equal(view.usedPicHtml, false);
+  assert.equal(view.bubble, 'Which word did you read?');
+  for (const c of replayed) { assert.equal(c.card, true); assert.ok(c.w); }
+});
+test('no choice ever renders a picture or ⭐ for a word-card check', () => {
+  for (const w of ['am', 'at', 'an', 'sat', 'top']) {
+    const cards = L.wordCards(w, { rand: L.rng(w.length + 3) });
+    if (!cards) continue;
+    for (const src of [cards, L.reshuffle(cards, L.rng(9))]) {
+      const view = renderCheck(src);
+      assert.equal(view.kind, 'cards', w);
+      assert.equal(view.usedPicHtml, false, w);
+      assert.equal(view.bubble, 'Which word did you read?');
+      for (const label of view.labels) {
+        assert.ok(label && !label.includes('⭐'), `${w}: ${label}`);
+        assert.match(label, /^[a-z]+$/);
+      }
+    }
+  }
+});
+test('no check ever has an undefined pic, and no duplicate picture choices', () => {
+  for (const e of all.filter(e => L.needsCheck(e, {}, 2))) {
+    for (let t = 0; t < 6; t++) {
+      const c = L.makeChoices(e.w, { rand: L.rng(t), trial: t });
+      const view = L.presentCheck(c);
+      assert.equal(view.kind, 'pics', e.w);
+      const pics = view.choices.map(x => x.pic);
+      assert.ok(pics.every(p => p), `${e.w} undefined pic`);
+      assert.equal(new Set(pics).size, pics.length, `${e.w} duplicate pics`);
+      const replayed = L.reshuffle(c, L.rng(t + 11));
+      const again = L.presentCheck(replayed);
+      assert.equal(again.kind, 'pics', e.w);
+      assert.equal(replayed.contrast, c.contrast);
+      const pics2 = again.choices.map(x => x.pic);
+      assert.ok(pics2.every(p => p));
+      assert.equal(new Set(pics2).size, pics2.length);
+    }
+  }
+  assert.equal(L.presentCheck([{ w: 'am', card: true }]).kind, 'skip');
+  assert.equal(L.presentCheck([{ w: 'am', card: true }, { w: 'am', card: true }]).kind, 'skip');
+  const missing = L.presentCheck([{ w: 'am' }, { w: 'at', pic: '🍎' }]);
+  assert.equal(missing.kind, 'cards');
+  const dup = L.presentCheck([{ w: 'mat', pic: '#mat' }, { w: 'hat', pic: '#mat' }]);
+  assert.notEqual(dup.kind, 'pics');
+  assert.equal(dup.kind, 'cards');
+});
+
+test('reshuffle keeps named flags', () => {
+  const a = [{ w: 'am' }, { w: 'at' }, { w: 'an' }];
+  a.cards = true;
+  a.contrast = 'vowel';
+  a.extra = 'keep-me';
+  a.ok = true;
+  Object.defineProperty(a, 'hiddenFlag', { value: 7, enumerable: false });
+  const b = L.reshuffle(a, L.rng(11));
+  assert.notDeepEqual(b.map(x => x.w), a.map(x => x.w));
+  assert.deepEqual(b.map(x => x.w).sort(), a.map(x => x.w).sort());
+  const names = Object.getOwnPropertyNames(a).filter(k => k !== 'length' && !/^\d+$/.test(k));
+  assert.ok(names.includes('cards') && names.includes('contrast') && names.includes('extra') && names.includes('ok') && names.includes('hiddenFlag'));
+  for (const k of names) assert.equal(b[k], a[k], k);
+});

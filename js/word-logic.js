@@ -35,11 +35,34 @@ export function rng(seed = Date.now()) {
 export function shuffle(arr, rand = Math.random) {
   const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a;
 }
+// Copy non-index own properties (e.g. .cards, .contrast) that array methods would drop.
+function copyArrayTags(src, dest) {
+  for (const key of Reflect.ownKeys(src)) {
+    if (key === 'length') continue;
+    if (typeof key === 'string' && /^\d+$/.test(key)) continue;
+    dest[key] = src[key];
+  }
+  return dest;
+}
 // Reshuffle after a wrong pick: always a different order (so the child sees the choices move).
 export function reshuffle(arr, rand = Math.random) {
-  if (arr.length < 2) return arr.slice();
-  for (let k = 0; k < 20; k++) { const a = shuffle(arr, rand); if (a.some((x, i) => x !== arr[i])) return a; }
-  return [...arr.slice(1), arr[0]];
+  const tag = a => copyArrayTags(arr, a);
+  if (arr.length < 2) return tag(arr.slice());
+  for (let k = 0; k < 20; k++) { const a = shuffle(arr, rand); if (a.some((x, i) => x !== arr[i])) return tag(a); }
+  return tag([...arr.slice(1), arr[0]]);
+}
+// How to render a check. Never use the picture path when a pic is missing (that used to
+// fall back to ⭐ after reshuffle dropped .cards). Word cards, or any missing pic, render
+// as printed words; duplicate pics also fall back to cards. Too few distinct words: skip.
+export function presentCheck(choices) {
+  if (!Array.isArray(choices) || choices.length < 2) return { kind: 'skip' };
+  const enoughCards = new Set(choices.map(c => c?.w).filter(Boolean)).size >= 2;
+  const asCards = !!choices.cards || choices.every(c => c?.card) || choices.some(c => !c?.pic);
+  if (asCards) return enoughCards ? { kind: 'cards', choices } : { kind: 'skip' };
+  const pics = choices.map(c => c.pic);
+  if (pics.some(p => !p) || new Set(pics).size !== pics.length)
+    return enoughCards ? { kind: 'cards', choices } : { kind: 'skip' };
+  return { kind: 'pics', choices };
 }
 
 const allPics = () => {

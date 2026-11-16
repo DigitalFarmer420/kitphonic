@@ -4,7 +4,7 @@ import { guessGuard, RULES } from './mastery.js';
 import { supportPattern } from './support.js';
 import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
-  makeChoices, wordCards, reshuffle, needsCheck, caseFor } from './word-logic.js';
+  makeChoices, wordCards, reshuffle, presentCheck, needsCheck, caseFor } from './word-logic.js';
 import { MASCOT } from './content.js';
 // A sweep faster than 250 ms per sound is not a blend (guess guard). It must not open the check: that used to
 // look like a finished word while the log stored a fling, so the "at" stop never collected a counted read.
@@ -180,9 +180,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
 
   // --- Picture check (§3.5.2) ---
   function showCheck() {
+    const view = presentCheck(choices);
+    if (view.kind === 'skip') { reveal(); return; }
+    const cards = view.kind === 'cards';
     state = 'check'; $('check').hidden = false; checkAt = performance.now(); $('check-help').hidden = trial.support !== 1;
     $('check-word').textContent = caseFor(entry.w, cfg.tileCase);
-    const cards = !!choices.cards; $('check-word').hidden = cards;
+    $('check-word').hidden = cards;
     $('check-bubble').innerHTML = cards ? 'Which word did you read?' : 'Which picture?';
     $('choices').replaceChildren(...choices.map(c => {
       const b = el('button', 'choice' + (cards ? ' wcard L' : ''), cards ? caseFor(c.w, cfg.tileCase) : picHtml(c.pic)); b.dataset.w = c.w; b.setAttribute('aria-label', c.w);
