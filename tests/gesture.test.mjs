@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { pointerOwner, scheduleLostCapture, sliderKeyTarget, sliderAriaState, applySliderAria } from '../js/gesture.js';
 import { screenToLetter } from '../js/trace.js';
-import { markers, createSweep } from '../js/core.js';
+import { markers, markerPositions, createSweep } from '../js/core.js';
+import { wordLayout, layoutFor, sliderTrack, fractionAt, KNOB } from '../js/layout.js';
+import { stageFor } from '../js/stage.js';
 
 const src = name => readFileSync(new URL(`../js/${name}`, import.meta.url), 'utf8');
 
@@ -92,6 +94,28 @@ test('slider ARIA follows the knob position, not sounds already heard', () => {
   applySliderAria(null, {});
 });
 
+test('End on the word slider and the sentence slider: knob at the track end, value 100, every sound', () => {
+  const words = [['at', 1], ['map', 3], ['sat', 2]];
+  for (const [vw, vh] of [[412, 839], [390, 844]]) {
+    const stage = stageFor(vw, vh), opts = layoutFor(stage);
+    for (const [word, level] of words) {
+      const ms = markers(word, level), lay = wordLayout(word.length, opts), track = sliderTrack(lay);
+      assert.equal(lay.knobX(1), track.left + track.width, `${word} @ ${vw}x${vh}: drawn end is the track end`);
+      assert.ok(lay.knobX(1) + KNOB / 2 <= stage.w + 1e-6, `${word}: knob stays on the stage`);
+      assert.ok(lay.knobX(0) - KNOB / 2 >= -1e-6, `${word}: knob stays on the stage`);
+      assert.equal(fractionAt(lay, lay.knobX(1)), 1, `${word}: a finger at the drawn end finishes the sweep`);
+      assert.ok(fractionAt(lay, lay.knobX(1) - 30) < 1, word);
+      for (const stop of markerPositions(ms)) assert.ok(lay.xFromFrac(stop) <= lay.knobX(1) + 1e-6, `${word} stop ${stop} sits on the track`);
+      const end = sliderKeyTarget(0.83, markerPositions(ms), 'End');
+      const sweep = createSweep(ms); sweep.move(end, 0);
+      const aria = sliderAriaState({ fraction: sweep.position, total: ms.length, stops: sweep.positions });
+      assert.equal(end, 1, word);
+      assert.equal(aria['aria-valuenow'], '100', `${word} @ ${vw}`);
+      assert.equal(aria['aria-valuetext'], `all ${ms.length} sounds`, word);
+    }
+  }
+});
+
 test('Home after hearing every sound announces the start: valuenow 0 and valuetext 0 of N', () => {
   for (const [word, level] of [['at', 1], ['map', 3], ['sat', 2]]) {
     const ms = markers(word, level), sweep = createSweep(ms);
@@ -147,7 +171,10 @@ test('slider, sentence, and family screens bind pointer id, cancel, lost capture
   assert.match(sentence, /pointercancel', endSlide/);
   assert.match(sentence, /lostpointercapture', endSlide/);
   assert.match(sentence, /function onSliderKey/);
-  assert.match(sentence, /applySliderAria\(\$\('sn-handle'\), \{ fraction: f, stops: run\.sweep\?\.positions/);
+  assert.match(sentence, /applySliderAria\(\$\('sn-handle'\), \{ fraction: f, stops: held\?\.stops \?\? run\.sweep\?\.positions/);
+  assert.match(sentence, /if \(run\?\.sweep\) setKnob\(run\.sweep\.position, held\)/);
+  assert.match(word, /fractionAt\(layout, p\.x\)/);
+  assert.match(sentence, /fractionAt\(run\.layout, stage\.toStage\(e\)\.x\)/);
   assert.doesNotMatch(sentence, /passed: run\.sweep\?\.lit/);
   assert.match(family, /owner\.begin\(e\.pointerId\)/);
   assert.match(family, /!owner\.owns\(e\.pointerId\)/);
