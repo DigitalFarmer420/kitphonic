@@ -10,15 +10,22 @@ cache stays while the new takes are incomplete, takes still play offline from th
 cache, and a cold relaunch applies the new worker and removes the old cache.
 It also serves the tree at /kitphonic/ and /kitphonic-dev/ on that one origin: both install,
 updating dev leaves prod's cache alone, both work offline, and ?nosw=1 on dev unregisters dev
-and clears only dev's caches (KP-QA-011, KP-QA-010).
+and clears only dev's caches (KP-QA-011, KP-QA-010). A follow-up scenario aborts a mid-install
+dev update (leaving an incomplete scoped cache) and checks that one ?nosw=1 visit removes every
+dev-scoped cache, complete or not, without touching prod or unowned legacy caches.
+A further scenario deploys the emergency kill-switch template as /kitphonic-dev/sw.js: a 30 s
+watch on a page that re-registers sw.js like sw-register does must exceed 2 navigations on the
+e5e47a0c template (the loop that template would fail) and stay at most 2 on the current one;
+going offline after the new kill does not loop or blank the page; restoring the real sw.js
+reinstalls and works offline; prod is unaffected.
 
 Chromium is required. WebKit is attempted and reported when this Playwright build
 cannot install a service worker. Exit 0 when Chromium passes. A missing Playwright
 install skips (exit 0), matching the other browser tools.
 """
-import argparse, os, re, sys, threading, time, urllib.request
+import argparse, os, re, signal, sys, threading, time, urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from subprocess import Popen
+from subprocess import DEVNULL, Popen
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -119,6 +126,33 @@ class Net:
         self.audio = 0
         self.release = threading.Event()
         self.release.set()
+        self.sw_files = {}
+        self.hits = []
+
+    def set_sw(self, mount, path):
+        """Serve path as sw.js under this site prefix, or drop the override when path is None."""
+        with self.lock:
+            if path is None:
+                self.sw_files.pop(mount, None)
+            else:
+                self.sw_files[mount] = path
+
+    def record_hit(self, path):
+        with self.lock:
+            self.hits.append((time.time(), path))
+
+    def clear_hits(self):
+        with self.lock:
+            self.hits.clear()
+
+    def hit_count(self, needle):
+        with self.lock:
+            return sum(1 for _, path in self.hits if needle in path)
+
+    def hit_count_exact(self, *names):
+        want = set(names)
+        with self.lock:
+            return sum(1 for _, path in self.hits if path in want)
 
     def bump(self, hold_after, prefix='/'):
         with self.lock:
@@ -180,6 +214,18 @@ def update_server(port, net):
                     net.release.wait(120)
                     if net.down:
                         return self.hang_up()
+            net.record_hit(full)
+            if path == '/repro.html':
+                src = open(os.path.join(ROOT, 'tests/fixtures/sw-killswitch-repro.html'), 'rb').read()
+                return self.body(src, 'text/html')
+            if path == '/probe.html':
+                return self.body(b'<!doctype html><title>sw probe</title>', 'text/html')
+            with net.lock:
+                sw_files = dict(net.sw_files)
+            if path == '/sw.js':
+                for mount, dest in sw_files.items():
+                    if full.startswith(mount):
+                        return self.body(open(dest, 'rb').read(), 'text/javascript')
             if bumped and path == '/sw.js':
                 src = open(os.path.join(ROOT, 'sw.js'), encoding='utf8').read()
                 return self.body(CACHE_LINE.sub(f"export const CACHE = '{NEW_CACHE}';", src).encode(), 'text/javascript')
@@ -208,6 +254,46 @@ def poll(page, expr, arg=None, timeout=30, every=0.2):
         if val or time.time() > deadline:
             return val
         time.sleep(every)
+
+
+def wait_map(page, timeout=20000):
+    """Wait for the map, tolerating a mid-wait navigation (?nosw=1 auto-reloads once)."""
+    deadline = time.time() + timeout / 1000
+    last = None
+    while time.time() < deadline:
+        try:
+            page.wait_for_function("() => window.kitphonic && !document.getElementById('map').hidden", timeout=2000)
+            return
+        except Exception as err:
+            last = err
+    raise TimeoutError(f'map not visible after nosw: {last}')
+
+
+def goto_nosw(page, url, timeout=30000):
+    """Open ?nosw=1 and wait out the single automatic reload.
+
+    The first load can paint the map before the kill switch reloads the tab.
+    Wait until this scope has no registration and the page is uncontrolled.
+    """
+    page.goto(url, wait_until='load', timeout=timeout)
+    wait_map(page, timeout=timeout)
+    deadline = time.time() + timeout / 1000
+    last = None
+    while time.time() < deadline:
+        try:
+            done = page.evaluate("""async () => {
+              if (!window.kitphonic || document.getElementById('map').hidden) return false;
+              const path = new URL('.', location.href).pathname;
+              const rs = await navigator.serviceWorker.getRegistrations();
+              const mine = rs.some(r => new URL(r.scope).pathname === path);
+              return !mine && !navigator.serviceWorker.controller;
+            }""")
+            if done:
+                return
+        except Exception as err:
+            last = err
+        time.sleep(0.1)
+    raise TimeoutError(f'nosw did not settle this scope uncontrolled: {last}')
 
 
 LESSON = '?sw=1&skipHello=1&activity=trace&gpc=s&reducedMotion=1'
@@ -397,8 +483,7 @@ def two_sites_scenario(browser, root, net, label):
     # ?nosw=1 on dev: dev unregisters and its caches go; prod stays registered, cached, and offline-ready.
     page = context.new_page()
     watch(page, errs)
-    page.goto(dev + '?nosw=1&skipHello=1', wait_until='load')
-    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    goto_nosw(page, dev + '?nosw=1&skipHello=1')
     cleared = poll(page, "() => Promise.all([navigator.serviceWorker.getRegistrations(), caches.keys()]).then(([rs, n]) => rs.length === 1 && n.length === 1 ? true : null)", timeout=20)
     kill = {
         'scopes': page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname))"),
@@ -427,7 +512,431 @@ def two_sites_scenario(browser, root, net, label):
     return problems
 
 
+def nosw_incomplete_scenario(browser, root, net, label):
+    """One ?nosw=1 visit must delete an incomplete leftover from an aborted dev install."""
+    build = json_cache()
+    prod, dev = root + 'kitphonic/', root + 'kitphonic-dev/'
+    prod_name, dev_name, dev_new = scoped('/kitphonic/', build), scoped('/kitphonic-dev/', build), scoped('/kitphonic-dev/', NEW_CACHE)
+    mixed_legacy = 'kitphonic-bbbb0000bbbb0001'
+    prod_partial = 'kitphonic:/kitphonic/:ffffffffffff'
+    problems = []
+    context = browser.new_context()
+    errs = []
+    page = context.new_page()
+    watch(page, errs)
+    installed = {}
+    for url, name in ((prod, prod_name), (dev, dev_name)):
+        page.goto(url + '?sw=1&skipHello=1', wait_until='load')
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+        installed[url] = {'controller': page.evaluate(PROBE), **page.evaluate(WAIT_CACHE, name)}
+    if not all(v.get('complete') for v in installed.values()):
+        problems.append(f'nosw-incomplete install {installed}')
+
+    page.evaluate("""async ({ mixed, prodPartial, prodScope, devScope }) => {
+      const mixedCache = await caches.open(mixed);
+      await mixedCache.put(prodScope + 'index.html', new Response('x'));
+      await mixedCache.put(devScope + 'js/app.js', new Response('x'));
+      const partial = await caches.open(prodPartial);
+      await partial.put(prodScope + 'index.html', new Response('x'));
+    }""", {
+        'mixed': mixed_legacy,
+        'prodPartial': prod_partial,
+        'prodScope': prod,
+        'devScope': dev,
+    })
+
+    # Abort a dev update after 20 takes so an incomplete scoped cache remains.
+    net.bump(hold_after=20, prefix='/kitphonic-dev/')
+    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
+    page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
+    deadline = time.time() + 60
+    while net.audio <= 20 and time.time() < deadline:
+        time.sleep(0.1)
+    mid = page.evaluate(CACHES)
+    net.drop()
+    context.set_offline(True)
+    gone = poll(page, "() => navigator.serviceWorker.getRegistration().then(r => !r.installing && !r.waiting)", timeout=60)
+    leftover = page.evaluate(CACHES)
+    print(label, 'nosw-incomplete mid-install', {'audio': net.audio, 'mid': mid, 'dropped': gone, 'leftover': leftover})
+    if not gone:
+        problems.append(f'nosw-incomplete install not dropped {leftover}')
+    if dev_new not in leftover or leftover[dev_new].get('audio', 0) >= 830:
+        problems.append(f'nosw-incomplete missing leftover {leftover}')
+    if leftover.get(dev_name, {}).get('audio', 0) < 830 or leftover.get(prod_name, {}).get('audio', 0) < 830:
+        problems.append(f'nosw-incomplete lost a complete cache {leftover}')
+
+    net.restore()
+    context.set_offline(False)
+
+    # One user visit with ?nosw=1 (the page may auto-reload once). Do not navigate again before asserting.
+    goto_nosw(page, dev + '?nosw=1&skipHello=1')
+    kill = {
+        'scopes': page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname).sort())"),
+        'caches': page.evaluate(CACHES),
+        'controller': page.evaluate("() => !!navigator.serviceWorker.controller"),
+    }
+    print(label, 'nosw-incomplete after one pass', kill)
+    print(label, 'nosw-incomplete errors', errs)
+    names = list(kill['caches'])
+    dev_left = [n for n in names if n.startswith('kitphonic:/kitphonic-dev/:')]
+    if dev_left or kill['controller'] or kill['scopes'] != ['/kitphonic/']:
+        problems.append(f'nosw-incomplete leftover after one pass {kill}')
+    if kill['caches'].get(prod_name, {}).get('audio', 0) < 830:
+        problems.append(f'nosw-incomplete touched prod {kill["caches"]}')
+    if prod_partial not in names:
+        problems.append(f'nosw-incomplete touched prod incomplete cache {names}')
+    if mixed_legacy not in names:
+        problems.append(f'nosw-incomplete touched unowned legacy {names}')
+    if errs:
+        problems.append(errs)
+
+    page.close()
+    context.set_offline(True)
+    off = offline_check(context, prod + '?sw=1&skipHello=1')
+    print(label, 'nosw-incomplete prod offline', off)
+    if off['controller'] != prod_name or not takes_ok(off['takes']) or off['errors']:
+        problems.append(f'nosw-incomplete prod offline {off}')
+    context.close()
+    net.__init__()
+    return problems
+
+
+
+OLD_KILLSWITCH = os.path.join(ROOT, 'tests/fixtures/sw-killswitch-e5e47a0c.js')
+NEW_KILLSWITCH = os.path.join(ROOT, 'tools/sw-killswitch.js')
+KILLSWITCH_WATCH_S = 30
+DEV_MOUNT = '/kitphonic-dev/'
+
+
+def attach_navs(page):
+    navs = []
+    def on_nav(frame):
+        if frame == page.main_frame:
+            navs.append({'t': time.time(), 'url': frame.url})
+    page.on('framenavigated', on_nav)
+    return navs
+
+
+def wait_navs(seconds, navs=None, stop_after=None):
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        if stop_after and navs is not None and len(navs) >= stop_after:
+            return
+        time.sleep(0.05)
+
+
+def page_alive(page, expect_title=None):
+    try:
+        href = page.url
+        title = page.evaluate('() => document.title')
+        return {'ok': True, 'href': href, 'title': title, 'error': None}
+    except Exception as err:
+        return {'ok': False, 'href': getattr(page, 'url', ''), 'title': None, 'error': str(err)}
+
+
+def _loop_client_proc(url, kind, result_path):
+    """Open the repro page in a child browser so a tight reload loop can be killed."""
+    script = (
+        "import json, time\n"
+        "from playwright.sync_api import sync_playwright\n"
+        f"url = {url!r}\n"
+        f"kind = {kind!r}\n"
+        f"result_path = {result_path!r}\n"
+        "kw = {'args': ['--no-sandbox']} if kind == 'chromium' else {}\n"
+        "out = {'ok': False, 'href': '', 'title': '', 'error': None}\n"
+        "try:\n"
+        "    with sync_playwright() as p:\n"
+        "        browser = getattr(p, kind).launch(**kw)\n"
+        "        page = browser.new_context().new_page()\n"
+        "        try:\n"
+        "            page.goto(url, wait_until='commit', timeout=5000)\n"
+        "        except Exception as err:\n"
+        "            out['error'] = 'goto ' + str(err)\n"
+        "        try:\n"
+        "            out['href'] = page.url\n"
+        "            out['title'] = page.title()\n"
+        "            out['ok'] = True\n"
+        "        except Exception as err:\n"
+        "            out['error'] = (out['error'] or '') + ' read ' + str(err)\n"
+        "        try:\n"
+        "            open(result_path, 'w').write(json.dumps(out))\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "        time.sleep(60)\n"
+        "except Exception as err:\n"
+        "    out['error'] = str(err)\n"
+        "    try:\n"
+        "        open(result_path, 'w').write(json.dumps(out))\n"
+        "    except Exception:\n"
+        "        pass\n"
+    )
+    env = dict(os.environ)
+    env.setdefault('PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS', '1')
+    return Popen([sys.executable, '-c', script], cwd=ROOT, env=env, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+
+
+def _stop_proc(proc, seconds=3):
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=seconds)
+    except Exception:
+        pass
+
+
+def _read_result(path):
+    try:
+        import json as _json
+        return _json.loads(open(path, encoding='utf8').read())
+    except Exception as err:
+        return {'error': f'no child result: {err}'}
+
+
+def killswitch_loop_watch(browser, root, net, label, template, expect_loop):
+    """30 s watch of a page that re-registers sw.js like sw-register does.
+
+    Navigations are counted from server hits to /repro.html, and the page
+    itself runs in a child process so a tight loop can be killed. The
+    e5e47a0c template must exceed 2 navigations (that is the loop this
+    harness would fail). The current template must stay at at most 2.
+    After the new template's watch, the server is dropped for 8 s to
+    prove going offline does not start a loop or a chrome-error navigation.
+    """
+    problems = []
+    name = 'old' if expect_loop else 'new'
+    kind = getattr(getattr(browser, 'browser_type', None), 'name', None) or 'chromium'
+    net.set_sw(DEV_MOUNT, template)
+    net.clear_hits()
+    url = root.rstrip('/') + DEV_MOUNT + 'repro.html?sw=1'
+    result_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'kp-killswitch-{kind}-{name}.json')
+    try:
+        os.remove(result_path)
+    except FileNotFoundError:
+        pass
+    proc = _loop_client_proc(url, kind, result_path)
+    deadline = time.time() + KILLSWITCH_WATCH_S
+    while time.time() < deadline:
+        if expect_loop and net.hit_count('/repro.html') >= 8:
+            break
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    mid_hits = net.hit_count('/repro.html')
+    result = _read_result(result_path)
+    print(label, f'killswitch-loop {name}', {
+        'repro_hits': mid_hits, 'sw_hits': net.hit_count('/sw.js'),
+        'client': 'exited' if proc.poll() is not None else 'running', 'result': result,
+    }, flush=True)
+
+    if expect_loop:
+        if mid_hits <= 2:
+            problems.append(
+                f'old kill-switch template did not loop ({mid_hits} repro hits in {KILLSWITCH_WATCH_S}s); the harness would not have failed on e5e47a0c'
+            )
+        _stop_proc(proc)
+        net.set_sw(DEV_MOUNT, None)
+        net.clear_hits()
+        return problems
+
+    if mid_hits > 2:
+        problems.append(f'new kill-switch template looped: {mid_hits} repro hits')
+
+    # Going offline after the kill must not navigate again (the old loop landed on chrome-error).
+    net.drop()
+    time.sleep(8)
+    hits = net.hit_count('/repro.html')
+    print(label, f'killswitch-loop {name} offline-after', {
+        'repro_hits': hits, 'at_offline': mid_hits, 'result': result,
+    }, flush=True)
+    if hits > mid_hits:
+        problems.append(f'new kill-switch looped after going offline: {mid_hits} then {hits} repro hits')
+    href = result.get('href') or ''
+    title = result.get('title') or ''
+    if result.get('ok') and ('chrome-error' in href or href.startswith('about:') or title != 'kill-switch loop repro'):
+        problems.append(f'kill-switch page was already bad before offline {result}')
+    net.restore()
+    _stop_proc(proc)
+    net.set_sw(DEV_MOUNT, None)
+    net.clear_hits()
+    return problems
+
+
+def killswitch_scenario(browser, root, net, label):
+    """Emergency kill switch: loop repro, offline after kill, restore, prod isolation."""
+    problems = []
+    problems += killswitch_loop_watch(browser, root, net, label, OLD_KILLSWITCH, expect_loop=True)
+    problems += killswitch_loop_watch(browser, root, net, label, NEW_KILLSWITCH, expect_loop=False)
+
+    build = json_cache()
+    prod, dev = root + 'kitphonic/', root + 'kitphonic-dev/'
+    prod_name, dev_name = scoped('/kitphonic/', build), scoped('/kitphonic-dev/', build)
+    marker = 'kitphonic-killswitch:/kitphonic-dev/'
+    context = browser.new_context()
+    errs = []
+    page = context.new_page()
+    watch(page, errs)
+    installed = {}
+    for url, name in ((prod, prod_name), (dev, dev_name)):
+        page.goto(url + '?sw=1&skipHello=1', wait_until='load')
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+        installed[url] = {'controller': page.evaluate(PROBE), **page.evaluate(WAIT_CACHE, name)}
+    print(label, 'killswitch two-sites installed', installed)
+    if installed[prod]['controller'] != prod_name or installed[dev]['controller'] != dev_name or not all(v['complete'] for v in installed.values()):
+        problems.append(f'killswitch install {installed}')
+
+    net.set_sw(DEV_MOUNT, NEW_KILLSWITCH)
+    net.clear_hits()
+    try:
+        page.close()
+    except Exception:
+        pass
+    kind = getattr(getattr(browser, 'browser_type', None), 'name', None) or 'chromium'
+    probe = context.new_page()
+    probe.goto(root + 'probe.html', wait_until='load', timeout=15000)
+    # A client under the dev scope must exist so skipWaiting can finish activating.
+    result_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'kp-killswitch-app-{kind}.json')
+    try:
+        os.remove(result_path)
+    except FileNotFoundError:
+        pass
+    started = time.time()
+    proc = _loop_client_proc(dev + '?sw=1&skipHello=1', kind, result_path)
+    try:
+        probe.evaluate("""async () => {
+          const r = await navigator.serviceWorker.getRegistration('/kitphonic-dev/');
+          if (r) await r.update();
+        }""")
+    except Exception as err:
+        print(label, 'killswitch update()', err, flush=True)
+    ident = """async () => {
+      const identify = async (worker) => {
+        if (!worker) return null;
+        return await new Promise(resolve => {
+          const ch = new MessageChannel();
+          ch.port1.onmessage = e => resolve(e.data || null);
+          try { worker.postMessage({ type: 'kitphonic-killswitch' }, [ch.port2]); }
+          catch (err) { resolve({ error: String(err) }); }
+          setTimeout(() => resolve(null), 800);
+        });
+      };
+      const rs = await navigator.serviceWorker.getRegistrations();
+      const scopes = rs.map(r => new URL(r.scope).pathname).sort();
+      const names = await caches.keys();
+      const dev = rs.find(r => new URL(r.scope).pathname === '/kitphonic-dev/');
+      const pieces = {
+        installing: dev && dev.installing ? await identify(dev.installing) : null,
+        waiting: dev && dev.waiting ? await identify(dev.waiting) : null,
+        active: dev && dev.active ? await identify(dev.active) : null,
+      };
+      const kill = !!(pieces.active && pieces.active.killswitch === true);
+      return { scopes, names, pieces, kill };
+    }"""
+    after = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        after = probe.evaluate(ident)
+        if after.get('kill') is True:
+            break
+        time.sleep(0.2)
+    print(label, 'killswitch after update', after, flush=True)
+    # Finish the 30 s loop watch from the child start.
+    while time.time() < started + KILLSWITCH_WATCH_S:
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    doc_hits = net.hit_count_exact('/kitphonic-dev/', '/kitphonic-dev/index.html')
+    print(label, 'killswitch after deploy child', {
+        'doc_hits': doc_hits, 'sw_hits': net.hit_count('/kitphonic-dev/sw.js'),
+        'client': 'exited' if proc.poll() is not None else 'running',
+        'result': _read_result(result_path),
+    }, flush=True)
+    _stop_proc(proc)
+    after = probe.evaluate(ident)
+    print(label, 'killswitch after deploy', {'doc_hits': doc_hits, 'after': after}, flush=True)
+    if doc_hits > 2:
+        problems.append(f'killswitch app looped: {doc_hits} document hits')
+    if '/kitphonic/' not in after['scopes'] or '/kitphonic-dev/' not in after['scopes']:
+        problems.append(f'killswitch must stay registered and leave prod registered {after["scopes"]}')
+    if after.get('kill') is not True:
+        problems.append(f'killswitch did not identify itself {after}')
+    names = after['names']
+    if any(n.startswith('kitphonic:/kitphonic-dev/:') for n in names):
+        problems.append(f'killswitch left a dev app cache {names}')
+    if marker not in names:
+        problems.append(f'killswitch missing marker {names}')
+    if prod_name not in names:
+        problems.append(f'killswitch dropped prod cache {names}')
+    probe.close()
+
+    # Prod must still work offline while the dev kill switch is deployed.
+    context.set_offline(True)
+    off = offline_check(context, prod + '?sw=1&skipHello=1')
+    print(label, 'killswitch prod offline', off, flush=True)
+    if off['controller'] != prod_name or not takes_ok(off['takes']) or off['errors']:
+        problems.append(f'killswitch prod offline {off}')
+    context.set_offline(False)
+
+    # Restore the real sw.js. The real worker is an update, so it waits until a cold launch.
+    net.set_sw(DEV_MOUNT, None)
+    page = context.new_page()
+    watch(page, errs)
+    try:
+        page.goto(dev + '?sw=1&skipHello=1', wait_until='commit', timeout=15000)
+        page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
+        waiting = poll(page, "() => navigator.serviceWorker.getRegistration().then(r => !!r.waiting)", timeout=180, every=0.5)
+    except Exception as err:
+        waiting = f'error {err}'
+    print(label, 'killswitch restore waiting', waiting, flush=True)
+    try:
+        page.close()
+    except Exception:
+        pass
+    time.sleep(1)
+    page = context.new_page()
+    watch(page, errs)
+    try:
+        page.goto(dev + '?sw=1&skipHello=1', wait_until='commit', timeout=15000)
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+    except Exception as err:
+        problems.append(f'killswitch restore goto {err}')
+    switched = poll(page, f"() => ({PROBE})().then(c => c === '{dev_name}' ? c : null)", timeout=40)
+    ready = page.evaluate(WAIT_CACHE, dev_name) if switched == dev_name else {'complete': False, 'controller': switched}
+    names = page.evaluate("() => caches.keys()")
+    print(label, 'killswitch restored', {'controller': switched, 'ready': ready, 'names': names}, flush=True)
+    if switched != dev_name or not ready.get('complete'):
+        problems.append(f'killswitch restore {switched} {ready}')
+    if marker in names:
+        problems.append(f'killswitch marker survived restore {names}')
+    if prod_name not in names:
+        problems.append(f'killswitch restore dropped prod {names}')
+    page.close()
+    context.set_offline(True)
+    off_dev = offline_check(context, dev + '?sw=1&skipHello=1')
+    off_prod = offline_check(context, prod + '?sw=1&skipHello=1')
+    print(label, 'killswitch restored offline', {'dev': off_dev, 'prod': off_prod}, flush=True)
+    if off_dev['controller'] != dev_name or not takes_ok(off_dev['takes']) or off_dev['errors']:
+        problems.append(f'killswitch restored dev offline {off_dev}')
+    if off_prod['controller'] != prod_name or not takes_ok(off_prod['takes']) or off_prod['errors']:
+        problems.append(f'killswitch restored prod offline {off_prod}')
+    if errs:
+        # Filter noise from the mid-update navigation; keep hard failures.
+        hard = [e for e in errs if 'net::ERR' not in str(e) and 'Failed to fetch' not in str(e) and 'Load failed' not in str(e)]
+        if hard:
+            problems.append(hard)
+    context.close()
+    net.__init__()
+    return problems
+
+
 def wait_http(port):
+
     url = f'http://127.0.0.1:{port}/sw.js'
     for _ in range(50):
         try:
@@ -515,8 +1024,7 @@ def scenario(browser, base, label):
     page = quiet.new_page()
     nosw_errs = []
     watch(page, nosw_errs)
-    page.goto(base + '?nosw=1&skipHello=1', wait_until='load')
-    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    goto_nosw(page, base + '?nosw=1&skipHello=1')
     page.wait_for_timeout(500)
     regs = page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => r.scope))")
     controlled = page.evaluate("() => !!navigator.serviceWorker.controller")
@@ -551,6 +1059,10 @@ def webkit(browser_type, base, upd=None, net=None):
         problems += update_scenario(browser, upd, net, 'WEBKIT')
         net.__init__()
         problems += two_sites_scenario(browser, upd, net, 'WEBKIT')
+        net.__init__()
+        problems += nosw_incomplete_scenario(browser, upd, net, 'WEBKIT')
+        net.__init__()
+        problems += killswitch_scenario(browser, upd, net, 'WEBKIT')
     browser.close()
     return problems
 
@@ -576,6 +1088,10 @@ def main():
             problems += update_scenario(browser, upd, net, 'CHROMIUM')
             net.__init__()
             problems += two_sites_scenario(browser, upd, net, 'CHROMIUM')
+            net.__init__()
+            problems += nosw_incomplete_scenario(browser, upd, net, 'CHROMIUM')
+            net.__init__()
+            problems += killswitch_scenario(browser, upd, net, 'CHROMIUM')
             browser.close()
             problems += webkit(p.webkit, base, upd, net)
         if problems:
