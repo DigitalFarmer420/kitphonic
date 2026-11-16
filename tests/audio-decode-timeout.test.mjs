@@ -238,3 +238,31 @@ test('hello gate still reaches the map when resume rejects and decode hangs', { 
   assert.equal((window.__kitAudioLog || []).length, logged);
   assert.equal(rejections.length, 0);
 });
+
+test('load() clears the decode timeout when decode finishes first', { timeout: 3000 }, async () => {
+  installDom();
+  const realSet = globalThis.setTimeout.bind(globalThis);
+  const realClear = globalThis.clearTimeout.bind(globalThis);
+  const pending = new Map();
+  globalThis.setTimeout = (fn, ms, ...args) => {
+    const handle = realSet(() => { pending.delete(handle); fn(...args); }, ms, ...args);
+    pending.set(handle, ms);
+    return handle;
+  };
+  globalThis.clearTimeout = handle => {
+    pending.delete(handle);
+    return realClear(handle);
+  };
+  try {
+    installAudio({ initialState: 'running' });
+    const { createAudio, DECODE_MS } = await import('../js/audio.js?clear-decode-timer');
+    const a = await createAudio({ early: [] });
+    await a.unlock({ first: ['m-hello'] });
+    await a.play('sfx-chime');
+    const leftover = [...pending.values()].filter(ms => ms >= DECODE_MS - 100);
+    assert.deepEqual(leftover, [], `${leftover.length} DECODE_MS timer(s) still pending after a fast decode: ${leftover}`);
+  } finally {
+    globalThis.setTimeout = realSet;
+    globalThis.clearTimeout = realClear;
+  }
+});

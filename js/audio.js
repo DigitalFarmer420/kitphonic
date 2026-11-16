@@ -81,7 +81,12 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     const work = startLoad(id);
     const remaining = work.__t0 != null ? DECODE_MS - (now() - work.__t0) : DECODE_MS;
     if (remaining <= 0) return Promise.race([work, Promise.resolve(null)]);
-    return Promise.race([work, wait(remaining).then(() => null)]);
+    let t;
+    const timeout = new Promise(r => {
+      t = setTimeout(() => { timers.delete(t); r(null); }, remaining);
+      timers.set(t, () => r(null)); // stop() clears and resolves so load() cannot hang
+    });
+    return Promise.race([work, timeout]).finally(() => { if (t) { clearTimeout(t); timers.delete(t); } });
   }
   const queue = []; let active = 0;
   function pump() { // at most 4 background loads in flight
