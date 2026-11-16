@@ -145,7 +145,7 @@ def cdp_lost_real(p, base, g, name, w, h, kind):
         cdp.send('Emulation.setTouchEmulationEnabled', {'enabled': True, 'maxTouchPoints': 5})
         T = lambda typ, tps: cdp.send('Input.dispatchTouchEvent', {'type': typ, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, x, y in tps]})
         pg.goto(base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={g}', wait_until='domcontentloaded')
-        pg.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+        pg.wait_for_function("() => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
         strokes = pg.evaluate("() => kitphonic.lesson.run.debugState().strokes")
         pts = pg.evaluate("() => kitphonic.lesson.run.debugPoints()"); cut = max(2, len(pts) // 3)
         T('touchStart', [(1, *pts[0])])
@@ -219,7 +219,7 @@ def main():
                 page = ctx.new_page()
                 for mode in ('early', 'mid'):
                     page.goto(args.base + q, wait_until='domcontentloaded')
-                    page.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+                    page.wait_for_function("() => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
                     data = page.evaluate(INJECT, mode)
                     code, text = line(name, mode, data)
                     print(text)
@@ -233,7 +233,7 @@ def main():
                     for g in multi:
                         for kind in ('control', 'pointercancel', 'lostpointercapture'):
                             page.goto(args.base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={g}', wait_until='domcontentloaded')
-                            page.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+                            page.wait_for_function("() => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
                             code, text = multi_line(bname, name, g, kind, page.evaluate(MULTI, kind))
                             print(text)
                             failed = failed or code != 0
