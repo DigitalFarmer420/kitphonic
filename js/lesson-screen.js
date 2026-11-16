@@ -4,7 +4,8 @@ import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { LETTER_PICS, WORDS } from './content.js';
 import { GPC } from './sequence.js';
-import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox } from './trace.js';
+import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox, screenToLetter } from './trace.js';
+import { tryCapture } from './gesture.js';
 import { shuffle } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
@@ -25,7 +26,7 @@ export function introLabel(word, g) {
 export const soundClip = (g, audio) => (audio?.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
 
 export function createLessonScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, seen = noSeen }) {
-  let run = null;
+  let run = null, detachTrace = () => {};
   const hand = createGhostHand({ host: $('lesson'), reduced: () => settings.reducedMotion?.() });
   const at = node => centerIn(node, $('lesson'), stage.scale);
   const reduced = () => settings.reducedMotion?.();
@@ -60,6 +61,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
 
   // ---- 1c tracing ----
   function trace(g) {
+    detachTrace();
     const l = GPC[g]?.grapheme ?? g;
     $('intro').hidden = true; $('trace').hidden = false; $('lesson').classList.add('tracing');
     const svg = $('tr-svg'); svg.replaceChildren();
@@ -84,23 +86,33 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       for (let s = 0; s < Math.min(st.stroke, strokes.length); s++) sv('path', { class: 'ink', d: pathD(strokes[s]) }, inkG);
       if (!st.done && st.k > 0) sv('path', { class: 'ink', d: pathD(strokes[st.stroke].slice(0, st.k + 1)) }, inkG);
     }
-    const toLetter = e => { const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY; const q = pt.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; };
+    const toLetter = e => screenToLetter(svg.getScreenCTM(), e.clientX, e.clientY);
     // Finger guide (Uiux r4): the soft blue dot appears only once a finger is down, riding the ink head — it never
     // sits on top of the green start dot before the child has touched.
     const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
     const owner = strokeOwner(); // rc6: only the finger that started the stroke drives it (iPad palm / second finger)
-    svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return; if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
-      const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { owner.reset(); owner.claim(e.pointerId); svg.setPointerCapture?.(e.pointerId); guide(true); } };
+    svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return;
+      // strokeDone clears `dragging` while this finger may still be down. Do not reset the owner:
+      // a palm or second finger must not start the next stroke until this one lifts.
+      if (owner.id !== null && !owner.owns(e.pointerId)) return;
+      if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
+      const p = toLetter(e); if (!p) return; const [x, y] = p; const st = tracer.down(x, y); dragging = st.active;
+      if (dragging) { owner.claim(e.pointerId); tryCapture(svg, e.pointerId); guide(true); } };
     svg.onpointermove = e => {
       if (!dragging || !run || !owner.owns(e.pointerId)) return;
-      let st; for (const c of (e.getCoalescedEvents?.() ?? []).concat(e)) { const [x, y] = toLetter(c); st = tracer.move(x, y); if (st.strokeDone) break; } // coalesced: smooth fast strokes
+      let st = tracer.state(); for (const c of (e.getCoalescedEvents?.() ?? []).concat(e)) { const q = toLetter(c); if (!q) continue; st = tracer.move(q[0], q[1]); if (st.strokeDone) break; } // coalesced: smooth fast strokes
       lanes.forEach((ln, i) => ln.classList.toggle('off', i === st.stroke && !st.onPath));
       if (!st.onPath && !run.offSaid) { run.offSaid = true; say('Back on the dots!', 'm-back-on'); setTimeout(() => run && (run.offSaid = false), 2500); }
       if (st.strokeDone) { dragging = false; drawMarks(); }
       drawInk(); guide(dragging);
       if (st.letterDone) done();
     };
-    svg.onpointerup = svg.onpointercancel = e => { if (!owner.release(e.pointerId)) return; dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); }; // cancel keeps the ink: the child resumes from where it paused
+    const endStroke = e => { if (!owner.release(e.pointerId)) return; dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); }; // cancel / lost capture keeps the ink: resume where it paused
+    svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = endStroke;
+    // Capture can fail. A cancel or lift that never reaches the svg (finger already outside) still has to drop the owner.
+    window.addEventListener('pointerup', endStroke); window.addEventListener('pointercancel', endStroke);
+    detachTrace = () => { window.removeEventListener('pointerup', endStroke); window.removeEventListener('pointercancel', endStroke);
+      if (svg.onpointerup === endStroke) svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = null; };
     $('tr-undo').onclick = () => { tracer.undo(); drawInk(); drawMarks(); };
     function done() {
       rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { gapMs: 300 }); // rc5: sound after the chime ends (spec §3.3 L1: trace while its sound plays)
@@ -113,7 +125,8 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       }, 1200);
     }
     run.debugState = () => tracer.state(); // automated checks only
-    run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); // automated play-through only
+    run.debugOwner = () => owner.id;
+    run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); if (!m) return []; // automated play-through only
       return strokes[st.stroke].filter((_, i) => i % 3 === 0 || i === strokes[st.stroke].length - 1).map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]); };
     $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => { seen.mark('trace'); finish(); };
     $('ls-again').onclick = () => { audio.stop(); say('Start at the green dot and follow the arrows!', 'm-trace-start'); };
@@ -122,7 +135,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       if (!run) return;
       hand.start(() => { if (!run || dragging) return null; const host = $('lesson').getBoundingClientRect(), s = stage.scale, pts = run.debugPoints?.() ?? [];
         // the fingertip rides just below the stroke (clear of the green start dot's radius) and pauses beside the dot first
-        const r = 8 * Math.hypot(svg.getScreenCTM().a, svg.getScreenCTM().b) / s, dy = Math.max(30, r + 22);
+        const m = svg.getScreenCTM(), r = m ? 8 * Math.hypot(m.a, m.b) / s : 30, dy = Math.max(30, r + 22);
         const path = pts.filter((_, i) => i % 2 === 0 || i === pts.length - 1).map(([x, y]) => [(x - host.left) / s, (y - host.top) / s + dy]);
         return path.length ? [path[0], ...path] : path; },
         { now: seen.demo('trace'), stepMs: 260 }); });
@@ -138,7 +151,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16, c.offsetLeft + c.offsetWidth / 2 + 20) + 'px'; });
   }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }
-  function stop() { run = null; hand.stop(); audio.stop(); }
+  function stop() { detachTrace(); detachTrace = () => {}; run = null; hand.stop(); audio.stop(); }
   $('ls-home').onclick = () => { stop(); onHome(); };
   return {
     // opts: { activity: 'intro' | 'trace', gpc, onComplete }

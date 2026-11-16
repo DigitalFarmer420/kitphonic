@@ -14,6 +14,15 @@ test('strokeOwner: the first finger owns the stroke; other pointers can neither 
   assert.equal(o.claim(2), true, 'after the owner lifts, any finger may start'); o.reset(); assert.equal(o.id, null);
 });
 
+test('a finished stroke stays owned until that finger lifts, so a second pointer cannot start the next one', () => {
+  const o = strokeOwner();
+  assert.equal(o.claim(7), true); // stroke started; strokeDone must not release or reset
+  assert.equal(o.claim(8), false, 'second finger cannot claim the next stroke');
+  assert.equal(o.release(8), false); assert.equal(o.owns(7), true);
+  assert.equal(o.release(7), true, 'the owning finger lifts');
+  assert.equal(o.claim(8), true);
+});
+
 test('tracer hit test: green dot accepts a fat-finger press within startTol, rejects one far away', () => {
   const t = createTracer('l', { tol: 17 }), P = t.strokes[0];
   assert.equal(t.down(P[0][0] + 19, P[0][1]).active, true);
@@ -40,13 +49,19 @@ test('fast strokes: coalesced samples complete a stroke a single big jump cannot
   assert.equal(co.state().stroke, 1, 'coalesced samples finish the stroke'); assert.ok(st);
 });
 
-test('trace screen wiring: pointer ownership, coalesced events, cancel keeps the ink', () => {
+test('trace screen wiring: pointer ownership, coalesced events, cancel and lost capture keep the ink', () => {
   const src = readFileSync(new URL('../js/lesson-screen.js', import.meta.url), 'utf8');
+  assert.match(src, /owner\.id !== null && !owner\.owns\(e\.pointerId\)\) return/); // next stroke waits until the owning finger lifts
   assert.match(src, /dragging && !owner\.owns\(e\.pointerId\)\) return/);
   assert.match(src, /onpointermove = e => \{\s*if \(!dragging \|\| !run \|\| !owner\.owns\(e\.pointerId\)\) return/);
   assert.match(src, /getCoalescedEvents/);
-  assert.match(src, /onpointercancel = e => \{ if \(!owner\.release\(e\.pointerId\)\) return;/);
-  assert.doesNotMatch(src.slice(src.indexOf('onpointercancel'), src.indexOf('onpointercancel') + 200), /reset\(\)|replaceChildren/);
+  assert.match(src, /screenToLetter\(svg\.getScreenCTM\(\)/);
+  assert.doesNotMatch(src, /owner\.reset\(\)/);
+  assert.match(src, /onpointerup = svg\.onpointercancel = svg\.onlostpointercapture = endStroke/);
+  assert.match(src, /addEventListener\('pointercancel', endStroke\)/);
+  const endAt = src.indexOf('const endStroke');
+  assert.ok(endAt > 0);
+  assert.doesNotMatch(src.slice(endAt, endAt + 280), /reset\(\)|replaceChildren/); // cancel / lost capture keeps the ink
   const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.match(css, /#tr-svg\{[^}]*touch-action:none/); assert.match(css, /\.short #lesson\.tracing \.top\{pointer-events:none\}/); assert.match(css, /html,body\{[^}]*touch-action:none/);
 });

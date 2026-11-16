@@ -11,15 +11,25 @@ const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls)
 const picOf = e => !e.pic ? null : e.pic.startsWith('#') ? `<svg width="140" height="100"><use href="${e.pic}"/></svg>` : `<span class="emoji">${e.pic}</span>`;
 
 import { noSeen } from './seen.js';
+import { pointerOwner, tryCapture, scheduleLostCapture } from './gesture.js';
 export function createFamilyScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen }) {
   let run = null, drag = null;
+  const owner = pointerOwner();
   const host = $('family'), hand = createGhostHand({ host, reduced: () => settings.reducedMotion() });
   const say = (t, ...clips) => { $('fm-bubble').innerHTML = t; return audio.say(clips); }; // rc5: one phrase, cancelled by audio.stop()
   const prompt = () => say(`Pick a letter and put it in front of <b>${run.fam.rime}</b>!`, 'm-family-pick', `rime-${run.fam.rime}`);
   const tiles = () => [...$('fm-tray').children];
   const handPath = () => { if (!run || run.busy || run.made.size) return null; const s = stage.scale, t = tiles()[0], a = centerIn(t, host, s), b = centerIn($('fm-slot'), host, s);
     return [a, [(a[0] + b[0]) / 2, Math.min(a[1], b[1]) - 60], b]; };
-  function select(t) { tiles().forEach(x => x.classList.toggle('sel', x === t)); run.sel = t; $('fm-slot').classList.toggle('ready', !!t); }
+  function select(t) {
+    tiles().forEach(x => { const on = x === t; x.classList.toggle('sel', on); x.setAttribute('aria-pressed', on ? 'true' : 'false'); });
+    run.sel = t; $('fm-slot').classList.toggle('ready', !!t);
+  }
+  function activateTile(t) { // keyboard / assistive click. A finger tap is handled on pointerup (and preventDefault skips the click).
+    if (!run || run.busy || owner.id !== null) return;
+    hand.hide(); hand.poke(); audio.stop(); audio.play(soundClip(t.dataset.g, audio));
+    select(run.sel === t ? null : t);
+  }
   async function place(g) {
     if (!run || run.busy) return; hand.poke(); select(null);
     const x = run.fam.words.find(w => w.onset === g); if (!x) return;
@@ -66,12 +76,14 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
   // drag: pointer moves a floating copy; dropping near the slot places it. A press without movement = tap-to-select.
   const toStage = e => { const b = host.getBoundingClientRect(), s = stage.scale; return [(e.clientX - b.left) / s, (e.clientY - b.top) / s]; };
   function down(e, t) {
-    if (!run || run.busy) return; e.preventDefault(); hand.hide(); hand.poke(); try { t.setPointerCapture?.(e.pointerId); } catch {}
-    drag = { t, x0: e.clientX, y0: e.clientY, moved: false, ghost: null };
+    if (!run || run.busy || !owner.begin(e.pointerId)) return; // a second finger must not take the tile
+    e.preventDefault(); hand.hide(); hand.poke(); tryCapture(t, e.pointerId);
+    drag = { id: e.pointerId, t, x0: e.clientX, y0: e.clientY, moved: false, ghost: null };
+    run.dragId = owner.id;
     audio.stop(); audio.play(soundClip(t.dataset.g, audio));
   }
   function move(e) {
-    if (!drag) return;
+    if (!drag || !owner.owns(e.pointerId)) return;
     if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 12) {
       drag.moved = true; drag.ghost = drag.t.cloneNode(true); drag.ghost.classList.add('fdrag'); drag.ghost.classList.remove('sel'); host.append(drag.ghost); drag.t.classList.add('dragging'); select(null);
     }
@@ -79,26 +91,43 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
       $('fm-slot').classList.toggle('ready', overSlot(e)); }
   }
   const overSlot = e => { const r = $('fm-slot').getBoundingClientRect(), pad = 30 * stage.scale; return e.clientX > r.left - pad && e.clientX < r.right + pad && e.clientY > r.top - pad && e.clientY < r.bottom + pad; };
-  function up(e) {
-    if (!drag) return; const d = drag; drag = null; d.ghost?.remove(); d.t.classList.remove('dragging'); $('fm-slot').classList.remove('ready');
+  function finishDrag(e, commit) {
+    if (!drag || e.pointerId !== drag.id) return;
+    const d = drag; drag = null; owner.end(e.pointerId); if (run) run.dragId = null;
+    d.ghost?.remove(); d.t.classList.remove('dragging'); $('fm-slot').classList.remove('ready');
+    if (!commit || !run) return;
     if (d.moved) { if (overSlot(e)) place(d.t.dataset.g); }
     else select(run.sel === d.t ? null : d.t);
   }
-  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', () => { if (drag) { drag.ghost?.remove(); drag.t.classList.remove('dragging'); drag = null; } });
+  function up(e) { finishDrag(e, true); }
+  function abortDrag(e) { finishDrag(e, false); } // cancel, or capture lost with no following lift: do not place the tile
+  // lostpointercapture fires before pointerup. Defer so a real lift can still drop the tile on the slot.
+  function onLost(e) { scheduleLostCapture(e, pid => owner.owns(pid) && drag?.id === pid, () => abortDrag(e)); }
+  function releaseDrag() {
+    if (drag) { drag.ghost?.remove(); drag.t.classList.remove('dragging'); $('fm-slot').classList.remove('ready'); drag = null; }
+    if (owner.id != null) owner.end(owner.id);
+    if (run) run.dragId = null;
+  }
+  addEventListener('pointermove', move); addEventListener('pointerup', up); addEventListener('pointercancel', abortDrag);
   $('fm-slot').onclick = () => { if (!run || run.busy) return; hand.poke(); if (run.sel) place(run.sel.dataset.g); else prompt(); };
   $('fm-again').onclick = () => run && !run.busy && (audio.stop(), prompt());
-  $('fm-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
+  $('fm-home').onclick = () => { releaseDrag(); run = null; hand.stop(); audio.stop(); onHome(); };
   return {
     start({ family, onComplete }) {
-      run = { fam: family, made: new Set(), sel: null, busy: true, onComplete }; $('family').hidden = false;
+      releaseDrag(); run = { fam: family, made: new Set(), sel: null, busy: true, onComplete }; $('family').hidden = false;
       $('fm-card').className = ''; $('fm-card').innerHTML = '<span class="q">?</span>'; $('fm-made').replaceChildren();
       $('fm-rime').textContent = caseFor(family.rime, cfg.tileCase); $('fm-slot').textContent = ''; $('fm-slot').className = 'L'; $('fm-tray').className = '';
       $('fm-tray').replaceChildren(...shuffle(family.words.map(x => x.onset), rand).map(g => { const t = el('button', 'ftile L', caseFor(GPC[g].grapheme, cfg.tileCase)); t.dataset.g = g;
-        t.setAttribute('aria-label', GPC[g].grapheme); t.onpointerdown = e => down(e, t); return t; }));
+        t.setAttribute('aria-label', GPC[g].grapheme); t.setAttribute('aria-pressed', 'false');
+        t.onpointerdown = e => down(e, t);
+        t.addEventListener('keydown', e => { if (e.repeat || (e.key !== 'Enter' && e.key !== ' ')) return; e.preventDefault(); activateTile(t); });
+        t.addEventListener('click', e => { if (e.detail > 0) return; activateTile(t); }); // Enter/Space and .click(); a finger's click is suppressed
+        t.addEventListener('lostpointercapture', onLost);
+        return t; }));
       pebbles(); layoutTray();
       prompt().then(() => { if (!run) return; run.busy = false; hand.start(handPath, { now: seen.demo('family') }); });
     },
-    stop() { run = null; hand.stop(); },
+    stop() { releaseDrag(); run = null; hand.stop(); },
     relayout: () => layoutTray(),
     get run() { return run; },
   };
