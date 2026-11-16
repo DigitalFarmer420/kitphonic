@@ -35,7 +35,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
   const trackBox = () => { const l = Math.max(8, layout.track.left - 20), r = Math.min(layout.stageW - 34, layout.track.left + layout.track.width + 20); return { left: l, width: r - l }; };
   const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px';
-    applySliderAria(handle, { fraction: f, passed: sweep?.lit.length ?? 0, total: ms?.length ?? 0 }); };
+    applySliderAria(handle, { fraction: f, stops: sweep?.positions, total: ms?.length ?? 0 }); };
 
   function renderPebbles() {
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
