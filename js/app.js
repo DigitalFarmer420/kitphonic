@@ -26,15 +26,20 @@ import { servableFamilies } from './families.js';
 import { allSentences, allStories } from './sentences.js';
 import { MASCOT } from './content.js';
 import { createHelloGate } from './hello-gate.js';
+import { createHelloVisit } from './hello-visit.js';
+import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
 import { registerServiceWorker } from './sw-register.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
+// ?sessionlog=1 is the only thing that builds the overlay, listens, or wraps storage / AudioContext.
+const sessionLog = sessionLogEnabled(location.search) ? createSessionLog(document) : null;
+if (sessionLog) observeAudioContexts(globalThis, sessionLog);
 const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
-const settings = createSettings(window.localStorage, undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
+const settings = createSettings(sessionLog ? watchStorage(window.localStorage, sessionLog) : window.localStorage, undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
 const audio = await createAudio({ base: 'audio/', speechRate: () => settings.audioRate() });
 // Reduced motion app-wide: a stage class stops CSS animation/transitions; screens also skip drift, path drawing,
 // confetti, the ghost hand and demos via settings.reducedMotion().
@@ -42,11 +47,13 @@ const applyMotion = () => $('stage').classList.toggle('rm', settings.reducedMoti
 applyMotion(); settings.onChange(k => (k === 'reducedMotion' || k === '*') && applyMotion());
 globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', applyMotion);
 // Local only (spec §3.9). Dev ?progress=N uses a seeded in-memory log so real progress is never touched.
-const storage = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
+const storageBacking = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
+const storage = sessionLog ? watchStorage(storageBacking, sessionLog) : storageBacking;
 const store = createStore(storage);
 const seen = createSeen(storage); // ghost-hand demos: first meetings per activity (in-memory in dev ?progress mode)
 let sessionId = null;
-const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; };
+let afterShow = () => {};
+const show = id => { for (const s of document.querySelectorAll('.screen')) s.hidden = s.id !== id; afterShow(id); };
 // rc7: map high-water marks — every stop passed at any moment gets a marker, so the map never walks back. Boot replays
 // the whole saved history once (migration for rc1–rc6 progress), then each response only checks what is new.
 let scanned = -Infinity;
@@ -74,6 +81,7 @@ const starScreen = createStarScreen({ audio, stage, seen, reduced: () => setting
 const familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
 const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), support: supportLevel });
 
+// Map Home is the Kit intro (the front door). Activity Home buttons call goHome() and land on the map.
 const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
   onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
 function showMap(opts) { show('map'); mapScreen.render(opts); }
@@ -150,22 +158,27 @@ function startDirect() { // dev: word screen at ?level (and ?word first)
 
 // Hello: one big play button; the tap unlocks audio (autoplay policies / iOS) and plays Kit's greeting once.
 // rc4: the tap registers instantly (pressed button, Kit waves, bubble text) before any audio work.
-// A second tap used to enqueue another greeting; that one kept playing after the map appeared.
-const helloGate = createHelloGate();
-const acceptHello = () => {
-  $('play').classList.add('going'); $('play').setAttribute('aria-disabled', 'true'); $('play').setAttribute('aria-busy', 'true');
-  $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!";
+// A second tap in the same visit must not enqueue another greeting (it would keep playing over the map).
+// Map Home shows this screen again, so every hello show arms one new visit and clears Play's accepted state.
+const helloGate = createHelloGate(sessionLog ? { onPhase: (next, from) => sessionLog.phase(from, next) } : undefined);
+const helloVisit = createHelloVisit({ gate: helloGate, play: $('play') });
+const helloLine = $('hello-bubble').textContent;
+const armHello = () => {
+  helloVisit.beginVisit();
+  $('hello').classList.remove('go');
+  $('play').classList.remove('pressed');
+  $('hello-bubble').textContent = helloLine;
 };
-const releaseHello = () => { $('play').classList.remove('going'); $('play').removeAttribute('aria-disabled'); $('play').removeAttribute('aria-busy'); };
+afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); };
 $('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
 $('play').onclick = () => {
-  acceptHello(); // keyboard activation has no pointerdown
-  helloGate.start({
+  $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; // keyboard activation has no pointerdown
+  helloVisit.press({
     unlock: () => audio.unlock({ first: [cfg.hello.greetingClip] }), // still inside this gesture, before the first await
     play: () => audio.play(cfg.hello.greetingClip),
     go: () => { cfg.activity || cfg.direct ? startSession() : showMap(); },
-  }).catch(releaseHello); // a failed unlock/play can be tried again; a success stays accepted
+  }).catch(() => {}); // a failed unlock/play re-enables Play; a second tap in this visit does not start another greeting
 };
 $('speaker').onclick = async () => { // sound check + silent-mode tip
   await audio.unlock(); audio.play('sfx-chime');
@@ -179,7 +192,7 @@ $('done-home').onclick = () => { // take a break. The recorded session-end line 
   audio.stop(); audio.play('m-all-done').then(() => { if ($('done').dataset.kind === 'break') showMap(); });
 };
 
-window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, get session() { return session; },
+window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, helloGate, sessionLog, get session() { return session; },
   map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
 if (cfg.parent) openParent(); // dev: ?parent=1 skips the gate
 else if (cfg.levelup) { const m = mapState(store.all()); if (m.index > 0) { show('levelup'); mapScreen.levelUp(m.stops[m.index - 1], { onBack: () => showMap({ drawFrom: m.index - 1 }) }); } else showMap(); } // dev
