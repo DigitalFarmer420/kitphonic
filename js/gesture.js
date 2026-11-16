@@ -33,6 +33,15 @@ export function scheduleLostCapture(event, stillOwns, abort, schedule = setTimeo
   schedule(() => { if (stillOwns(pid)) abort(event); }, 0);
 }
 
+// Touch implicitly captures the hit child. Moving capture to a parent fires
+// lostpointercapture on that child, and the event bubbles. Only a loss from the
+// element that was listening (the capture target itself) may abort, and only
+// after this turn, so a pointerup that follows can still finish the gesture.
+export function scheduleLostCaptureOnSelf(event, stillOwns, abort, schedule = setTimeout) {
+  if (!event || event.target !== event.currentTarget) return;
+  scheduleLostCapture(event, stillOwns, abort, schedule);
+}
+
 const SLIDER_KEYS = new Set(['ArrowRight', 'ArrowLeft', 'ArrowUp', 'ArrowDown', 'Home', 'End']);
 
 // Next track fraction (0..1) for a slider key. Arrows step to the next or previous sound, then the

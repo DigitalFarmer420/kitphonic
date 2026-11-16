@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { STROKES } from '../../js/trace.js';
 
 // Touch stroke along the samples tools/trace-touch.py already uses (screen
 // coordinates, every few points, still inside the lane). Playwright WebKit
@@ -137,3 +138,87 @@ test('a lostpointercapture mid-stroke lets the same finger finish the letter', a
   test.fixme(stillTheUnfixedCancel(data), PENDING_LOST);
   expect(strokeProgressed(data), JSON.stringify(data)).toBe(true);
 });
+
+// PR #18 Uiux / Test Engineer: multi-stroke letters deadlocked. Stroke 1 finished, drawMarks()
+// replaced the start dot under the finger, the lift was dispatched on that detached node (WebKit
+// implicit touch capture), and no new finger could start stroke 2. Every multi-stroke grapheme in
+// STROKES, with no interruption (the missed-lift control), a pointercancel, and a lostpointercapture;
+// during a held stroke a palm lands and lifts and must not take it. Each later stroke is a new
+// finger. tools/ipad-trace-cancel.py runs the same model on four iPad sizes plus real CDP touches.
+const MULTI = Object.entries(STROKES).filter(([, v]) => v.length > 1).map(([k]) => k);
+
+async function multiStroke(page, kind) {
+  return page.evaluate(async (kind) => {
+    const svg = document.getElementById('tr-svg');
+    const run = window.kitphonic.lesson.run;
+    const active = new Map();
+    const hit = (x, y) => document.elementFromPoint(x, y) || svg;
+    const P = (type, target, id, x, y, buttons) => target.dispatchEvent(new PointerEvent(type, {
+      bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, buttons,
+    }));
+    const T = (type, target, ident, x, y) => {
+      const t = { identifier: ident, clientX: x, clientY: y };
+      if (type === 'touchend') active.delete(ident); else active.set(ident, t);
+      const ev = new Event(type, { bubbles: true, cancelable: true });
+      ev.touches = [...active.values()];
+      ev.changedTouches = [t];
+      target.dispatchEvent(ev);
+    };
+    const finger = (pid, ident) => ({
+      target: null,
+      down(q) { this.target = hit(q[0], q[1]); P('pointerdown', this.target, pid, q[0], q[1], 1); T('touchstart', this.target, ident, q[0], q[1]); },
+      move(q) { P('pointermove', this.target, pid, q[0], q[1], 1); T('touchmove', this.target, ident, q[0], q[1]); },
+      touchOnly(q) { T('touchmove', this.target, ident, q[0], q[1]); },
+      up(q) { P('pointerup', this.target, pid, q[0], q[1], 0); T('touchend', this.target, ident, q[0], q[1]); },
+    });
+    const strokes = run.debugState().strokes;
+    let pts = run.debugPoints();
+    const f1 = finger(2, 1);
+    f1.down(pts[0]);
+    const cut = Math.max(2, Math.floor(pts.length / 3));
+    for (let i = 1; i <= cut; i++) f1.move(pts[i]);
+    let held = true, palmOk = true;
+    if (kind === 'control') {
+      for (let i = cut + 1; i < pts.length; i++) f1.move(pts[i]);
+    } else {
+      if (kind === 'pointercancel') P('pointercancel', f1.target, 2, pts[cut][0], pts[cut][1], 0);
+      else svg.dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 2, pointerType: 'touch', isPrimary: true }));
+      await new Promise((r) => setTimeout(r, 0));
+      held = run.debugState().active;
+      const r = svg.getBoundingClientRect(), at = [r.right - 10, r.bottom - 10], palm = finger(9, 8);
+      const k0 = run.debugState().k;
+      palm.down(at);
+      palmOk = run.debugOwner() === 2 && run.debugState().k === k0 && run.debugState().stroke === 0;
+      const half = cut + Math.floor((pts.length - cut) / 2);
+      for (let i = cut + 1; i < pts.length; i++) { f1.touchOnly(pts[i]); if (i === half) palm.up(at); }
+    }
+    const s1 = run.debugState();
+    f1.up(pts[pts.length - 1]);
+    for (let s = 1; s < strokes; s++) {
+      pts = run.debugPoints();
+      if (!pts.length) break;
+      const f = finger(10 + 2 * s, 9 + 2 * s);
+      f.down(pts[0]);
+      for (let i = 1; i < pts.length; i++) f.move(pts[i]);
+      f.up(pts[pts.length - 1]);
+    }
+    return { strokes, held, palmOk, s1: s1.stroke, end: run.debugState(), stars: document.querySelectorAll('#tr-tray .emoji:not(.off)').length };
+  }, kind);
+}
+
+test('every multi-stroke grapheme is enumerated', () => {
+  expect(MULTI.length).toBeGreaterThanOrEqual(19);
+  expect(MULTI).toEqual(expect.arrayContaining(['t', 'f', 'i', 'j', 'k', 'x']));
+});
+
+for (const kind of ['control', 'pointercancel', 'lostpointercapture']) {
+  test(`multi-stroke letters: a new finger starts each later stroke after ${kind === 'control' ? 'a missed lift (no cancel)' : `a ${kind} and a missed lift`}`, async ({ page }) => {
+    const fails = [];
+    for (const g of MULTI) {
+      await openTrace(page, g);
+      const d = await multiStroke(page, kind);
+      if (!(d.held && d.palmOk && d.s1 >= 1 && (d.end.done || d.stars >= 1))) fails.push(`${g} ${JSON.stringify(d)}`);
+    }
+    expect(fails, fails.join('\n')).toEqual([]);
+  });
+}

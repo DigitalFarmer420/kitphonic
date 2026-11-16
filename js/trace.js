@@ -65,6 +65,35 @@ export function screenToLetter(ctm, x, y) {
   return Number.isFinite(lx) && Number.isFinite(ly) ? [lx, ly] : null;
 }
 
+// iOS can cancel the pointer stream at any moment, including mid-stroke, and then send
+// only touch events. A touch pointercancel or lostpointercapture pauses; it does not end.
+// A lostpointercapture that bubbled from a child is ignored (unconfirmed in device logs).
+// Mouse and pen cancels still end the stroke.
+export function traceHold({ type, target, svg, pointerType = 'touch' } = {}) {
+  if (type === 'lostpointercapture' && target !== svg) return 'ignore';
+  const touch = pointerType !== 'mouse' && pointerType !== 'pen';
+  if (touch && (type === 'pointercancel' || type === 'lostpointercapture')) return 'hold';
+  return 'end';
+}
+
+// The touch that started the stroke. Prefer its identifier; if that finger is gone, the
+// touch nearest the last point. Any other finger in the list is not chosen.
+export function traceTouch(touches, { id = null, last = null } = {}) {
+  const list = [...(touches ?? [])];
+  if (!list.length) return null;
+  if (id != null) {
+    const hit = list.find(t => t.identifier === id);
+    if (hit) return hit;
+  }
+  if (!last) return null;
+  let best = null, bd = Infinity;
+  for (const t of list) {
+    const d = Math.hypot((t.clientX ?? 0) - last[0], (t.clientY ?? 0) - last[1]);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
+
 // opts: tol (letter units; lane is ~2*tol wide), ahead (how far ahead progress may jump, units), startTol.
 export function createTracer(letter, { tol = 16, ahead = 24, startTol = 20 } = {}) {
   const strokes = (STROKES[letter] ?? []).map(s => resample(s));
