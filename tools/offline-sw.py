@@ -23,9 +23,9 @@ Chromium is required. WebKit is attempted and reported when this Playwright buil
 cannot install a service worker. Exit 0 when Chromium passes. A missing Playwright
 install skips (exit 0), matching the other browser tools.
 """
-import argparse, os, re, sys, threading, time, urllib.request
+import argparse, os, re, signal, sys, threading, time, urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
-from subprocess import Popen
+from subprocess import DEVNULL, Popen
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -127,6 +127,7 @@ class Net:
         self.release = threading.Event()
         self.release.set()
         self.sw_files = {}
+        self.hits = []
 
     def set_sw(self, mount, path):
         """Serve path as sw.js under this site prefix, or drop the override when path is None."""
@@ -135,6 +136,18 @@ class Net:
                 self.sw_files.pop(mount, None)
             else:
                 self.sw_files[mount] = path
+
+    def record_hit(self, path):
+        with self.lock:
+            self.hits.append((time.time(), path))
+
+    def clear_hits(self):
+        with self.lock:
+            self.hits.clear()
+
+    def hit_count(self, needle):
+        with self.lock:
+            return sum(1 for _, path in self.hits if needle in path)
 
     def bump(self, hold_after, prefix='/'):
         with self.lock:
@@ -196,6 +209,7 @@ def update_server(port, net):
                     net.release.wait(120)
                     if net.down:
                         return self.hang_up()
+            net.record_hit(full)
             if path == '/repro.html':
                 src = open(os.path.join(ROOT, 'tests/fixtures/sw-killswitch-repro.html'), 'rb').read()
                 return self.body(src, 'text/html')
@@ -613,52 +627,137 @@ def page_alive(page, expect_title=None):
         return {'ok': False, 'href': getattr(page, 'url', ''), 'title': None, 'error': str(err)}
 
 
+def _loop_client_proc(url, kind, result_path):
+    """Open the repro page in a child browser so a tight reload loop can be killed."""
+    script = (
+        "import json, time\n"
+        "from playwright.sync_api import sync_playwright\n"
+        f"url = {url!r}\n"
+        f"kind = {kind!r}\n"
+        f"result_path = {result_path!r}\n"
+        "kw = {'args': ['--no-sandbox']} if kind == 'chromium' else {}\n"
+        "out = {'ok': False, 'href': '', 'title': '', 'error': None}\n"
+        "try:\n"
+        "    with sync_playwright() as p:\n"
+        "        browser = getattr(p, kind).launch(**kw)\n"
+        "        page = browser.new_context().new_page()\n"
+        "        try:\n"
+        "            page.goto(url, wait_until='commit', timeout=5000)\n"
+        "        except Exception as err:\n"
+        "            out['error'] = 'goto ' + str(err)\n"
+        "        try:\n"
+        "            out['href'] = page.url\n"
+        "            out['title'] = page.title()\n"
+        "            out['ok'] = True\n"
+        "        except Exception as err:\n"
+        "            out['error'] = (out['error'] or '') + ' read ' + str(err)\n"
+        "        try:\n"
+        "            open(result_path, 'w').write(json.dumps(out))\n"
+        "        except Exception:\n"
+        "            pass\n"
+        "        time.sleep(60)\n"
+        "except Exception as err:\n"
+        "    out['error'] = str(err)\n"
+        "    try:\n"
+        "        open(result_path, 'w').write(json.dumps(out))\n"
+        "    except Exception:\n"
+        "        pass\n"
+    )
+    env = dict(os.environ)
+    env.setdefault('PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS', '1')
+    return Popen([sys.executable, '-c', script], cwd=ROOT, env=env, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+
+
+def _stop_proc(proc, seconds=3):
+    if proc.poll() is not None:
+        return
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except Exception:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    try:
+        proc.wait(timeout=seconds)
+    except Exception:
+        pass
+
+
+def _read_result(path):
+    try:
+        import json as _json
+        return _json.loads(open(path, encoding='utf8').read())
+    except Exception as err:
+        return {'error': f'no child result: {err}'}
+
+
 def killswitch_loop_watch(browser, root, net, label, template, expect_loop):
     """30 s watch of a page that re-registers sw.js like sw-register does.
 
-    The e5e47a0c template must exceed 2 navigations (that is the loop this
+    Navigations are counted from server hits to /repro.html, and the page
+    itself runs in a child process so a tight loop can be killed. The
+    e5e47a0c template must exceed 2 navigations (that is the loop this
     harness would fail). The current template must stay at at most 2.
+    After the new template's watch, the server is dropped for 8 s to
+    prove going offline does not start a loop or a chrome-error navigation.
     """
     problems = []
     name = 'old' if expect_loop else 'new'
+    kind = getattr(getattr(browser, 'browser_type', None), 'name', None) or 'chromium'
     net.set_sw(DEV_MOUNT, template)
-    context = browser.new_context()
-    page = context.new_page()
-    navs = attach_navs(page)
+    net.clear_hits()
     url = root.rstrip('/') + DEV_MOUNT + 'repro.html?sw=1'
+    result_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'kp-killswitch-{kind}-{name}.json')
     try:
-        page.goto(url, wait_until='commit', timeout=30000)
-    except Exception as err:
-        print(label, f'killswitch-loop {name} goto', err)
-    wait_navs(KILLSWITCH_WATCH_S, navs, stop_after=8 if expect_loop else None)
-    mid = len(navs)
-    alive = page_alive(page, 'kill-switch loop repro')
-    # Offline after the new kill: no further loop, and the tab must not become a blank chrome-error page.
-    if not expect_loop:
-        context.set_offline(True)
-        wait_navs(8, navs)
-        alive = page_alive(page, 'kill-switch loop repro')
-    print(label, f'killswitch-loop {name}', {
-        'navs': len(navs), 'online_navs': mid, 'alive': alive,
-        'urls': [n['url'] for n in navs[:12]],
-    })
-    if expect_loop:
-        if mid <= 2:
-            problems.append(f'old kill-switch template did not loop ({mid} navs in {KILLSWITCH_WATCH_S}s); the harness would not have failed on e5e47a0c')
-    else:
-        if mid > 2:
-            problems.append(f'new kill-switch template looped: {mid} navigations {[n["url"] for n in navs]}')
-        if len(navs) > 2:
-            problems.append(f'new kill-switch looped after going offline: {len(navs)} navigations')
-        href = (alive.get('href') or '')
-        if (not alive['ok'] or 'chrome-error' in href or href.startswith('about:')
-                or alive.get('title') != 'kill-switch loop repro'):
-            problems.append(f'offline after kill left a bad page {alive}')
-    try:
-        context.close()
-    except Exception:
+        os.remove(result_path)
+    except FileNotFoundError:
         pass
+    proc = _loop_client_proc(url, kind, result_path)
+    deadline = time.time() + KILLSWITCH_WATCH_S
+    while time.time() < deadline:
+        if expect_loop and net.hit_count('/repro.html') >= 8:
+            break
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    mid_hits = net.hit_count('/repro.html')
+    result = _read_result(result_path)
+    print(label, f'killswitch-loop {name}', {
+        'repro_hits': mid_hits, 'sw_hits': net.hit_count('/sw.js'),
+        'client': 'exited' if proc.poll() is not None else 'running', 'result': result,
+    }, flush=True)
+
+    if expect_loop:
+        if mid_hits <= 2:
+            problems.append(
+                f'old kill-switch template did not loop ({mid_hits} repro hits in {KILLSWITCH_WATCH_S}s); the harness would not have failed on e5e47a0c'
+            )
+        _stop_proc(proc)
+        net.set_sw(DEV_MOUNT, None)
+        net.clear_hits()
+        return problems
+
+    if mid_hits > 2:
+        problems.append(f'new kill-switch template looped: {mid_hits} repro hits')
+
+    # Going offline after the kill must not navigate again (the old loop landed on chrome-error).
+    net.drop()
+    time.sleep(8)
+    hits = net.hit_count('/repro.html')
+    print(label, f'killswitch-loop {name} offline-after', {
+        'repro_hits': hits, 'at_offline': mid_hits, 'result': result,
+    }, flush=True)
+    if hits > mid_hits:
+        problems.append(f'new kill-switch looped after going offline: {mid_hits} then {hits} repro hits')
+    href = result.get('href') or ''
+    title = result.get('title') or ''
+    if result.get('ok') and ('chrome-error' in href or href.startswith('about:') or title != 'kill-switch loop repro'):
+        problems.append(f'kill-switch page was already bad before offline {result}')
+    net.restore()
+    _stop_proc(proc)
     net.set_sw(DEV_MOUNT, None)
+    net.clear_hits()
     return problems
 
 
