@@ -211,20 +211,72 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     requestAnimationFrame(step);
   }
 
-  // --- Reveal ---
-  function reveal(picked = false) {
-    state = 'revealed'; $('check').hidden = true;
-    const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
+  // A picture is inside its card only when every edge of the border box is. Comparing the
+  // style height with the card height misses the baseline gap above an inline svg.
+  function boxInside(inner, outer, pad = 1) {
+    return inner.top >= outer.top - pad && inner.bottom <= outer.bottom + pad
+      && inner.left >= outer.left - pad && inner.right <= outer.right + pad;
+  }
+  function fitRevealPic() {
+    const card = $('card'), pic = card.querySelector('.pic');
+    if (!pic) return;
     const uFit = stage.info?.u || 1;
-    card.querySelector('.pic').style.fontSize = Math.round(96 * uFit) + 'px';
-    const svg = card.querySelector('svg');
-    if (svg) { // 150×125 stage px, shrunk so it stays inside the card on a short board
+    pic.style.display = 'flex';
+    pic.style.alignItems = 'center';
+    pic.style.justifyContent = 'center';
+    pic.style.lineHeight = '1';
+    pic.style.maxWidth = '92%';
+    pic.style.maxHeight = '90%';
+    const svg = pic.querySelector('svg');
+    if (svg) {
+      svg.style.display = 'block';
       let pw = 150 * uFit, ph = 125 * uFit;
       const maxW = card.clientWidth * 0.92, maxH = card.clientHeight * 0.9;
       if (maxW > 0 && pw > maxW) { ph *= maxW / pw; pw = maxW; }
       if (maxH > 0 && ph > maxH) { pw *= maxH / ph; ph = maxH; }
-      svg.setAttribute('width', Math.round(pw)); svg.setAttribute('height', Math.round(ph));
+      svg.style.width = Math.max(1, Math.round(pw)) + 'px';
+      svg.style.height = Math.max(1, Math.round(ph)) + 'px';
+    } else pic.style.fontSize = Math.round(96 * uFit) + 'px';
+    // offset ignores the pop transform, which is still scaling up when this runs.
+    const maxW = card.clientWidth * 0.92, maxH = card.clientHeight * 0.9;
+    const art = svg || pic.querySelector('.emoji') || pic;
+    for (let i = 0; i < 6; i++) {
+      const aw = art.offsetWidth, ah = art.offsetHeight;
+      if (aw <= maxW + 1 && ah <= maxH + 1 && pic.offsetWidth <= card.clientWidth && pic.offsetHeight <= card.clientHeight) break;
+      const scale = Math.min(0.96, maxW / Math.max(1, aw), maxH / Math.max(1, ah));
+      if (!(scale > 0) || scale >= 1) break;
+      if (svg) {
+        svg.style.width = Math.max(1, Math.floor(aw * scale)) + 'px';
+        svg.style.height = Math.max(1, Math.floor(ah * scale)) + 'px';
+      } else {
+        const fs = parseFloat(getComputedStyle(pic).fontSize) || 16;
+        pic.style.fontSize = Math.max(12, Math.floor(fs * scale)) + 'px';
+      }
     }
+    const held = pic.style.animation;
+    pic.style.animation = 'none'; // the pop scale would hide a box that is still too tall
+    for (let i = 0; i < 4; i++) {
+      const outer = card.getBoundingClientRect();
+      const drawn = art.getBoundingClientRect(), box = pic.getBoundingClientRect();
+      if (boxInside(drawn, outer) && boxInside(box, outer)) break;
+      const scale = Math.min(0.96, (outer.width - 2) / Math.max(1, drawn.width), (outer.height - 2) / Math.max(1, drawn.height));
+      if (!(scale > 0) || scale >= 1) break;
+      if (svg) {
+        svg.style.width = Math.max(1, Math.floor(drawn.width * scale)) + 'px';
+        svg.style.height = Math.max(1, Math.floor(drawn.height * scale)) + 'px';
+      } else {
+        const fs = parseFloat(getComputedStyle(pic).fontSize) || 16;
+        pic.style.fontSize = Math.max(12, Math.floor(fs * scale)) + 'px';
+      }
+    }
+    pic.style.animation = held;
+  }
+  // --- Reveal ---
+  function reveal(picked = false) {
+    state = 'revealed'; $('check').hidden = true;
+    const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
+    fitRevealPic();
+    const uFit = stage.info?.u || 1;
     for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = ((20 + k * 55) * uFit) + 'px'; s.style.top = ((20 + (k % 2) * 80) * uFit) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
     stickers.push(entry.pic && !entry.pic.startsWith('#') ? entry.pic : '⭐');
     if (!entry.pic && !picked) audio.play('sfx-chime'); // no check, no picture: the chime is the reward (never a 2nd chime)
@@ -261,7 +313,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     $('check').hidden = true; showSlider(true); state = 'slide'; say('Say the sounds, then pick.', { id: 'm-say-sounds' }); hand.start(handPath, { now: false }); };
 
   return {
-    relayout() { if (entry && state === 'slide') render(); },
+    relayout() { if (!entry) return; if (state === 'slide') render(); else if (state === 'revealed') fitRevealPic(); },
     start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)

@@ -126,7 +126,11 @@ MEASURE = r"""() => {
     const hit = document.elementFromPoint(x, y);
     if (!hit || (hit !== e && !e.contains(hit))) covered.push(name(e) + ' -> ' + (hit ? (hit.id ? '#' + hit.id : (hit.className.baseVal ?? hit.className).toString().split(' ')[0]) : 'nothing'));
   }
-  return { ptiles, empty, cueHits, covered, huntTray, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  const card = document.getElementById('card');
+  const picEl = card && !card.hidden && card.classList.contains('revealed') ? card.querySelector('.pic') : null;
+  const edge = e => { const b = e.getBoundingClientRect(); return { top: b.top, right: b.right, bottom: b.bottom, left: b.left }; };
+  const revealPic = picEl && vis(picEl) ? { card: edge(card), pic: edge(picEl), art: edge(picEl.querySelector('svg, .emoji') || picEl) } : null;
+  return { ptiles, empty, cueHits, covered, huntTray, revealPic, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
@@ -134,6 +138,12 @@ CLASSIC = {'360x780', '780x360', '820x1180', '390x844', '844x390', '1180x820'}
 
 def overlaps(a, b, pad=2):
     return a['x'] + pad < b['x'] + b['w'] and b['x'] + pad < a['x'] + a['w'] and a['y'] + pad < b['y'] + b['h'] and b['y'] + pad < a['y'] + a['h']
+
+def boxInside(inner, outer, pad=1):
+    """The picture is inside the card only when all four edges of the real border box are."""
+    if not inner or not outer: return True
+    return (inner['top'] >= outer['top'] - pad and inner['bottom'] <= outer['bottom'] + pad
+            and inner['left'] >= outer['left'] - pad and inner['right'] <= outer['right'] + pad)
 
 def check(m, vp, scene):
     errs = []
@@ -146,6 +156,9 @@ def check(m, vp, scene):
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
     errs += [f'covered {c}' for c in m.get('covered', [])]
     errs += [f'hunt overlap {c}' for c in m.get('huntTray', [])]
+    pic = m.get('revealPic')
+    if pic and not boxInside(pic.get('art'), pic.get('card')): errs.append('reveal picture outside #card')
+    if pic and not boxInside(pic.get('pic'), pic.get('card')): errs.append('reveal picture box outside #card')
     errs += [f'empty button {n}' for n in m.get('empty', [])]
     errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 48" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 47.5]
     k = m['key']
