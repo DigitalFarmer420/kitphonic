@@ -30,10 +30,8 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   function earPos() { const s = stage.info, u = U(); return s.mode === 'short' ? { x: Math.round(s.w * 0.22) + 40 * u, y: 240 * u } : { x: s.w / 2, y: s.mode === 'portrait' ? Math.max(310 * u, s.h * 0.36) : 250 * u }; }
   function earLayout(letters) {
     const s = stage.info, u = U(), e = earPos(), n = letters.length;
-    const drop = (s.mode === 'short' ? 66 : 75) * u; // hunt tile hangs this far below its centre
-    const floor = s.h - Math.max(64, 72 * u) - 28 * u;
-    if (s.mode === 'short') { const x0 = e.x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: Math.min(230 * u, floor - drop) })); }
-    const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = Math.min(e.y + (s.mode === 'portrait' ? 200 : 185) * u, floor - drop);
+    if (s.mode === 'short') { const x0 = e.x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u })); }
+    const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = e.y + (s.mode === 'portrait' ? 200 : 185) * u;
     return letters.map((l, i) => ({ l, x: s.w / 2 + (i - (n - 1) / 2) * cw, y }));
   }
   // Sound-tap rows must keep the dot under the last row on the board. cellH shrinks only when the design pitch would not.
