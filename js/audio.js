@@ -16,6 +16,12 @@ export const EARLY_CLIPS = ['m-hello', 'sfx-chime', 'sfx-tap', 'm-letter-says', 
 export const earlyFile = id => `takes/${id}.mp3`; // rc4: the sfx are small MP3 takes too (chime wav 70 KB -> 7 KB)
 // play() must never hang: onended can be skipped if the context is suspended/interrupted (iPad app switch).
 const PLAY_MARGIN_MS = 400, PLAY_TIMEOUT_CAP_MS = 10_000, RESUME_MS = 200, UNLOCK_RESUME_MS = 500;
+// Hung decodeAudioData or fetch must not block unlock() or play() — otherwise hello Play never
+// reaches the map (resume fallbacks never run). 1500 ms is long enough for a normal decode;
+// with UNLOCK_RESUME_MS (500) + play()'s RESUME_MS (200) the hello gate stays under ~2 s.
+// A late success is cached for a later play but never auto-plays. A timeout does not store
+// null, so a later retry can decode again once the hung attempt settles as a failure.
+export const DECODE_MS = 1500;
 export function endedWaitMs(durSec) { // missing / NaN / non-finite / negative -> 10 s cap, never NaN
   const n = Number(durSec);
   if (!Number.isFinite(n) || n < 0) return PLAY_TIMEOUT_CAP_MS;
@@ -53,17 +59,39 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
   if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.addEventListener?.('voiceschanged', pickVoice); }
 
   const bytes = f => raw.get(f) ?? fetch(base + f).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
-  async function load(id) {
-    const c = byId.get(id), f = fileFor(c); if (!f || !ctx) return null;
-    if (!buffers.has(id)) { const p = raw.get(f); raw.delete(f); // raw bytes are single-use (decodeAudioData detaches them)
-      buffers.set(id, (p ?? bytes(f)).then(b => b && ctx.decodeAudioData(b)).catch(() => null)); }
-    return buffers.get(id);
+  const now = () => performance.now();
+  const wait = ms => new Promise(r => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); });
+  // startLoad is unbounded: the in-flight promise stays until it settles. load() races it
+  // against DECODE_MS so unlock()/play() can move on; a late success is then cached, and a
+  // failure is dropped so a later retry is not stuck on null or a hung promise.
+  function startLoad(id) {
+    const c = byId.get(id), f = fileFor(c); if (!f || !ctx) return Promise.resolve(null);
+    if (buffers.has(id)) return buffers.get(id);
+    const p = raw.get(f); raw.delete(f); // raw bytes are single-use (decodeAudioData detaches them)
+    let work;
+    work = (p ?? bytes(f)).then(b => b && ctx.decodeAudioData(b)).then(buf => buf || null, () => null).then(buf => {
+      if (!buf && buffers.get(id) === work) buffers.delete(id); // failed: don't poison the cache
+      return buf;
+    });
+    work.__t0 = now();
+    buffers.set(id, work);
+    return work;
+  }
+  function load(id) { // bounded: hung decode/fetch must not block unlock() or play()
+    const work = startLoad(id);
+    const remaining = work.__t0 != null ? DECODE_MS - (now() - work.__t0) : DECODE_MS;
+    if (remaining <= 0) return Promise.race([work, Promise.resolve(null)]);
+    let t;
+    const timeout = new Promise(r => {
+      t = setTimeout(() => { timers.delete(t); r(null); }, remaining);
+      timers.set(t, () => r(null)); // stop() clears and resolves so load() cannot hang
+    });
+    return Promise.race([work, timeout]).finally(() => { if (t) { clearTimeout(t); timers.delete(t); } });
   }
   const queue = []; let active = 0;
   function pump() { // at most 4 background loads in flight
-    while (active < 4 && queue.length && ctx) { const id = queue.shift(); if (buffers.has(id)) continue; active++; load(id).finally(() => { active--; pump(); }); }
+    while (active < 4 && queue.length && ctx) { const id = queue.shift(); if (buffers.has(id)) continue; active++; startLoad(id).finally(() => { active--; pump(); }); }
   }
-  const wait = ms => new Promise(r => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); });
   const resumeContext = () => { // suspended or interrupted (iOS); never reject
     if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
     try { return Promise.resolve(ctx.resume()).catch(() => {}); } catch { return Promise.resolve(); }
@@ -96,7 +124,6 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
   }
   // --- rc5 serial queue ---
   let tail = Promise.resolve(), pending = 0, lastEnd = -Infinity; // lastEnd: when the last clip finished (a cut = -Infinity)
-  const now = () => performance.now();
   function edges(buf) { // [lead, tail] silence (s) below -50 dBFS, cached; phrases skip it so clips join without a gap
     if (buf.__edges) return buf.__edges;
     const d = buf.getChannelData(0), th = 0.003, n = d.length; let a = 0, b = n - 1;
@@ -176,7 +203,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
       api.warm(manifest.clips.filter(c => fileFor(c) && HOT.test(c.id)).map(c => c.id));
       return ctx.state;
     },
-    preload: ids => Promise.all(ids.map(load)),
+    preload: ids => Promise.all(ids.map(startLoad)),
     // Background fetch+decode with low concurrency so it never competes with first paint or the clip being played.
     warm(ids) { queue.push(...ids.filter(id => byId.has(id) && !buffers.has(id))); pump(); },
     get loadedCount() { return buffers.size; },
