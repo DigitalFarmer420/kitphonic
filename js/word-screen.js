@@ -22,17 +22,20 @@ export const picHtml = pic => pic?.startsWith('2x') ? `<span class="two">${onePi
 
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
+import { pointerOwner, tryCapture, sliderKeyTarget, applySliderAria } from './gesture.js';
 // v2 V2 support ladder: support(entry) -> 4 model | 3 you blend | 2 silent dots | 1 read it (js/support.js)
 export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
   let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
+  const slideOwner = pointerOwner(); // survives blend / reslide until this finger lifts, so a palm cannot grab the next drag
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
   const say = (bubbleText, clip) => { $('bubble').textContent = bubbleText; return clip ? audio.play(clip.id, clip) : Promise.resolve(); };
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
   const trackBox = () => { const l = Math.max(8, layout.track.left - 20), r = Math.min(layout.stageW - 34, layout.track.left + layout.track.width + 20); return { left: l, width: r - l }; };
-  const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px'; };
+  const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px';
+    applySliderAria(handle, { fraction: f, passed: sweep?.lit.length ?? 0, total: ms?.length ?? 0 }); };
 
   function renderPebbles() {
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
@@ -98,9 +101,11 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function onDown(e) {
     hand.hide(); hand.poke();
     if (state !== 'slide') return;
+    if (slideOwner.id !== null && !slideOwner.owns(e.pointerId)) return; // a palm must not take the knob
     const p = toStage(e), hx = layout.knobX(sweep.position);
     if (Math.abs(p.x - hx) > 70 || !attached(p.y - sliderY(), 70)) return; // must grab the handle (64pt + padding)
-    dragging = { id: e.pointerId }; handle.setPointerCapture?.(e.pointerId); e.preventDefault();
+    if (!slideOwner.begin(e.pointerId)) return;
+    dragging = { id: e.pointerId }; tryCapture(handle, e.pointerId); e.preventDefault();
   }
   function onMove(e) {
     if (!dragging || e.pointerId !== dragging.id) return;
@@ -110,7 +115,22 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     handleEvents(sweep.move(layout.fracFromX(p.x), e.timeStamp));
     setHandle(sweep.position);
   }
-  function onUp(e) { if (dragging && e.pointerId === dragging.id) { dragging = null; sweep.lift(); } }
+  function onUp(e) {
+    // Blend / reslide clears `dragging` while the finger may still be down. The owner stays until
+    // this pointer lifts, is cancelled, or loses capture, so a second finger cannot start another drag.
+    if (!slideOwner.end(e.pointerId)) return;
+    dragging = null; sweep?.lift();
+  }
+  function onSliderKey(e) {
+    if (state !== 'slide' || dragging || slideOwner.id !== null || !sweep) return;
+    const target = sliderKeyTarget(sweep.position, sweep.positions, e.key);
+    if (target == null) return;
+    e.preventDefault();
+    hand.hide(); hand.poke();
+    sweepStart ??= performance.now();
+    handleEvents(sweep.move(target, e.timeStamp));
+    setHandle(sweep.position);
+  }
   function handleEvents(evs) {
     for (const ev of evs) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
@@ -212,10 +232,13 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     return [[x, y + 20], [layout.knobX(0.5), y + 20], [layout.knobX(1), y + 20]]; };
   handle.addEventListener('pointerdown', onDown);
   $('slider').addEventListener('pointerdown', onDown);
+  handle.addEventListener('keydown', onSliderKey);
+  handle.addEventListener('lostpointercapture', onUp);
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
   $('next').onclick = next;
-  $('home').onclick = $('check-home').onclick = () => { audio.stop(); hand.stop(); $('check').hidden = true; onHome(); };
+  const releaseSlide = () => { if (slideOwner.id != null) slideOwner.end(slideOwner.id); dragging = null; };
+  $('home').onclick = $('check-home').onclick = () => { releaseSlide(); audio.stop(); hand.stop(); $('check').hidden = true; onHome(); };
   // ↻ before the pick never says the target word unless Kit is modelling (S4); at S3 it replays the sounds (a hint)
   $('again').onclick = () => { audio.stop();
     if (state === 'revealed') return audio.play(`reveal-${entry.w}`);
@@ -228,7 +251,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
 
   return {
     relayout() { if (entry && state === 'slide') render(); },
-    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

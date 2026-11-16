@@ -54,6 +54,17 @@ export function resample(poly, step = 2) {
 }
 export const pathD = poly => poly.map((p, i) => `${i ? 'L' : 'M'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
 
+// Viewport point -> letter space. getScreenCTM() is null when the svg is not on screen, and
+// SVGMatrix.inverse() throws when the matrix cannot be inverted. Either one must not throw mid-stroke.
+export function screenToLetter(ctm, x, y) {
+  if (!ctm || typeof ctm.inverse !== 'function') return null;
+  let inv;
+  try { inv = ctm.inverse(); } catch { return null; }
+  if (!inv) return null;
+  const lx = inv.a * x + inv.c * y + inv.e, ly = inv.b * x + inv.d * y + inv.f;
+  return Number.isFinite(lx) && Number.isFinite(ly) ? [lx, ly] : null;
+}
+
 // opts: tol (letter units; lane is ~2*tol wide), ahead (how far ahead progress may jump, units), startTol.
 export function createTracer(letter, { tol = 16, ahead = 24, startTol = 20 } = {}) {
   const strokes = (STROKES[letter] ?? []).map(s => resample(s));
@@ -96,6 +107,8 @@ export function letterBox(letter, pad = 16) {
 // rc6 (iPad palm / second finger): one stroke = one finger. The finger that starts a stroke owns it; any other pointer
 // (a resting palm, the other hand, a second finger) is ignored until that finger lifts, so it can neither restart
 // the stroke (a down far from the dot used to deactivate it) nor end it (its pointerup used to stop the drag).
+// strokeDone does not release the owner. The screen must not reset() it: the next stroke starts only after
+// this pointer's pointerup, pointercancel, or lostpointercapture.
 export function strokeOwner() {
   let id = null;
   return {

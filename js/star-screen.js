@@ -11,6 +11,7 @@ import { guessGuard } from './mastery.js';
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { pictureChoices } from './sentences.js';
+import { pointerOwner, tryCapture, sliderKeyTarget, applySliderAria } from './gesture.js';
 
 const $ = id => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -69,6 +70,7 @@ export function createStarScreen({ audio, stage, rand = Math.random, record = ()
 // dots, 1 read it = no slider). Any S4 token makes the read modelled (Kit said a word), so the pick is not scored.
 export function createSentenceScreen({ audio, stage, rand = Math.random, record = () => {}, onHome, cfg = {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
   let run = null, dragging = null;
+  const slideOwner = pointerOwner(); // held until this finger lifts, including after the word blends
   const hand = createGhostHand({ host: $('sentence'), reduced });
   const handPath = () => { if (!run || run.reading || dragging) return null; const at = n => centerIn(n, $('sentence'), stage.scale), t = run.tokens[run.i];
     if (!t) return $('sn-read').disabled ? null : [at($('sn-read')), at($('sn-read'))];
@@ -108,22 +110,40 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     markerPositions(run.ms).forEach(f => { const d = el('div', 'tdot'); d.style.left = (L.xFromFrac(f) - l) + 'px'; tr.append(d); }); // one stop per sound
     $('sn-slider').hidden = false; setKnob(0);
   }
-  const setKnob = f => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px'; };
-  function onMove(e) {
-    if (!dragging || !run?.ms) return;
-    const p = stage.toStage(e); run.t0 ??= performance.now();
-    for (const ev of run.sweep.move(run.layout.fracFromX(p.x), e.timeStamp)) {
+  const setKnob = f => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px';
+    applySliderAria($('sn-handle'), { fraction: f, passed: run.sweep?.lit.length ?? 0, total: run.ms?.length ?? 0 }); };
+  function slideTo(frac, timeStamp) {
+    if (!run?.ms) return;
+    run.t0 ??= performance.now();
+    for (const ev of run.sweep.move(frac, timeStamp)) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
         const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); if (run.tokSupport !== 2) audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs, gapMs: 0 }); // S2: silent dots
         [...$('sn-tiles').children][ev.marker]?.classList.add('passed'); $('sn-track').querySelectorAll('.tdot')[ev.marker]?.classList.add('on');
       } else if (ev.kind === 'blend') {
         dragging = null; const t = run.tokens[run.i], ok = guessGuard({ sweepMs: performance.now() - run.t0, phonemes: run.ms.length }).scored;
         // v2 V1: the whole word is NOT spoken before the scored picture pick (the child blends it); ?speakBeforeCheck=1 = old model
+        // slideOwner stays until the finger lifts, so a palm cannot start the next word's slider.
         run.ms = null; const after = () => { if (!run) return; if (!ok) audio.play('m-slide-slowly'); run.i++; next(); };
         if (cfg.speakBeforeCheck || run.tokSupport === 4) audio.play(clipForBlend(t.entry.w).id, { delayMs: (ev.delayMs || 0) + 300 }).then(after); else setTimeout(after, 500);
       }
     }
-    if (run.ms) setKnob(run.sweep.position);
+    if (run?.ms) setKnob(run.sweep.position);
+  }
+  function onMove(e) {
+    if (!dragging || e.pointerId !== dragging.id || !run?.ms) return;
+    slideTo(run.layout.fracFromX(stage.toStage(e).x), e.timeStamp);
+  }
+  function endSlide(e) {
+    if (!slideOwner.end(e.pointerId)) return;
+    dragging = null; if (run) run.dragId = null; run?.sweep?.lift?.();
+  }
+  function onSliderKey(e) {
+    if (!run?.ms || dragging || slideOwner.id !== null) return;
+    const target = sliderKeyTarget(run.sweep.position, run.sweep.positions, e.key);
+    if (target == null) return;
+    e.preventDefault();
+    hand.hide(); hand.poke();
+    slideTo(target, e.timeStamp);
   }
   function allRead() { // every word swept: scored mode goes straight to the question; model mode unlocks "read it all"
     blending(false); $('sn-tiles').replaceChildren(); $('sn-slider').hidden = true;
@@ -183,8 +203,15 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
       }));
     blending(false); fitLine();
   }
-  $('sn-handle').addEventListener('pointerdown', e => { hand.hide(); hand.poke(); if (run?.ms) { dragging = { id: e.pointerId }; $('sn-handle').setPointerCapture?.(e.pointerId); e.preventDefault(); } });
-  addEventListener('pointermove', onMove); addEventListener('pointerup', () => { dragging = null; run?.sweep?.lift?.(); });
+  const releaseSlide = () => { if (slideOwner.id != null) slideOwner.end(slideOwner.id); dragging = null; if (run) run.dragId = null; };
+  $('sn-handle').addEventListener('pointerdown', e => {
+    hand.hide(); hand.poke();
+    if (!run?.ms || !slideOwner.begin(e.pointerId)) return;
+    dragging = { id: e.pointerId }; run.dragId = slideOwner.id; tryCapture($('sn-handle'), e.pointerId); e.preventDefault();
+  });
+  $('sn-handle').addEventListener('keydown', onSliderKey);
+  $('sn-handle').addEventListener('lostpointercapture', endSlide);
+  addEventListener('pointermove', onMove); addEventListener('pointerup', endSlide); addEventListener('pointercancel', endSlide);
   // rc4 (Uiux): locked words stay inert (pointer-events none), but a tap on one makes the current word bounce + a soft
   // tap, pointing the child back. Reduced motion: a still glow instead of the bounce.
   let nudgedAt = 0;
@@ -200,12 +227,12 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   });
   $('sn-read').onclick = readAll;
   $('sn-next').onclick = () => { if (!run || $('sn-next').hidden || run.reading) return; hand.poke(); audio.stop(); $('sn-next').hidden = true; run.i++; next(); };
-  $('sn-home').onclick = () => { run = null; hand.stop(); audio.stop(); onHome(); };
+  $('sn-home').onclick = () => { releaseSlide(); run = null; hand.stop(); audio.stop(); onHome(); };
   $('sn-again').onclick = () => run && (audio.stop(), audio.play(run.tokens[run.i]?.clip ?? `sent-${run.sent.id}`));
   return {
     // a sentence, or a story ({ story }): its pages are read one by one like sentences (page dots in the top bar)
     start({ sentence, story, reread = false, onComplete }) {
-      run = { story, reread: !!(story && reread), page: 0, onComplete, levels: [], hints: 0 }; $('sentence').hidden = false; loadSentence(story ? story.pages[0] : sentence);
+      releaseSlide(); run = { story, reread: !!(story && reread), page: 0, onComplete, levels: [], hints: 0 }; $('sentence').hidden = false; loadSentence(story ? story.pages[0] : sentence);
       say(run.reread ? "This story again! You know this one." : story ? `A story: <b>${story.title}</b>. Let's read it together!` : "Let's read it together!", run.reread ? 'm-reread' : 'm-read-together').then(() => { if (!run) return; next(); hand.start(handPath, { now: seen.demo('sentence') }); });
     },
     get run() { return run; },
