@@ -86,3 +86,51 @@ test('store: local-only log with cap', () => {
   for (let i = 0; i < 5; i++) st.log({ skill: 'sound:m', correct: true, firstAttempt: true });
   assert.equal(st.all().length, 3); assert.ok(st.all()[0].timestamp); st.clear(); assert.equal(st.all().length, 0);
 });
+
+test('store.log survives QuotaExceeded without losing progress keys', () => {
+  const KEY = 'kitphonic.v1.responses', SEEN = 'kitphonic.v1.seen', SETTINGS = 'kitphonic.v1.settings';
+  const mem = new Map([[SEEN, '{"hello":true}'], [SETTINGS, '{"speechRate":1}']]);
+  const seed = [
+    { skill: 'stop:sound:m', marker: true, timestamp: 1 },
+    ...Array.from({ length: 20 }, (_, i) => ({ skill: 'sound:m', correct: true, firstAttempt: true, timestamp: i + 2 })),
+  ];
+  mem.set(KEY, JSON.stringify(seed));
+  const storageFor = setItem => ({
+    getItem: k => mem.get(k) ?? null,
+    setItem,
+    removeItem: k => { throw new Error(`must not clear storage key ${k}`); },
+  });
+
+  // First write fails while the log is large; retry after trimming oldest non-markers succeeds.
+  const st = M.createStore(storageFor((k, v) => {
+    if (k !== KEY) { mem.set(k, v); return; }
+    if (JSON.parse(v).length > 12) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    mem.set(k, v);
+  }), KEY, 5000);
+  assert.doesNotThrow(() => st.log({ skill: 'sound:s', correct: true, firstAttempt: true, scored: true }));
+  const after = st.all();
+  assert.ok(after.some(r => r.skill === 'stop:sound:m'), 'map marker (progress) kept');
+  assert.ok(after.some(r => r.skill === 'sound:s'), 'new entry persisted after trim retry');
+  assert.ok(after.length <= 12 && after.length > 1);
+  assert.equal(mem.get(SEEN), '{"hello":true}');
+  assert.equal(mem.get(SETTINGS), '{"speechRate":1}');
+
+  // Retry also fails: skip the write; existing progress and other keys stay put.
+  const frozen = mem.get(KEY);
+  const st2 = M.createStore(storageFor((k, v) => {
+    if (k === KEY) throw new DOMException('The quota has been exceeded.', 'QuotaExceededError');
+    mem.set(k, v);
+  }), KEY, 5000);
+  assert.doesNotThrow(() => st2.log({ skill: 'sound:z', correct: true, firstAttempt: true }));
+  assert.doesNotThrow(() => st2.logMany([{ skill: 'sound:z', correct: true }]));
+  assert.equal(mem.get(KEY), frozen, 'failed write is skipped; existing responses stay');
+  assert.ok(JSON.parse(frozen).some(r => r.skill === 'stop:sound:m'));
+  assert.equal(mem.get(SEEN), '{"hello":true}');
+  assert.equal(mem.get(SETTINGS), '{"speechRate":1}');
+
+  // Any storage exception (not only QuotaExceeded) is also swallowed.
+  const st3 = M.createStore(storageFor(() => { const e = new Error('blocked'); e.name = 'SecurityError'; throw e; }), KEY, 5000);
+  assert.doesNotThrow(() => st3.log({ skill: 'sound:x', correct: true }));
+  assert.equal(mem.get(KEY), frozen);
+  assert.equal(mem.get(SEEN), '{"hello":true}');
+});
