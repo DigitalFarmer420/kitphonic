@@ -29,8 +29,12 @@ async function completeLetter(page) {
 // pointermoves, then a cancel, then touchmoves only. On develop before PR #18
 // that cancel ends the stroke, so the touchmoves do not continue the ink.
 // lostpointercapture is the same gap: the svg treats it as the end of the stroke.
+//
+// The cancel and the follow-up moves are separate turns. PR #18 holds a touch
+// lostpointercapture from setTimeout(0); touchmoves in the same evaluate run
+// before that and are ignored. A frame plus a short timer lets the hold land.
 async function injectCancel(page, opts) {
-  return page.evaluate((opts) => {
+  const started = await page.evaluate((opts) => {
     const svg = document.getElementById('tr-svg');
     const child = svg.querySelector('text.startn') || svg.querySelector('.start');
     const r = child.getBoundingClientRect();
@@ -56,11 +60,24 @@ async function injectCancel(page, opts) {
     for (let i = 1; i <= cut; i++) fire('pointermove', svg, pts[i][0], pts[i][1], 1);
     const at = pts[cut] || pts[0];
     fire(opts.cancel, svg, at[0], at[1], 0);
-    const cancelled = window.kitphonic.lesson.run.debugState();
-    for (let i = cut + 1; i < pts.length; i++) touch('touchmove', pts[i][0], pts[i][1]);
-    const end = window.kitphonic.lesson.run.debugState();
-    return { down, cancelled, end, pts: pts.length, cut };
+    return { down, cancelled: window.kitphonic.lesson.run.debugState(), pts, cut };
   }, opts);
+  await page.evaluate(() => new Promise((resolve) => {
+    requestAnimationFrame(() => setTimeout(resolve, 20));
+  }));
+  const end = await page.evaluate(({ pts, cut }) => {
+    const svg = document.getElementById('tr-svg');
+    const touch = (type, x, y) => {
+      const t = { identifier: 1, clientX: x, clientY: y };
+      const ev = new Event(type, { bubbles: true, cancelable: true });
+      ev.touches = [t];
+      ev.changedTouches = [t];
+      svg.dispatchEvent(ev);
+    };
+    for (let i = cut + 1; i < pts.length; i++) touch('touchmove', pts[i][0], pts[i][1]);
+    return window.kitphonic.lesson.run.debugState();
+  }, { pts: started.pts, cut: started.cut });
+  return { down: started.down, cancelled: started.cancelled, end, pts: started.pts.length, cut: started.cut };
 }
 
 function strokeProgressed(data) {

@@ -28,6 +28,7 @@ import { MASCOT } from './content.js';
 import { createHelloGate } from './hello-gate.js';
 import { createHelloVisit } from './hello-visit.js';
 import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
+import { registerServiceWorker } from './sw-register.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -210,3 +211,7 @@ else if (cfg.practiceEnd) { // dev: the session-end screen, with the same copy t
 }
 else if (!cfg.hello.show) cfg.activity || cfg.direct ? startSession() : showMap();
 else show('hello');
+// After load, and only for the static site. Local harnesses stay unregistered unless ?sw=1.
+const startWorker = () => registerServiceWorker();
+if (document.readyState === 'complete') startWorker();
+else window.addEventListener('load', startWorker, { once: true });
