@@ -68,9 +68,13 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     const hw0 = host.clientWidth, land = !$('stage').classList.contains('portrait'); // landscape: one row across the whole width if it fits
     const avail = land ? hw0 - 16 : tray.clientWidth, tw = ts[0].offsetWidth, gap = parseFloat(getComputedStyle(tray).columnGap) || 14;
     const cap = Math.max(1, Math.floor((avail + gap) / (tw + gap))), rows = Math.ceil(ts.length / cap), per = Math.ceil(ts.length / rows);
+    tray.style.setProperty('--rows', String(rows));
     const width = per * tw + (per - 1) * gap, wd = $('fm-word'), slot = $('fm-slot'), rime = $('fm-rime');
+    tray.style.flexWrap = rows === 1 ? 'nowrap' : 'wrap';
     const cx = wd.offsetLeft + (slot.offsetLeft + rime.offsetLeft + rime.offsetWidth) / 2, hw = host.clientWidth;
-    tray.style.width = width + 'px'; tray.style.right = 'auto'; tray.style.left = Math.max(8, Math.min(hw - width - 8, cx - width / 2)) + 'px';
+    // a couple of px of slack: subpixel tile widths otherwise wrap one extra tile onto its own row
+    const boxW = width + 8;
+    tray.style.width = boxW + 'px'; tray.style.right = 'auto'; tray.style.left = Math.max(8, Math.min(hw - boxW - 8, cx - boxW / 2)) + 'px';
   }
   const pebbles = () => $('fm-pebbles').replaceChildren(...run.fam.words.map((_, i) => el('div', 'peb' + (i < run.made.size ? ' on' : i === run.made.size ? ' now' : ''))));
   // drag: pointer moves a floating copy; dropping near the slot places it. A press without movement = tap-to-select.

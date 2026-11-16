@@ -250,8 +250,9 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     if (stage.info.mode !== 'short') return;
     // rc6: a wide letter (ss, qu, ng…) must not run under the undo / stars column, or a stroke's start dot sits under
     // Undo (iPhone landscape): cap the centred card so its right edge + 20 px clears the column (150 px + 16 px margin)
-    if (card) card.style.maxWidth = Math.max(200, stage.info.w - 2 * (150 + 16 + 20)) + 'px';
-    requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16, c.offsetLeft + c.offsetWidth / 2 + 20) + 'px'; });
+    const u = stage.info.u || 1;
+    if (card) card.style.maxWidth = Math.max(200 * u, stage.info.w - 2 * (150 + 16 + 20) * u) + 'px';
+    requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; const uu = stage.info.u || 1; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16 * uu, c.offsetLeft + c.offsetWidth / 2 + 20 * uu) + 'px'; });
   }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }
   function stop() { detachTrace(); detachTrace = () => {}; run = null; hand.stop(); audio.stop(); }

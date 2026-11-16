@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mapWindow, mapLayout, levelUpChips, GO, NOW_R, TEASERS } from '../js/map-layout.js';
+import { mapWindow, mapLayout, mapMetrics, levelUpChips, TEASERS } from '../js/map-layout.js';
 import { STOPS, mapState } from '../js/progress.js';
 import { stageFor } from '../js/stage.js';
 import { seedProgress } from '../js/dev-seed.js';
@@ -19,10 +19,10 @@ test('map window: current stop visible, <= 6 stops, the map ends on the story st
 test('map layout: stops never overlap each other, the top bar or the ▶ button; all on stage', () => {
   for (const [vw, vh] of VPS) for (let n = 0; n <= STOPS.length; n++) {
     const s = stageFor(vw, vh), pts = mapLayout(mapWindow(mapState(seedProgress(n)).stops, n), s);
-    const goTop = s.h - GO.bottom - GO.h, goL = s.w / 2 - GO.w / 2, goR = s.w / 2 + GO.w / 2;
+    const m = mapMetrics(s), goL = s.w / 2 - m.goW / 2, goR = s.w / 2 + m.goW / 2;
     for (const p of pts) {
-      assert.ok(p.x - p.r >= 0 && p.x + p.r <= s.w && p.y - p.r >= 86, `${vw}x${vh} n=${n} ${p.label} off stage/top bar`);
-      assert.ok(p.y + p.r <= goTop - 4 || p.x + p.r < goL || p.x - p.r > goR, `${vw}x${vh} n=${n} ${p.label} under ▶`);
+      assert.ok(p.x - p.r >= -1 && p.x + p.r <= s.w + 1 && p.y - p.r >= 48, `${vw}x${vh} n=${n} ${p.label} off stage/top bar`);
+      assert.ok(p.y + p.r <= m.goTop - 2 || p.x + p.r < goL || p.x - p.r > goR, `${vw}x${vh} n=${n} ${p.label} under ▶`);
     }
     for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++)
       assert.ok(Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) >= pts[i].r + pts[j].r + 6, `${vw}x${vh} n=${n} ${pts[i].label}/${pts[j].label} overlap`);

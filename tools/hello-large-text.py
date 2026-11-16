@@ -35,8 +35,11 @@ def main():
             pg.goto(args.base, wait_until='domcontentloaded')
             pg.wait_for_timeout(250)
             at1 = gap(pg)
-            if abs(at1['gap'] - ONE_X[key]) > 2 or at1['fs'] != '24px':
-                fails.append(f'{key} 1x gap {at1["gap"]:.1f} font {at1["fs"]} (want {ONE_X[key]}px, 24px)')
+            # The greeting is 1.5rem, so its screen size follows the board instead of staying 24px.
+            root = pg.evaluate("() => parseFloat(getComputedStyle(document.documentElement).fontSize)")
+            want = root * 1.5
+            if abs(at1['gap'] - ONE_X[key]) > 2 or abs(float(at1['fs'].replace('px', '')) - want) > 0.6:
+                fails.append(f'{key} 1x gap {at1["gap"]:.1f} font {at1["fs"]} (want gap {ONE_X[key]}px, {want:.1f}px)')
             pg.evaluate("""() => {
               document.documentElement.style.fontSize = '64px';
               document.getElementById('hello-bubble').style.fontSize = '64px';

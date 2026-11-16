@@ -1,7 +1,23 @@
 // Learning-map geometry (pure, unit-tested). A window of up to 6 stops around the current one, winding bottom->top
 // in portrait and left->right in landscape, clear of the top bar and the big ▶ button (thumb zone, bottom centre).
+// Coordinates are CSS pixels of the fluid board. STOP_R / GO are the design sizes; mapMetrics scales them by u
+// and floors stop diameters at 64px (the current stop at 72px) so the touch floor matches the CSS clamps.
+import { MIN_TOUCH } from './stage.js';
 export const STOP_R = 38, NOW_R = 52, WINDOW = 6, TEASERS = []; // the stories teaser became the real story stops
 export const GO = { w: 200, h: 72, bottom: 22 };
+
+export function mapMetrics(stage) {
+  const u = stage.u ?? 1, w = stage.w, h = stage.h, mode = stage.mode;
+  const goH = Math.max(MIN_TOUCH, GO.h * u), goW = GO.w * u;
+  const nowR = Math.max(36, NOW_R * u), stopR = Math.max(MIN_TOUCH / 2, STOP_R * u);
+  let top = 92 * u + nowR;
+  let bottom = h - GO.bottom * u - goH - 18 * u - nowR - (mode === 'portrait' ? 0 : 28 * u);
+  if (bottom < top + stopR) { // a very short board: pull both rows into the band between the top bar and ▶
+    top = MIN_TOUCH + 8 + nowR;
+    bottom = Math.max(top + stopR, h - goH - 8 - nowR);
+  }
+  return { u, w, h, mode, goH, goW, nowR, stopR, top, bottom, goTop: h - GO.bottom * u - goH, goBottom: GO.bottom * u };
+}
 export const groupOf = s => s.group ?? (s.kind === 'words' ? (s.level === 6 ? 'sh · ch · th' : s.level === 5 ? 'end blends' : s.level >= 4 ? 'blends' : 'blend words') : s.kind === 'sound' ? 'sounds' : '');
 
 // stops: mapState().stops; index: current index. Returns the visible window (with teasers appended near the end).
@@ -10,14 +26,15 @@ export function mapWindow(stops, index, size = WINDOW) {
   let start = Math.max(0, cur - 2); start = Math.min(start, Math.max(0, all.length - size));
   return all.slice(start, start + size).map((s, k) => ({ ...s, idx: start + k, now: start + k === index && index < stops.length }));
 }
-export function mapLayout(win, { w, h, mode }) {
-  const n = win.length, top = 92 + NOW_R, bottom = h - GO.bottom - GO.h - 18 - NOW_R - (mode === 'portrait' ? 0 : 28); // + label room
+export function mapLayout(win, stage) {
+  const { w, h, mode, u, top, bottom, nowR, stopR } = mapMetrics(stage);
+  const n = win.length;
   const P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [1, 0, 1, 0, 1, 0]; // landscape zigzag uses the full height (room for Kit beside a stop)
   return win.map((s, i) => {
-    const r = s.now ? NOW_R : STOP_R, t = n > 1 ? i / (n - 1) : 0;
+    const r = s.now ? nowR : stopR, t = n > 1 ? i / (n - 1) : 0;
     let x, y, side;
     if (mode === 'portrait') { y = bottom - t * (bottom - top); x = w * P[i % P.length]; side = x < w / 2 ? 'right' : 'left'; }
-    else { x = 90 + t * (w - 180); y = top + L[i % L.length] * (bottom - top); side = 'below'; } // landscape: every label on the same side (below its stop)
+    else { x = 90 * u + t * (w - 180 * u); y = top + L[i % L.length] * (bottom - top); side = 'below'; } // landscape: every label on the same side (below its stop)
     return { ...s, x, y, r, side, low: mode !== 'portrait' && y > (top + bottom) / 2 };
   });
 }

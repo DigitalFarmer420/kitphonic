@@ -35,7 +35,7 @@ const $ = id => document.getElementById(id);
 // ?sessionlog=1 is the only thing that builds the overlay, listens, or wraps storage / AudioContext.
 const sessionLog = sessionLogEnabled(location.search) ? createSessionLog(document) : null;
 if (sessionLog) observeAudioContexts(globalThis, sessionLog);
-const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); });
+const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); k?.letters?.relayout?.(); });
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
