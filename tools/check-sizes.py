@@ -13,6 +13,8 @@ from playwright.sync_api import sync_playwright
 
 REQUIRED = ['360x780', '780x360', '820x1180']
 EXTRA = ['390x844', '844x390', '1180x820']
+# u is capped at 2. These are the windows where a 540-tall landscape board used to be doubled onto the tray.
+LARGE = ['1920x1080', '2560x1440', '3840x2160']
 MIN, KNOB = 64, 80
 # make n words in the family screen (tap a tile, tap the slot), waiting for each word to finish
 MAKE = "(async n => { const k = kitphonic.familyScreen, idle = () => new Promise(r => { const t = setInterval(() => (!k.run || !k.run.busy) && (clearInterval(t), r()), 50); }); for (let i = 0; i < n; i++) { await idle(); const t = document.querySelector('#fm-tray .ftile:not(.made)'); t.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); await new Promise(r => setTimeout(r, 150)); } })(%d)"
@@ -94,6 +96,17 @@ MEASURE = r"""() => {
   const empty = [...root.querySelectorAll('button, .marker .bar, .marker .dot')].filter(vis).filter(e => !e.textContent.trim() && !e.matches('[data-dropslot]') && !e.querySelector('svg, img, .emoji')).map(name);
   // Uiux rc1: grown-ups sound grid tiles never shrink below 32 px (the card scrolls instead)
   const ptiles = [...document.querySelectorAll('#parent:not([hidden]) .ptile')].map(e => ({ name: 'ptile[' + e.textContent.trim() + ']', ...box(e) }));
+  const tray = document.getElementById('l-tray');
+  const huntTray = [];
+  if (tray && vis(tray) && scr.classList.contains('hunt')) {
+    const tr = tray.getBoundingClientRect();
+    for (const tile of scr.querySelectorAll('.ltr .tile')) {
+      if (!vis(tile)) continue;
+      const r = tile.getBoundingClientRect();
+      const overlap = r.left + 2 < tr.right && tr.left + 2 < r.right && r.top + 2 < tr.bottom && tr.top + 2 < r.bottom;
+      if (overlap) huntTray.push(`tile[${tile.getAttribute('aria-label') || tile.textContent.trim()}] / #l-tray`);
+    }
+  }
   // A hidden screen that still paints (a display rule beating [hidden]) steals the tap. The centre of every control must hit that control or something inside it.
   const covered = [];
   const clipped = (e, x, y) => {
@@ -113,7 +126,7 @@ MEASURE = r"""() => {
     const hit = document.elementFromPoint(x, y);
     if (!hit || (hit !== e && !e.contains(hit))) covered.push(name(e) + ' -> ' + (hit ? (hit.id ? '#' + hit.id : (hit.className.baseVal ?? hit.className).toString().split(' ')[0]) : 'nothing'));
   }
-  return { ptiles, empty, cueHits, covered, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  return { ptiles, empty, cueHits, covered, huntTray, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
@@ -132,6 +145,7 @@ def check(m, vp, scene):
         if t['play'] and vp in CLASSIC and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
     errs += [f'covered {c}' for c in m.get('covered', [])]
+    errs += [f'hunt overlap {c}' for c in m.get('huntTray', [])]
     errs += [f'empty button {n}' for n in m.get('empty', [])]
     errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 48" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 47.5]
     k = m['key']
@@ -145,7 +159,7 @@ def check(m, vp, scene):
         for y in m['ltr']: rows[y] = rows.get(y, 0) + 1
         c = list(rows.values())
         if len(c) > 1 and (min(c) == 1 or max(c) - min(c) > 1): errs.append(f"unbalanced grid {c}")
-    # A capped desktop board (u = 2, the 1080p composition) is centered in a larger window on purpose.
+    # Past 2000×1400, u is capped at 2 and the board (1920×1260 at the tall minimum) is centered on purpose.
     capped = m['vw'] > 2000 or m['vh'] > 1400
     if not capped and m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
     if not capped and m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")
@@ -156,7 +170,7 @@ def check(m, vp, scene):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
-    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
+    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
     only = set(filter(None, a.scenes.split(',')))
     os.makedirs(a.out, exist_ok=True); fails = 0; rows = []
     with sync_playwright() as p:

@@ -7,9 +7,12 @@ import { cssVarsFromInline, resolveSafeInsets, stageBox, envInsetsAllowed } from
 // Controls that would fall under the touch floor use clamp(64px, …rem, …) / clamp(80px, …) in CSS;
 // buttonPx / knobPx are that same formula for layout math.
 export const PORTRAIT_W = { phone: 400, tablet: 630 }, SHORT_H = 400, TALL_W = 960;
+// 16:9 used to clamp the tall board to 540 design px. Doubled at u = 2, the sound-hunt tiles
+// (150 stage px, centred 75 below their point) ran into #l-tray. 630 leaves a gap above that tray.
+export const TALL_MIN_H = 630, TALL_MAX_H = 760;
 export const MIN_TOUCH = 64, MIN_KNOB = 80;
 export const BUTTON = 72, KNOB_D = 90;
-export const MAX_SCALE = 2; // 1920×1080 already lands on 2; larger windows do not grow past it
+export const MAX_SCALE = 2; // 2560×1440 and 4K stop here. 1920×1080 stays under it because the tall board is 630 tall.
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // Design-space fit (the historical stage). Kept so the tested viewports keep the same u.
@@ -17,7 +20,7 @@ export function legacyStage(vw, vh) {
   let mode, w, h;
   if (vh > vw * 1.05) { mode = 'portrait'; w = vw < 600 ? PORTRAIT_W.phone : PORTRAIT_W.tablet; h = Math.round(clamp(w * vh / vw, 700, 1400)); }
   else if (vh < 500) { mode = 'short'; h = SHORT_H; w = Math.round(clamp(SHORT_H * vw / vh, 640, 1000)); }
-  else { mode = 'tall'; w = TALL_W; h = Math.round(clamp(TALL_W * vh / vw, 540, 760)); }
+  else { mode = 'tall'; w = TALL_W; h = Math.round(clamp(TALL_W * vh / vw, TALL_MIN_H, TALL_MAX_H)); }
   return { mode, w, h, scale: Math.min(vw / w, vh / h) };
 }
 
