@@ -1,5 +1,7 @@
 # Kitphonic 1.0.0-rc10 — release candidate
 
+**Held letter sounds (KP-QA-008).** 22 of the 38 letter sounds have a stretched `snd-*-held` clip, which plays while a child traces. The other 16 (`b c ch ck d g h j k nk p qu t w x y`) deliberately have none, and the player uses the short clip instead. Stops, and sounds that end in a stop, are never stretched, to avoid "buh"-style schwa errors. `h` can't be held. `w` and `y` stay short until the Phonics Educator decides otherwise. `tests/held-clips.test.mjs` pins this list.
+
 Version: `1.0.0-rc10` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). This candidate adds the Android system-bar safe rectangle below.
 It does not claim an emulator or phone pass. Packaging and signing stay with the existing Release Engineer stream.
