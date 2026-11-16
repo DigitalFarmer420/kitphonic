@@ -14,6 +14,23 @@ export const HOT = /^(snd-|name-|m-|sfx-)/; // small clips warmed right after un
 // <link rel=preload>s them. Ids must stay in sync with EARLY_CLIPS there (tests/audio.test.mjs checks).
 export const EARLY_CLIPS = ['m-hello', 'sfx-chime', 'sfx-tap', 'm-letter-says', 'm-tap-it'];
 export const earlyFile = id => `takes/${id}.mp3`; // rc4: the sfx are small MP3 takes too (chime wav 70 KB -> 7 KB)
+// play() must never hang: onended can be skipped if the context is suspended/interrupted (iPad app switch).
+const PLAY_MARGIN_MS = 400, PLAY_TIMEOUT_CAP_MS = 10_000, RESUME_MS = 200;
+const resumers = new Set();
+let visHooked = false;
+function hookVisibility(fn) { // once per module; each audio instance adds its own resume
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  if (typeof document.addEventListener !== 'function' || typeof window.addEventListener !== 'function') return;
+  resumers.add(fn);
+  if (visHooked) return;
+  visHooked = true;
+  const onShow = ev => {
+    if (ev?.type === 'visibilitychange' && document.hidden) return;
+    for (const f of resumers) { try { f(); } catch {} }
+  };
+  document.addEventListener('visibilitychange', onShow);
+  window.addEventListener('pageshow', onShow);
+}
 export async function createAudio({ base = 'audio/', onClip = () => {}, speechRate = () => 1, early = EARLY_CLIPS } = {}) {
   const raw = new Map(early.map(id => [earlyFile(id), fetch(base + earlyFile(id)).then(r => (r.ok ? r.arrayBuffer() : null)).catch(() => null)]));
   const manifest = await (await fetch(base + 'manifest.json')).json();
@@ -42,6 +59,35 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     while (active < 4 && queue.length && ctx) { const id = queue.shift(); if (buffers.has(id)) continue; active++; load(id).finally(() => { active--; pump(); }); }
   }
   const wait = ms => new Promise(r => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); });
+  const resumeContext = () => { // suspended or interrupted (iOS); never reject
+    if (!ctx || ctx.state === 'running' || ctx.state === 'closed') return;
+    try { return Promise.resolve(ctx.resume()).catch(() => {}); } catch { return Promise.resolve(); }
+  };
+  hookVisibility(resumeContext);
+  async function ensureRunning() {
+    if (!ctx || ctx.state === 'running') return true;
+    if (ctx.state === 'closed') return false;
+    const p = resumeContext();
+    if (ctx.state === 'running') return true;
+    await Promise.race([p || Promise.resolve(), wait(RESUME_MS)]);
+    return ctx.state === 'running';
+  }
+  const endedWaitMs = durSec => Math.min(PLAY_TIMEOUT_CAP_MS, Math.round(Math.max(0, durSec) * 1000) + PLAY_MARGIN_MS);
+  function waitEnded(s, ms, onDone) { // resolve on onended or timeout; do not use `timers` (stop() must still s.stop() first)
+    return new Promise(r => {
+      let settled = false, tid = 0;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        if (tid) { clearTimeout(tid); tid = 0; }
+        sources.delete(s);
+        try { onDone?.(); } catch {}
+        r();
+      };
+      s.onended = finish;
+      tid = setTimeout(finish, ms);
+    });
+  }
   // --- rc5 serial queue ---
   let tail = Promise.resolve(), pending = 0, lastEnd = -Infinity; // lastEnd: when the last clip finished (a cut = -Infinity)
   const now = () => performance.now();
@@ -67,6 +113,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     const clips = ids.map(id => byId.get(id)).filter(c => c || (console.warn('unknown clip', ids), false));
     const bufs = await Promise.all(clips.map(c => load(c.id)));
     if (my !== gen) return;
+    if (!(await ensureRunning()) || my !== gen) return; // can't resume promptly: resolve, don't hang or schedule
     let at = null; const ends = [];
     for (const [k, c] of clips.entries()) {
       const rate = SPOKEN.test(c.id) ? rate0 * speechRate() : rate0, buf = bufs[k];
@@ -79,7 +126,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
         const e = { id: c.id, via, rate, t: Math.round(now() + (at - ctx.currentTime) * 1000) }; log.push(e);
         s.start(at, lead, dur * rate); at += dur;
         const sched = e.t + dur * 1000; s.__e = e; s.__end = sched; e.a = at * 1000 - dur * 1000; e.b = at * 1000; // a/b: audio clock (ms), exact // log the exact scheduled end (onended fires a few ms late on the main thread)
-        ends.push(new Promise(r => (s.onended = () => { sources.delete(s); e.end ??= Math.round(sched); r(); })));
+        ends.push(waitEnded(s, endedWaitMs(dur), () => { e.end ??= Math.round(sched); }));
       } else { // no buffer: speech / tone, strictly after whatever was scheduled before it
         await Promise.all(ends.splice(0)); at = null; if (my !== gen) return;
         const e = { id: c.id, via, rate, t: Math.round(now()), a: ctx ? ctx.currentTime * 1000 : undefined }; log.push(e);
@@ -97,7 +144,7 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     g.gain.setValueAtTime(0.0001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.02);
     g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + dur);
     o.connect(g).connect(ctx.destination); o.start(); o.stop(ctx.currentTime + dur + 0.02);
-    sources.add(o); return new Promise(r => (o.onended = () => { sources.delete(o); r(); }));
+    sources.add(o); return waitEnded(o, endedWaitMs(dur + 0.02));
   }
   function speak(text, rate) {
     return new Promise(res => {
