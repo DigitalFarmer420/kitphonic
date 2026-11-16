@@ -6,7 +6,7 @@ export function createSeen(storage, key = 'kitphonic.v1.seen') {
   return {
     count: kind => s[kind] ?? 0,
     demo: kind => (s[kind] ?? 0) < DEMO_TIMES,
-    mark(kind) { s[kind] = (s[kind] ?? 0) + 1; storage?.setItem(key, JSON.stringify(s)); },
+    mark(kind) { s[kind] = (s[kind] ?? 0) + 1; try { storage?.setItem(key, JSON.stringify(s)); } catch { /* full storage: keep the count in memory, never block Next */ } },
     reset() { s = {}; storage?.removeItem(key); },
   };
 }
