@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pointerOwner, scheduleLostCapture, sliderKeyTarget, sliderAriaState, applySliderAria } from '../js/gesture.js';
+import { pointerOwner, scheduleLostCapture, scheduleLostCaptureOnSelf, sliderKeyTarget, sliderAriaState, applySliderAria } from '../js/gesture.js';
 import { screenToLetter } from '../js/trace.js';
 import { markers, markerPositions, createSweep } from '../js/core.js';
 import { wordLayout, layoutFor, sliderTrack, fractionAt, KNOB } from '../js/layout.js';
@@ -43,6 +43,30 @@ test('lost capture aborts only when pointerup or pointercancel does not end the 
   run();
   assert.equal(aborted, 1, 'another pointer losing capture does not abort the owner');
   assert.equal(o.owns(5), true);
+});
+
+test('a lostpointercapture that bubbled from a child does not end the stroke', () => {
+  const o = pointerOwner();
+  let aborted = 0, run = null;
+  const later = fn => { run = fn; };
+  const child = {}, svg = {};
+  o.begin(1);
+  scheduleLostCaptureOnSelf({ pointerId: 1, target: child, currentTarget: svg }, pid => o.owns(pid), () => { aborted++; }, later);
+  assert.equal(run, null, 'a child loss is ignored');
+  assert.equal(aborted, 0);
+  assert.equal(o.owns(1), true);
+
+  scheduleLostCaptureOnSelf({ pointerId: 1, target: svg, currentTarget: svg }, pid => o.owns(pid), () => { aborted++; }, later);
+  o.end(1); // pointerup in the same turn still finishes the stroke
+  run();
+  assert.equal(aborted, 0);
+  assert.equal(o.id, null);
+
+  o.begin(3);
+  scheduleLostCaptureOnSelf({ pointerId: 3, target: svg, currentTarget: svg }, pid => o.owns(pid), () => { aborted++; o.end(3); }, later);
+  run(); // capture left the svg and no lift followed
+  assert.equal(aborted, 1);
+  assert.equal(o.id, null);
 });
 
 test('slider keys step one sound at a time; Home and End are the ends of the track', () => {
