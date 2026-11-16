@@ -9,15 +9,41 @@ No build step. Audio comes from `audio/manifest.json`: recorded takes in `audio/
 TTS / tone placeholders (`npm run manifest` rebuilds the manifest after adding takes).
 
 ## Automated checks
+GitHub Actions (`.github/workflows/pr-checks.yml`) runs these on pull requests into `develop` and `main`, and when
+someone starts the workflow by hand. The jobs only read the repo. They do not deploy, and they do not use secrets.
+Each browser test opens a fresh context: no saved progress, no cookies carried over, and nothing is sent off the machine.
+
 ```
-npm test                  # unit tests (node:test, Node 20+): sweep engine, content decodability, mastery, letters, layout math
-npm run check:sizes       # headless Chrome touch-target check (needs `pip install playwright`; uses /usr/bin/google-chrome
-                          # or CHROME=/path); default --base http://localhost:8099/ (pass --base for :8080)
+npm test                                  # unit tests (node:test, Node 20+): sweep engine, content decodability, mastery, letters, layout math
+KITPHONIC_REQUIRE_PILLOW=1 npm test       # same suite, and the icon generator (needs Pillow: python3 -m pip install --user Pillow)
+npm run test:e2e                          # Playwright touch checks (Chromium and WebKit). Starts the static server itself.
+npm run check:sizes                       # headless Chrome touch-target check (needs `pip install playwright`; uses /usr/bin/google-chrome
+                                          # or CHROME=/path); default --base http://localhost:8099/ (pass --base for :8080)
 ```
+
+Playwright, once:
+
+```
+npm install
+npx playwright install --with-deps webkit chromium
+npm run test:e2e
+```
+
+`test:e2e` loads the hello screen at iPad Pro 13" landscape (1376×1032) and portrait (1032×1376) with touch, a phone
+(390×844), and a desktop window (1440×900), in WebKit and Chromium. It fails if the console reports an error, a
+request fails (including a missing audio clip), a hidden screen is not `display: none`, or the centre of a visible
+control is covered by something else. It also traces the letter **l** with a touch pointer. Two further checks — an
+early `pointercancel`, and a `lostpointercapture` mid-stroke — are marked `test.fixme` until
+[PR #18](https://github.com/DigitalFarmer420/kitphonic/pull/18) (`fix/ipad-trace-touch`, `tools/ipad-trace-cancel.py`)
+is on this branch. Once that fix lands and the finger can finish the letter, those two stop being skipped and run as normal checks.
+Reports, screenshots, and traces are written locally under `playwright-report/` and `test-results/` when a test fails.
+
 `check:sizes` loads every screen (hello, word L2/L4, picture check, reveal, letter activities) at 360x780, 780x360,
 820x1180 (required) plus 390x844, 844x390, 1180x820, and **fails** if any tap target is < 64 px, the slider knob < 80 px,
 anything is cut off, key elements overlap, the stage leaves an empty band, or (portrait) the slider is not in the
-bottom quarter. Screenshots land in `screenshots/sizes/`.
+bottom quarter. Screenshots land in `screenshots/sizes/`. The PR job serves the app on port 8099 and runs this with
+headless Chromium. Locally, start the server first (`PORT=8099 npm start`) and install Python Playwright
+(`python3 -m pip install --user playwright`, then `python3 -m playwright install chromium` if you have no Chrome).
 
 ## Flow
 Hello ▶ -> **map** (home) -> ▶ (or tap the glowing stop) -> planned 5–10 min session (due review, the current stop,

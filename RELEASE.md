@@ -2,6 +2,8 @@
 
 **Offline (KP-QA-007).** A service worker (`sw.js`, asset list `sw-assets.json`) stores the app shell at install and fetches every recorded take in the background after it activates. One full online visit is enough for the app, including audio, to load again with no network. Pages, scripts, styles, and JSON stay network-first while online, so a reload does not keep stale code. Takes, fonts, and icons are cache-first. Nothing in `localStorage` is read or written. The worker is not registered in the Capacitor/Android wrapper. On localhost and 127.0.0.1 it stays off unless the URL has `?sw=1`, so the local test harness is unchanged. Add `?nosw=1` to skip registration on any host.
 
+**Held letter sounds (KP-QA-008).** 22 of the 38 letter sounds have a stretched `snd-*-held` clip, which plays while a child traces. The other 16 (`b c ch ck d g h j k nk p qu t w x y`) deliberately have none, and the player uses the short clip instead. Stops, and sounds that end in a stop, are never stretched, to avoid "buh"-style schwa errors. `h` can't be held. `w` and `y` stay short until the Phonics Educator decides otherwise. `tests/held-clips.test.mjs` pins this list.
+
 Version: `1.0.0-rc10` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
 modules, no network calls, progress in `localStorage`). This candidate adds the Android system-bar safe rectangle below.
 It does not claim an emulator or phone pass. Packaging and signing stay with the existing Release Engineer stream.
