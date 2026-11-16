@@ -1,6 +1,6 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-e4f604f81597196f';
+export const CACHE = 'kitphonic-6b77e933f7b9338e';
 export const CACHE_PREFIX = 'kitphonic-';
 
 // KP-QA-011: /kitphonic/ and /kitphonic-dev/ share one origin, so they share Cache Storage. Every
@@ -10,6 +10,13 @@ export const CACHE_PREFIX = 'kitphonic-';
 // js/sw-register.js has the same rule for ?nosw=1; tests/sw.test.mjs checks the two agree.
 export function cachePrefixFor(scopeUrl) {
   return `kitphonic:${new URL(scopeUrl).pathname}:`;
+}
+
+// Empty marker left by tools/sw-killswitch.js. Not an app cache (kitphonic-killswitch:<path>,
+// not kitphonic:<path>:<hash>). deleteOldCaches / lookups never match it. Dropped here so a
+// later emergency can navigate clients once again.
+export function killSwitchMarkerFor(scopeUrl) {
+  return `kitphonic-killswitch:${new URL(scopeUrl).pathname}`;
 }
 
 export function cacheNameFor(scopeUrl, build = CACHE) {
@@ -231,6 +238,7 @@ export async function installWorker(scope) {
 export async function activateWorker(scope) {
   await scope.clients.claim();
   const base = scope.registration.scope;
+  try { await scope.caches.delete(killSwitchMarkerFor(base)); } catch { /* no marker */ }
   const name = cacheNameFor(base);
   const data = await loadList(scope);
   const cache = await scope.caches.open(name);
@@ -258,7 +266,15 @@ export function attachWorker(scope) {
   // Read-only probe for tests and diagnostics: which cache does the controlling worker use?
   scope.addEventListener('message', event => {
     const port = event.ports && event.ports[0];
-    if (event.data && event.data.type === 'kitphonic-cache' && port) port.postMessage({ cache: cacheNameFor(scope.registration.scope) });
+    if (event.data && event.data.type === 'kitphonic-killswitch' && port) {
+      port.postMessage({ type: 'kitphonic-killswitch', killswitch: false });
+      try { port.close && port.close(); } catch { /* already closed */ }
+      return;
+    }
+    if (event.data && event.data.type === 'kitphonic-cache' && port) {
+      port.postMessage({ cache: cacheNameFor(scope.registration.scope) });
+      try { port.close && port.close(); } catch { /* already closed */ }
+    }
   });
   scope.addEventListener('fetch', event => {
     if (classify(event.request, { origin: scope.location.origin }) === 'bypass') return;
