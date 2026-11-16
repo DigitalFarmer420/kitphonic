@@ -1,6 +1,6 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-60471a7d1565bc0a';
+export const CACHE = 'kitphonic-35d489617e38f969';
 export const CACHE_PREFIX = 'kitphonic-';
 
 const SHELL_EXT = /\.(?:html|js|mjs|css|json)$/;
