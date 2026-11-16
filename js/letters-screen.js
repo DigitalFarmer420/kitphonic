@@ -30,9 +30,23 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   function earPos() { const s = stage.info, u = U(); return s.mode === 'short' ? { x: Math.round(s.w * 0.22) + 40 * u, y: 240 * u } : { x: s.w / 2, y: s.mode === 'portrait' ? Math.max(310 * u, s.h * 0.36) : 250 * u }; }
   function earLayout(letters) {
     const s = stage.info, u = U(), e = earPos(), n = letters.length;
-    if (s.mode === 'short') { const x0 = e.x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u })); }
-    const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = e.y + (s.mode === 'portrait' ? 200 : 185) * u;
+    const drop = (s.mode === 'short' ? 66 : 75) * u; // hunt tile hangs this far below its centre
+    const floor = s.h - Math.max(64, 72 * u) - 28 * u;
+    if (s.mode === 'short') { const x0 = e.x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: Math.min(230 * u, floor - drop) })); }
+    const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = Math.min(e.y + (s.mode === 'portrait' ? 200 : 185) * u, floor - drop);
     return letters.map((l, i) => ({ l, x: s.w / 2 + (i - (n - 1) / 2) * cw, y }));
+  }
+  // Sound-tap rows must keep the dot under the last row on the board. cellH shrinks only when the design pitch would not.
+  function gridSpec(n) {
+    const s = stage.info, u = U(), b = box();
+    const per = (s.designW || s.w) < 700 ? 3 : 6;
+    const rows = Math.ceil(n / Math.min(per, n));
+    const below = 72 * u + Math.max(64, 72 * u) + 10;
+    let cellH = (s.mode === 'short' ? 220 : s.mode === 'portrait' ? 232 : 210) * u;
+    const need = (rows - 0.5) * cellH;
+    const room = s.h - below - b.top;
+    if (need > room) cellH = Math.max(110, room / Math.max(0.5, rows - 0.5));
+    return { per, cellH, top: b.top };
   }
   function addEar() {
     const e = earPos(), b = el('button', 'ear emoji', '👂'); b.id = 'l-ear'; b.setAttribute('aria-label', 'Hear the sound again');
@@ -64,8 +78,8 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       const fresh = floatInit(letters, { box: b, rand, half: tileHalf() });
       run.items.forEach((it, i) => { it.x = fresh[i].x; it.y = fresh[i].y; it.vx = fresh[i].vx * u; it.vy = fresh[i].vy * u; it.half = fresh[i].half; });
     } else {
-      const per = (stage.info.designW || stage.info.w) < 700 ? 3 : 6;
-      const pos = staticLayout(letters.length, { w: stage.info.w, top: b.top, perRow: per, cellW: cellW(letters.length), cellH: (stage.info.mode === 'short' ? 220 : stage.info.mode === 'portrait' ? 232 : 210) * u });
+      const g = gridSpec(letters.length);
+      const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH });
       run.items.forEach((it, i) => { it.x = pos[i].x; it.y = pos[i].y; });
     }
     move();
@@ -94,7 +108,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     $('letters').classList.toggle('hunt', !!run.def.ear);
     if (run.def.ear) run.items = earLayout(letters);
     else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() }).map(it => ({ ...it, vx: it.vx * u, vy: it.vy * u }));
-    else { const per = (stage.info.designW || stage.info.w) < 700 ? 3 : 6; const pos = staticLayout(letters.length, { w: stage.info.w, top: b.top, perRow: per, cellW: cellW(letters.length), cellH: (stage.info.mode === 'short' ? 220 : stage.info.mode === 'portrait' ? 232 : 210) * u }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
+    else { const g = gridSpec(letters.length); const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
     run.target = target; run.firstTry = true; run.misses = 0; run.promptEnd = 0; place(run.items); renderPebbles(); if (run.def.ear) { addEar(); tray(); }
     const p = prompt();
     if (!run.def.ear) p?.then(() => run && hand.start(() => { // explore: taps two tiles; find: hovers every tile (never just the answer)
