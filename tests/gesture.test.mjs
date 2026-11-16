@@ -73,19 +73,48 @@ test('arrow keys drive the same sweep as a drag: one sound each, End blends', ()
   assert.ok(back.some(e => e.kind === 'replay'));
 });
 
-test('slider ARIA stays in sync with the knob and the sounds already passed', () => {
-  assert.deepEqual(sliderAriaState({ fraction: 0, passed: 0, total: 3 }), {
+test('slider ARIA follows the knob position, not sounds already heard', () => {
+  const stops = [0.167, 0.5, 0.833];
+  assert.deepEqual(sliderAriaState({ fraction: 0, total: 3, stops }), {
     'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', 'aria-valuetext': '0 of 3 sounds', 'aria-orientation': 'horizontal',
   });
-  const mid = sliderAriaState({ fraction: 0.5, passed: 1, total: 3 });
-  assert.equal(mid['aria-valuenow'], '50'); assert.equal(mid['aria-valuetext'], '1 of 3 sounds');
-  assert.equal(sliderAriaState({ fraction: 1, passed: 3, total: 3 })['aria-valuetext'], 'all 3 sounds');
+  const mid = sliderAriaState({ fraction: 0.5, total: 3, stops });
+  assert.equal(mid['aria-valuenow'], '50'); assert.equal(mid['aria-valuetext'], '2 of 3 sounds');
+  assert.equal(sliderAriaState({ fraction: 0.2, total: 3, stops })['aria-valuetext'], '1 of 3 sounds');
+  assert.equal(sliderAriaState({ fraction: 1, total: 3, stops })['aria-valuetext'], 'all 3 sounds');
   assert.equal(sliderAriaState({ fraction: 0, total: 0 })['aria-valuetext'], 'start');
   assert.equal(sliderAriaState({ fraction: Number.NaN, total: 2 })['aria-valuenow'], '0');
+  assert.equal(sliderAriaState({ fraction: Number.NaN, total: 2 })['aria-valuetext'], '0 of 2 sounds');
   const el = { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; } };
-  applySliderAria(el, { fraction: 0.833, passed: 3, total: 3 });
-  assert.equal(el.attrs['aria-valuenow'], '83'); assert.equal(el.attrs['aria-valuemin'], '0'); assert.equal(el.attrs['aria-valuemax'], '100');
+  applySliderAria(el, { fraction: 0.833, total: 3, stops });
+  assert.equal(el.attrs['aria-valuenow'], '83'); assert.equal(el.attrs['aria-valuetext'], '3 of 3 sounds');
+  assert.equal(el.attrs['aria-valuemin'], '0'); assert.equal(el.attrs['aria-valuemax'], '100');
   applySliderAria(null, {});
+});
+
+test('Home after hearing every sound announces the start: valuenow 0 and valuetext 0 of N', () => {
+  for (const [word, level] of [['at', 1], ['map', 3], ['sat', 2]]) {
+    const ms = markers(word, level), sweep = createSweep(ms);
+    sweep.move(1, 0); // every sound has been heard; the lit set does not shrink
+    assert.equal(sweep.lit.length, ms.length, word);
+    const end = sliderAriaState({ fraction: sweep.position, total: ms.length, stops: sweep.positions });
+    assert.equal(end['aria-valuenow'], '100', word);
+    assert.equal(end['aria-valuetext'], `all ${ms.length} sounds`, word);
+    const home = sliderKeyTarget(sweep.position, sweep.positions, 'Home');
+    sweep.move(home, 400);
+    const back = sliderAriaState({ fraction: sweep.position, total: ms.length, stops: sweep.positions });
+    assert.equal(sweep.position, 0, word);
+    assert.equal(back['aria-valuenow'], '0', word);
+    assert.equal(back['aria-valuetext'], `0 of ${ms.length} sounds`, word);
+    assert.equal(sweep.lit.length, ms.length, `${word}: heard sounds stay lit; the label must not`);
+    // two arrows back: the first lands on the last sound (still N of N); the second leaves it
+    let f = 1;
+    f = sliderKeyTarget(f, sweep.positions, 'ArrowLeft');
+    f = sliderKeyTarget(f, sweep.positions, 'ArrowLeft');
+    const stepped = sliderAriaState({ fraction: f, total: ms.length, stops: sweep.positions });
+    assert.equal(stepped['aria-valuenow'], String(Math.round(f * 100)), word);
+    assert.equal(stepped['aria-valuetext'], `${ms.length - 1} of ${ms.length} sounds`, word);
+  }
 });
 
 test('screenToLetter is null-safe when the svg has no screen matrix', () => {
@@ -111,13 +140,15 @@ test('slider, sentence, and family screens bind pointer id, cancel, lost capture
   assert.match(word, /pointercancel', onUp/);
   assert.match(word, /lostpointercapture', onUp/);
   assert.match(word, /onSliderKey/);
-  assert.match(word, /applySliderAria\(handle/);
+  assert.match(word, /applySliderAria\(handle, \{ fraction: f, stops: sweep\?\.positions/);
+  assert.doesNotMatch(word, /passed: sweep\?\.lit/);
   assert.match(sentence, /slideOwner\.begin\(e\.pointerId\)/);
   assert.match(sentence, /e\.pointerId !== dragging\.id/);
   assert.match(sentence, /pointercancel', endSlide/);
   assert.match(sentence, /lostpointercapture', endSlide/);
   assert.match(sentence, /function onSliderKey/);
-  assert.match(sentence, /applySliderAria\(\$\('sn-handle'\)/);
+  assert.match(sentence, /applySliderAria\(\$\('sn-handle'\), \{ fraction: f, stops: run\.sweep\?\.positions/);
+  assert.doesNotMatch(sentence, /passed: run\.sweep\?\.lit/);
   assert.match(family, /owner\.begin\(e\.pointerId\)/);
   assert.match(family, /!owner\.owns\(e\.pointerId\)/);
   assert.match(family, /pointercancel', abortDrag/);
