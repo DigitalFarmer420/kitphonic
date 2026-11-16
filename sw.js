@@ -1,7 +1,38 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-547d0a1981217d71';
+export const CACHE = 'kitphonic-9f3610782eeb7125';
 export const CACHE_PREFIX = 'kitphonic-';
+
+// KP-QA-011: /kitphonic/ and /kitphonic-dev/ share one origin, so they share Cache Storage. Every
+// cache this worker opens, cleans up, or falls back to is named after its registration scope:
+//   kitphonic:<scope pathname>:<hash>   e.g. kitphonic:/kitphonic-dev/:62802e1804f499f9
+// The ':' after the path ends the prefix, so /kitphonic/ never matches /kitphonic-dev/ or /kitphonic/dev/.
+// js/sw-register.js has the same rule for ?nosw=1; tests/sw.test.mjs checks the two agree.
+export function cachePrefixFor(scopeUrl) {
+  return `kitphonic:${new URL(scopeUrl).pathname}:`;
+}
+
+export function cacheNameFor(scopeUrl, build = CACHE) {
+  return cachePrefixFor(scopeUrl) + build.slice(CACHE_PREFIX.length);
+}
+
+export function prefixOfName(name) {
+  const at = name.lastIndexOf(':');
+  return name.startsWith('kitphonic:') && at > 'kitphonic:'.length ? name.slice(0, at + 1) : null;
+}
+
+// Unscoped names from the first cut of KP-QA-007 (kitphonic-<hash>) do not say which deployment
+// wrote them. Delete one only when its contents prove it is ours: it holds this scope's index.html
+// and every key lives under this scope. Anything else (another deployment's, empty, or mixed) is left.
+export const LEGACY = /^kitphonic-[0-9a-f]+$/;
+
+export async function legacyOwned(caches, name, scopeUrl) {
+  if (!LEGACY.test(name)) return false;
+  const keys = (await (await caches.open(name)).keys()).map(req => (typeof req === 'string' ? req : req.url));
+  if (!keys.length) return false;
+  const base = new URL(scopeUrl).href;
+  return keys.includes(new URL('index.html', base).href) && keys.every(url => url.startsWith(base));
+}
 
 const SHELL_EXT = /\.(?:html|js|mjs|css|json)$/;
 const AUDIO = /\/audio\/takes\/[^/]+\.mp3$/;
@@ -49,9 +80,10 @@ async function store(cache, key, res) {
 
 // Look in this worker's cache first, then in any other kitphonic-* cache. During an update the
 // previous cache and the next one can both exist; a take missing from one may still be in the other.
-export async function matchAny(caches, key, { current = CACHE, prefix = CACHE_PREFIX } = {}) {
+export async function matchAny(caches, key, { current, prefix = prefixOfName(current) } = {}) {
   const hit = await (await caches.open(current)).match(key);
   if (hit) return hit;
+  if (!prefix) return null;
   let names = [];
   try { names = await caches.keys(); }
   catch { return null; }
@@ -63,7 +95,7 @@ export async function matchAny(caches, key, { current = CACHE, prefix = CACHE_PR
   return null;
 }
 
-export async function handleFetch(request, { origin, caches, fetch: doFetch, cacheName = CACHE, online = true } = {}) {
+export async function handleFetch(request, { origin, caches, fetch: doFetch, cacheName, online = true } = {}) {
   const req = asRequest(request);
   const kind = classify(req, { origin });
   if (kind === 'bypass') return doFetch(req);
@@ -97,7 +129,8 @@ export async function handleFetch(request, { origin, caches, fetch: doFetch, cac
   }
 }
 
-export async function deleteOldCaches(names, { current = CACHE, prefix = CACHE_PREFIX, drop } = {}) {
+export async function deleteOldCaches(names, { current, prefix = prefixOfName(current), drop } = {}) {
+  if (!prefix) return [];
   const old = [...names].filter(name => name.startsWith(prefix) && name !== current);
   await Promise.all(old.map(name => drop(name)));
   return old;
@@ -144,7 +177,7 @@ async function loadList(scope) {
   try {
     return await readAssetList(scope.fetch.bind(scope), href, CACHE);
   } catch {
-    const cache = await scope.caches.open(CACHE);
+    const cache = await scope.caches.open(cacheNameFor(scope.registration.scope));
     const hit = await cache.match(href);
     if (!hit) throw new Error('sw-assets.json unavailable');
     const data = await hit.json();
@@ -176,7 +209,7 @@ export async function installWorker(scope) {
   const base = scope.registration.scope;
   const href = new URL('sw-assets.json', base).href;
   const data = await readAssetList(scope.fetch.bind(scope), href, CACHE);
-  const cache = await scope.caches.open(CACHE);
+  const cache = await scope.caches.open(cacheNameFor(base));
   const shell = data.shell.map(path => new URL(path, base).href);
   await precacheUrls(shell, { cache, fetch: freshFetch(scope), concurrency: 6 });
   const shellMissing = await missingFrom(cache, shell);
@@ -198,18 +231,24 @@ export async function installWorker(scope) {
 export async function activateWorker(scope) {
   await scope.clients.claim();
   const base = scope.registration.scope;
+  const name = cacheNameFor(base);
   const data = await loadList(scope);
-  const cache = await scope.caches.open(CACHE);
+  const cache = await scope.caches.open(name);
   const audio = data.audio.map(path => new URL(path, base).href);
   await precacheUrls(audio, { cache, fetch: freshFetch(scope) });
   const shell = data.shell.map(path => new URL(path, base).href);
   const missing = await missingFrom(cache, [...shell, ...audio]);
   let dropped = [];
   if (!missing.length) {
-    dropped = await deleteOldCaches(await scope.caches.keys(), { current: CACHE, drop: name => scope.caches.delete(name) });
+    const names = await scope.caches.keys();
+    const drop = n => scope.caches.delete(n);
+    dropped = await deleteOldCaches(names, { current: name, drop });
+    for (const legacy of names.filter(n => LEGACY.test(n))) {
+      if (await legacyOwned(scope.caches, legacy, base)) { await drop(legacy); dropped.push(legacy); }
+    }
   }
   const clients = await scope.clients.matchAll({ includeUncontrolled: true, type: 'window' });
-  for (const client of clients) client.postMessage({ type: 'kitphonic-audio-ready', cache: CACHE, complete: !missing.length, missing: missing.length });
+  for (const client of clients) client.postMessage({ type: 'kitphonic-audio-ready', cache: name, complete: !missing.length, missing: missing.length });
   return { complete: !missing.length, missing: missing.length, dropped };
 }
 
@@ -219,12 +258,12 @@ export function attachWorker(scope) {
   // Read-only probe for tests and diagnostics: which cache does the controlling worker use?
   scope.addEventListener('message', event => {
     const port = event.ports && event.ports[0];
-    if (event.data && event.data.type === 'kitphonic-cache' && port) port.postMessage({ cache: CACHE });
+    if (event.data && event.data.type === 'kitphonic-cache' && port) port.postMessage({ cache: cacheNameFor(scope.registration.scope) });
   });
   scope.addEventListener('fetch', event => {
     if (classify(event.request, { origin: scope.location.origin }) === 'bypass') return;
     event.respondWith(handleFetch(event.request, {
-      origin: scope.location.origin, caches: scope.caches, fetch: scope.fetch.bind(scope), cacheName: CACHE,
+      origin: scope.location.origin, caches: scope.caches, fetch: scope.fetch.bind(scope), cacheName: cacheNameFor(scope.registration.scope),
       online: scope.navigator.onLine !== false,
     }));
   });
