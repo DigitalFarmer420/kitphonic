@@ -5,7 +5,7 @@
 //    slider (one stop per sound; passed sounds turn sage). "Read it all" unlocks at the end: karaoke + picture.
 import { STAR_WORDS, WORDS } from './content.js';
 import { markers, markerPositions, createSweep, graphemeUnits } from './core.js';
-import { wordLayout, layoutFor } from './layout.js';
+import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
 import { clipForMarker, clipForBlend, shuffle, caseFor } from './word-logic.js';
 import { guessGuard } from './mastery.js';
 import { createGhostHand, centerIn } from './ghost-hand.js';
@@ -104,17 +104,20 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     const w = t.entry.w, ids = t.entry.parse?.split(' '); run.ms = markers(w, 3, { ids }); run.layout = wordLayout(w.length, layoutFor(stage.info)); run.sweep = createSweep(run.ms, { gapMs: cfg.sweepGapMs ?? 180 }); run.t0 = null;
     const L = run.layout, tiles = $('sn-tiles'); tiles.replaceChildren();
     graphemeUnits(w, ids).forEach(u => { const d = el('div', 'tile L' + (u.b - u.a > 1 ? ' dg' : ''), caseFor(u.text, cfg.tileCase)); d.style.left = L.tileLeft(u.a) + 'px'; d.style.width = (u.b - u.a) * L.cell - L.gap + 'px'; d.style.fontSize = Math.round(Math.min(84, L.tileW * .78)) + 'px'; tiles.append(d); });
-    const tr = $('sn-track'), l = Math.max(8, L.track.left - 20), r = Math.min(L.stageW - 34, L.track.left + L.track.width + 20);
-    tr.style.left = l + 'px'; tr.style.width = r - l + 'px'; run.trackLeft = l;
+    const tr = $('sn-track'), box = sliderTrack(L), l = box.left;
+    tr.style.left = l + 'px'; tr.style.width = box.width + 'px'; run.trackLeft = l;
     tr.querySelectorAll('.tdot').forEach(d => d.remove());
     markerPositions(run.ms).forEach(f => { const d = el('div', 'tdot'); d.style.left = (L.xFromFrac(f) - l) + 'px'; tr.append(d); }); // one stop per sound
     $('sn-slider').hidden = false; setKnob(0);
   }
-  const setKnob = f => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px';
-    applySliderAria($('sn-handle'), { fraction: f, stops: run.sweep?.positions, total: run.ms?.length ?? 0 }); };
+  const setKnob = (f, held) => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px';
+    applySliderAria($('sn-handle'), { fraction: f, stops: held?.stops ?? run.sweep?.positions, total: held?.total ?? run.ms?.length ?? 0 }); };
   function slideTo(frac, timeStamp) {
     if (!run?.ms) return;
     run.t0 ??= performance.now();
+    // Blend clears run.ms inside the loop. Remember the sounds first, and still park the knob at
+    // the end so End announces the full count instead of leaving the last sound's value up.
+    const held = { total: run.ms.length, stops: run.sweep.positions };
     for (const ev of run.sweep.move(frac, timeStamp)) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
         const c = clipForMarker(run.ms[ev.marker], ev.stretch); if (ev.kind === 'replay') audio.stop(); if (run.tokSupport !== 2) audio.play(c.id, { rate: c.rate, delayMs: ev.delayMs, gapMs: 0 }); // S2: silent dots
@@ -127,11 +130,11 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
         if (cfg.speakBeforeCheck || run.tokSupport === 4) audio.play(clipForBlend(t.entry.w).id, { delayMs: (ev.delayMs || 0) + 300 }).then(after); else setTimeout(after, 500);
       }
     }
-    if (run?.ms) setKnob(run.sweep.position);
+    if (run?.sweep) setKnob(run.sweep.position, held);
   }
   function onMove(e) {
     if (!dragging || e.pointerId !== dragging.id || !run?.ms) return;
-    slideTo(run.layout.fracFromX(stage.toStage(e).x), e.timeStamp);
+    slideTo(fractionAt(run.layout, stage.toStage(e).x), e.timeStamp);
   }
   function endSlide(e) {
     if (!slideOwner.end(e.pointerId)) return;
