@@ -1,7 +1,7 @@
 // ?sessionlog=1 ring buffer. The flag-off path never constructs one.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage, SESSION_LOG_CAP } from '../js/session-log.js';
+import { chooseSessionSpot, createSessionLog, observeAudioContexts, rectsOverlap, sessionLogEnabled, watchStorage, SESSION_LOG_CAP, SESSION_LOG_CHIP, SESSION_LOG_PRE_H } from '../js/session-log.js';
 
 function fakeDocument() {
   const make = (tag) => {
@@ -63,7 +63,12 @@ test('the ring keeps the last 200 stamped entries and Copy reads all of them', a
   assert.equal(log.entries.at(-1).detail, `s${SESSION_LOG_CAP + 19}`);
   assert.match(log.text(), new RegExp(`2026-11-16T10:56:00.007Z\\tscreen\\ts${SESSION_LOG_CAP + 19}`));
   assert.equal(log.view.style.pointerEvents, 'none');
+  assert.equal(log.view.style.height, `${SESSION_LOG_PRE_H}px`);
+  assert.equal(log.view.style.overflow, 'auto');
   assert.equal(log.root.style.pointerEvents, 'none');
+  assert.equal(log.root.dataset.open, 'false');
+  assert.equal(log.copyButton.hidden, true);
+  assert.equal(log.clearButton.hidden, true);
   assert.equal(log.copyButton.style.pointerEvents, 'auto');
   assert.equal(log.clearButton.style.pointerEvents, 'auto');
   let copied = '';
@@ -86,6 +91,9 @@ test('taps, visibility, page show/hide, and hello phases are recorded', () => {
   assert.equal(tap[2].passive, true);
   tap[1]({ target: { id: '', className: '', parentElement: { id: 'play' } }, pointerType: 'touch' });
   tap[1]({ target: { id: '', className: 'btn coral', parentElement: null }, pointerType: 'mouse' });
+  const before = log.entries.filter(e => e.kind === 'tap').length;
+  tap[1]({ target: { id: 'kit-sessionlog-clear', parentElement: log.root }, pointerType: 'touch' });
+  assert.equal(log.entries.filter(e => e.kind === 'tap').length, before);
   doc.listeners.find(([type]) => type === 'visibilitychange')[1]();
   doc.visibilityState = 'hidden';
   doc.listeners.find(([type]) => type === 'visibilitychange')[1]();
@@ -122,6 +130,45 @@ test('storage errors are logged and rethrown; a missing log does not wrap', () =
     'setItem kitphonic.v1.settings: QuotaExceededError quota',
     'removeItem kitphonic.v1.seen: Error nope',
   ]);
+});
+
+function overlapsAny(rect, list) {
+  return list.some(o => rectsOverlap(rect, o, 0));
+}
+
+test('the chip uses a free corner and stays inside the safe area', () => {
+  const controls = [{ x: 10, y: 10, w: 72, h: 72, id: 'home' }];
+  const spot = chooseSessionSpot({ vw: 400, vh: 800, controls, expanded: false });
+  assert.equal(spot.toggle.w, SESSION_LOG_CHIP);
+  assert.equal(spot.toggle.h, SESSION_LOG_CHIP);
+  assert.equal(overlapsAny(spot.toggle, controls), false);
+  assert.ok(spot.toggle.x >= 8 && spot.toggle.y >= 8);
+  assert.equal(spot.name === 'tl' && spot.toggle.y < 20, false);
+  const inset = chooseSessionSpot({
+    vw: 400, vh: 800, insets: { top: 24, right: 0, bottom: 48, left: 0 }, controls, expanded: false,
+  });
+  assert.ok(inset.toggle.y >= 24);
+  assert.ok(inset.toggle.y + inset.toggle.h <= 800 - 48);
+});
+
+test('lesson corners are full, so the chip steps off the toolbar and the buttons stay clear', () => {
+  const controls = [
+    { x: 14, y: 14, w: 70, h: 70, id: 'ls-home' },
+    { x: 306, y: 14, w: 70, h: 70, id: 'ls-again' },
+    { x: 18, y: 745, w: 80, h: 84, id: 'ic-replay' },
+    { x: 110, y: 745, w: 260, h: 84, id: 'ic-next' },
+    { x: 73, y: 180, w: 244, h: 244, id: 'ic-letter' },
+  ];
+  const toolbars = [
+    { x: 0, y: 0, w: 390, h: 96, id: 'top' },
+    { x: 0, y: 730, w: 390, h: 114, id: 'ibar' },
+  ];
+  const spot = chooseSessionSpot({ vw: 390, vh: 844, controls, toolbars, expanded: true });
+  for (const rect of [spot.toggle, spot.copy, spot.clear]) {
+    assert.equal(overlapsAny(rect, controls), false, spot.kind);
+    assert.equal(overlapsAny(rect, toolbars), false, spot.kind);
+  }
+  assert.equal(spot.pre == null || overlapsAny(spot.pre, toolbars), false);
 });
 
 test('AudioContext state changes are observed without an audio.js getter', () => {

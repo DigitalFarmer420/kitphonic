@@ -45,19 +45,24 @@ test('Play, map Home, Play reaches the map three times', async ({ page, browserN
 
   const overlay = await page.evaluate(() => {
     const root = document.getElementById('kit-sessionlog');
+    const toggle = document.getElementById('kit-sessionlog-toggle');
     const copy = document.getElementById('kit-sessionlog-copy');
-    const clear = document.getElementById('kit-sessionlog-clear');
     const view = document.getElementById('kit-sessionlog-view');
     const cs = getComputedStyle;
     return {
       present: !!root,
+      open: root.dataset.open,
       root: cs(root).pointerEvents,
-      copy: cs(copy).pointerEvents,
-      clear: cs(clear).pointerEvents,
-      view: cs(view).pointerEvents,
+      toggle: cs(toggle).pointerEvents,
+      copyHidden: !!copy.hidden,
+      viewHidden: !!view.hidden,
+      viewH: view.style.height,
     };
   });
-  expect(overlay).toEqual({ present: true, root: 'none', copy: 'auto', clear: 'auto', view: 'none' });
+  expect(overlay).toEqual({
+    present: true, open: 'false', root: 'none', toggle: 'auto',
+    copyHidden: true, viewHidden: true, viewH: '96px',
+  });
 
   const before = await page.evaluate(() => (window.__kitAudioLog || []).filter(e => e.id === 'm-hello').length);
   await page.evaluate(() => { const b = document.getElementById('play'); b.click(); b.click(); });
