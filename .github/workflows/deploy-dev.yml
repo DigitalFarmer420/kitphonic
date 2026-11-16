@@ -38,7 +38,7 @@ jobs:
           touch site/.nojekyll
           python3 src/.github/dev/inject-dev-badge.py site/index.html
           # Stamp the dev site with the develop commit it was built from (KP-QA-006).
-          printf '%s\n' "$GITHUB_SHA" > site/VERSION.txt
+          git -C src rev-parse HEAD > site/VERSION.txt
       - name: Commit and push (normal push, no force)
         run: |
           cd site
