@@ -111,7 +111,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     $('sn-slider').hidden = false; setKnob(0);
   }
   const setKnob = f => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px';
-    applySliderAria($('sn-handle'), { fraction: f, passed: run.sweep?.lit.length ?? 0, total: run.ms?.length ?? 0 }); };
+    applySliderAria($('sn-handle'), { fraction: f, stops: run.sweep?.positions, total: run.ms?.length ?? 0 }); };
   function slideTo(frac, timeStamp) {
     if (!run?.ms) return;
     run.t0 ??= performance.now();
