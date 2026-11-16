@@ -6,12 +6,14 @@ is < 80 px, anything interactive is cut off the screen, key elements overlap, th
 the slider is not in the bottom (thumb) zone in portrait. Saves a screenshot per scene.
 
   python3 tools/check-sizes.py [--base http://localhost:8099/] [--out screenshots/sizes] [--viewports 360x780,780x360]
-Requires: pip install playwright && playwright install chromium; the app served (npm start).
+Viewports run in parallel, one browser each (KITPHONIC_SIZES_WORKERS overrides the pool size).
+Each scene opens a new browser context. Requires: pip install playwright && playwright install chromium; the app served (npm start).
 """
 import argparse, json, os, sys
+from concurrent.futures import ThreadPoolExecutor
 from playwright.sync_api import sync_playwright
 
-REQUIRED = ['360x780', '780x360', '820x1180']
+REQUIRED = ['320x568', '360x640', '360x780', '780x360', '820x1180']
 EXTRA = ['390x844', '844x390', '1180x820']
 # u is capped at 2. 1280x800 sits flush on the tray; the three larger windows double the 540-tall board onto it.
 LARGE = ['1280x800', '1920x1080', '2560x1440', '3840x2160']
@@ -181,30 +183,49 @@ def check(m, vp, scene):
         if bottom_gap > m['vh'] * .25: errs.append(f"slider not in thumb zone ({bottom_gap:.0f}px above the bottom)")
     return errs
 
-def main():
-    ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
-    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
-    only = set(filter(None, a.scenes.split(',')))
-    os.makedirs(a.out, exist_ok=True); fails = 0; rows = []
+GOTO_TIMEOUT_MS = 15000
+
+def launch_browser(p):
+    exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium'] if os.path.exists(c)), None)
+    return p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
+
+def run_viewport(vp, base, out, only):
+    """One browser for this viewport. Each scene gets its own context (clean storage)."""
+    w, h = map(int, vp.split('x'))
+    rows = []
     with sync_playwright() as p:
-        exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium'] if os.path.exists(c)), None)
-        b = p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
-        for vp in a.viewports.split(','):
-            w, h = map(int, vp.split('x'))
+        b = launch_browser(p)
+        try:
             for scene, q, js in SCENES:
                 if only and scene not in only: continue
-                pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True)
-                pg.goto(a.base + ('?' + q if q else ''), wait_until='networkidle'); pg.wait_for_timeout(500)
-                if js: pg.evaluate(js); pg.wait_for_timeout(700)
-                m = pg.evaluate(MEASURE); errs = check(m, vp, scene)
-                pg.screenshot(path=f"{a.out}/{scene}-{vp}.png"); pg.close()
-                smallest = min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
-                knob = next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
-                rows.append((vp, scene, len(m['targets']), smallest, knob, errs)); fails += bool(errs)
-        if not only:
-            # Mid-activity rotate: letter tiles must pick up the new board, stay on screen, and stay >= 64px.
-            pg = b.new_page(viewport={'width': 390, 'height': 844}, has_touch=True)
-            pg.goto(a.base + '?skipHello=1&activity=find&seed=1', wait_until='networkidle'); pg.wait_for_timeout(700)
+                ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, service_workers='block')
+                try:
+                    pg = ctx.new_page()
+                    pg.goto(base + ('?' + q if q else ''), wait_until='load', timeout=GOTO_TIMEOUT_MS)
+                    pg.wait_for_timeout(500)
+                    if js: pg.evaluate(js); pg.wait_for_timeout(700)
+                    m = pg.evaluate(MEASURE); errs = check(m, vp, scene)
+                    pg.screenshot(path=f"{out}/{scene}-{vp}.png")
+                    smallest = min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
+                    knob = next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
+                    rows.append((vp, scene, len(m['targets']), smallest, knob, errs))
+                finally:
+                    ctx.close()
+        finally:
+            b.close()
+    bad = sum(bool(errs) for *_, errs in rows)
+    print(f'{vp} finished {len(rows) - bad}/{len(rows)}', flush=True)
+    return rows
+
+def extra_passes(base, out):
+    """Rotate mid-activity, and the 24px top + 48px bottom system bars. Not a viewport of SCENES."""
+    rows = []
+    with sync_playwright() as p:
+        b = launch_browser(p)
+        try:
+            ctx = b.new_context(viewport={'width': 390, 'height': 844}, has_touch=True, service_workers='block')
+            pg = ctx.new_page()
+            pg.goto(base + '?skipHello=1&activity=find&seed=1', wait_until='load', timeout=GOTO_TIMEOUT_MS); pg.wait_for_timeout(700)
             before = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr')].map(e => {
               const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })""")
             pg.set_viewport_size({'width': 844, 'height': 390}); pg.wait_for_timeout(500)
@@ -217,19 +238,17 @@ def main():
                 errs.append('tiles kept stale coordinates after rotate')
             if any(t[2] < 63 for t in after):
                 errs.append('rotated tile under 64px')
-            stage = m['stage']
             off = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr .tile')].filter(e => {
               const r = e.getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect();
               return r.left < s.left - 2 || r.top < s.top - 2 || r.right > s.right + 2 || r.bottom > s.bottom + 2; }).length""")
             if off: errs.append(f'{off} tiles outside the stage after rotate')
-            pg.screenshot(path=f"{a.out}/rotate-letters-844x390.png"); pg.close()
+            pg.screenshot(path=f"{out}/rotate-letters-844x390.png"); ctx.close()
             rows.append(('844x390', 'rotate-find', len(m['targets']), min((min(t['w'], t['h']) for t in m['targets']), default=0), None, errs))
-            fails += bool(errs)
-            # System bars: 24px top + 48px bottom. Controls stay inside the safe rect and at the floor.
             for vp, w, h, top, bottom in [('360x640', 360, 640, 24, 48), ('780x360', 780, 360, 24, 48)]:
                 for scene, q in [('hello', ''), ('word-map', 'skipHello=1&level=2&word=map&seed=1'), ('family-7', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1')]:
-                    pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True)
-                    pg.goto(a.base + ('?' + q if q else ''), wait_until='networkidle'); pg.wait_for_timeout(500)
+                    ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, service_workers='block')
+                    pg = ctx.new_page()
+                    pg.goto(base + ('?' + q if q else ''), wait_until='load', timeout=GOTO_TIMEOUT_MS); pg.wait_for_timeout(500)
                     pg.evaluate("""([t, b]) => { const s = document.documentElement.style;
                       s.setProperty('--safe-area-inset-top', t + 'px'); s.setProperty('--safe-area-inset-right', '0px');
                       s.setProperty('--safe-area-inset-bottom', b + 'px'); s.setProperty('--safe-area-inset-left', '0px'); }""", [top, bottom])
@@ -239,11 +258,25 @@ def main():
                     for t in m['targets']:
                         if t['y'] < top - 2 or t['y'] + t['h'] > safe_bottom + 2:
                             errs.append(f"{t['name']} outside safe bars")
-                    pg.screenshot(path=f"{a.out}/inset-{scene}-{vp}.png"); pg.close()
+                    pg.screenshot(path=f"{out}/inset-{scene}-{vp}.png"); ctx.close()
                     rows.append((vp + '+bars', scene, len(m['targets']), min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0),
                                  next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None), errs))
-                    fails += bool(errs)
-        b.close()
+        finally:
+            b.close()
+    return rows
+
+def main():
+    ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
+    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
+    only = set(filter(None, a.scenes.split(',')))
+    os.makedirs(a.out, exist_ok=True)
+    viewports = [v for v in a.viewports.split(',') if v]
+    workers = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or len(viewports) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        grouped = list(pool.map(lambda vp: run_viewport(vp, a.base, a.out, only), viewports))
+    rows = [row for group in grouped for row in group]
+    fails = sum(bool(errs) for *_, errs in rows)
+    if not only: rows.extend(extra_passes(a.base, a.out)); fails = sum(bool(errs) for *_, errs in rows)
     print(f"{'viewport':9} {'scene':13} {'n':>3} {'min':>5} {'knob':>5}  result")
     for vp, sc, n, sm, kn, errs in rows:
         print(f"{vp:9} {sc:13} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")

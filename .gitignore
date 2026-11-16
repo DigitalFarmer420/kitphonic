@@ -1,2 +1,7 @@
 screenshots/sizes/
 __pycache__/
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
