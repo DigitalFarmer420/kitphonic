@@ -6,9 +6,11 @@ is < 80 px, anything interactive is cut off the screen, key elements overlap, th
 the slider is not in the bottom (thumb) zone in portrait. Saves a screenshot per scene.
 
   python3 tools/check-sizes.py [--base http://localhost:8099/] [--out screenshots/sizes] [--viewports 360x780,780x360]
-Requires: pip install playwright && playwright install chromium; the app served (npm start).
+Viewports run in parallel, one browser each (KITPHONIC_SIZES_WORKERS overrides the pool size).
+Each scene opens a new browser context. Requires: pip install playwright && playwright install chromium; the app served (npm start).
 """
 import argparse, json, os, sys
+from concurrent.futures import ThreadPoolExecutor
 from playwright.sync_api import sync_playwright
 
 REQUIRED = ['360x780', '780x360', '820x1180']
@@ -131,27 +133,51 @@ def check(m, vp, scene):
         if bottom_gap > m['vh'] * .25: errs.append(f"slider not in thumb zone ({bottom_gap:.0f}px above the bottom)")
     return errs
 
+GOTO_TIMEOUT_MS = 15000
+
+def launch_browser(p):
+    exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium'] if os.path.exists(c)), None)
+    return p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
+
+def run_viewport(vp, base, out, only):
+    """One browser for this viewport. Each scene gets its own context (clean storage)."""
+    w, h = map(int, vp.split('x'))
+    rows = []
+    with sync_playwright() as p:
+        b = launch_browser(p)
+        try:
+            for scene, q, js in SCENES:
+                if only and scene not in only: continue
+                ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, service_workers='block')
+                try:
+                    pg = ctx.new_page()
+                    pg.goto(base + ('?' + q if q else ''), wait_until='load', timeout=GOTO_TIMEOUT_MS)
+                    pg.wait_for_timeout(500)
+                    if js: pg.evaluate(js); pg.wait_for_timeout(700)
+                    m = pg.evaluate(MEASURE); errs = check(m, vp, scene)
+                    pg.screenshot(path=f"{out}/{scene}-{vp}.png")
+                    smallest = min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
+                    knob = next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
+                    rows.append((vp, scene, len(m['targets']), smallest, knob, errs))
+                finally:
+                    ctx.close()
+        finally:
+            b.close()
+    bad = sum(bool(errs) for *_, errs in rows)
+    print(f'{vp} finished {len(rows) - bad}/{len(rows)}', flush=True)
+    return rows
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
     ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
     only = set(filter(None, a.scenes.split(',')))
-    os.makedirs(a.out, exist_ok=True); fails = 0; rows = []
-    with sync_playwright() as p:
-        exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium'] if os.path.exists(c)), None)
-        b = p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
-        for vp in a.viewports.split(','):
-            w, h = map(int, vp.split('x'))
-            for scene, q, js in SCENES:
-                if only and scene not in only: continue
-                pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True)
-                pg.goto(a.base + ('?' + q if q else ''), wait_until='networkidle'); pg.wait_for_timeout(500)
-                if js: pg.evaluate(js); pg.wait_for_timeout(700)
-                m = pg.evaluate(MEASURE); errs = check(m, vp, scene)
-                pg.screenshot(path=f"{a.out}/{scene}-{vp}.png"); pg.close()
-                smallest = min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
-                knob = next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
-                rows.append((vp, scene, len(m['targets']), smallest, knob, errs)); fails += bool(errs)
-        b.close()
+    os.makedirs(a.out, exist_ok=True)
+    viewports = [v for v in a.viewports.split(',') if v]
+    workers = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or len(viewports) or 1))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        grouped = list(pool.map(lambda vp: run_viewport(vp, a.base, a.out, only), viewports))
+    rows = [row for group in grouped for row in group]
+    fails = sum(bool(errs) for *_, errs in rows)
     print(f"{'viewport':9} {'scene':13} {'n':>3} {'min':>5} {'knob':>5}  result")
     for vp, sc, n, sm, kn, errs in rows:
         print(f"{vp:9} {sc:13} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")
