@@ -82,11 +82,24 @@ export const dueItems = (responses, now = Date.now()) =>
 export function createStore(storage, key = 'kitphonic.v1.responses', cap = 5000) {
   const read = () => { try { return JSON.parse(storage?.getItem(key) || '[]'); } catch { return []; } };
   // the cap trims the oldest responses, never the map markers (progress must not roll back on a long-used device)
-  const write = a => { if (a.length > cap) { let drop = a.length - cap; a = a.filter(r => isMarker(r) || drop-- <= 0); } storage?.setItem(key, JSON.stringify(a)); };
+  const put = a => { storage?.setItem(key, JSON.stringify(a)); };
+  const write = a => {
+    if (a.length > cap) { let drop = a.length - cap; a = a.filter(r => isMarker(r) || drop-- <= 0); }
+    try { put(a); }
+    catch {
+      // QuotaExceeded (or any storage error): trim oldest log entries, keep markers, retry once; else skip the write.
+      // Never clear localStorage or drop other keys / existing child progress.
+      try {
+        const extras = a.filter(r => !isMarker(r)).length;
+        let drop = Math.max(1, Math.ceil(extras / 2));
+        put(a.filter(r => isMarker(r) || drop-- <= 0));
+      } catch { /* leave the previous value in place */ }
+    }
+  };
   return {
     all: read,
-    log(r) { const a = read(); a.push({ timestamp: Date.now(), ...r }); write(a); return a.at(-1); },
-    logMany(rs) { if (!rs.length) return; const a = read(); for (const r of rs) a.push({ timestamp: Date.now(), ...r }); write(a); },
+    log(r) { try { const a = read(); a.push({ timestamp: Date.now(), ...r }); write(a); return a.at(-1); } catch { return { timestamp: Date.now(), ...r }; } },
+    logMany(rs) { if (!rs.length) return; try { const a = read(); for (const r of rs) a.push({ timestamp: Date.now(), ...r }); write(a); } catch {} },
     clear() { storage?.removeItem(key); },
   };
 }
