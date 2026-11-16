@@ -149,6 +149,11 @@ class Net:
         with self.lock:
             return sum(1 for _, path in self.hits if needle in path)
 
+    def hit_count_exact(self, *names):
+        want = set(names)
+        with self.lock:
+            return sum(1 for _, path in self.hits if path in want)
+
     def bump(self, hold_after, prefix='/'):
         with self.lock:
             self.bumped, self.hold_after, self.audio, self.bump_prefix = True, hold_after, 0, prefix
@@ -213,6 +218,8 @@ def update_server(port, net):
             if path == '/repro.html':
                 src = open(os.path.join(ROOT, 'tests/fixtures/sw-killswitch-repro.html'), 'rb').read()
                 return self.body(src, 'text/html')
+            if path == '/probe.html':
+                return self.body(b'<!doctype html><title>sw probe</title>', 'text/html')
             with net.lock:
                 sw_files = dict(net.sw_files)
             if path == '/sw.js':
@@ -785,91 +792,108 @@ def killswitch_scenario(browser, root, net, label):
         problems.append(f'killswitch install {installed}')
 
     net.set_sw(DEV_MOUNT, NEW_KILLSWITCH)
-    navs = attach_navs(page)
-    page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
-    # Wait until the kill switch is controlling or a navigate has happened, then watch the rest of 30 s.
-    deadline = time.time() + 20
-    while time.time() < deadline:
-        try:
-            flag = page.evaluate("""async () => {
-              const c = navigator.serviceWorker.controller;
-              if (!c) return false;
-              return await new Promise(resolve => {
-                const ch = new MessageChannel();
-                ch.port1.onmessage = e => resolve(!!(e.data && e.data.killswitch === true));
-                c.postMessage({ type: 'kitphonic-killswitch' }, [ch.port2]);
-                setTimeout(() => resolve(false), 400);
-              });
-            }""")
-            if flag or len(navs) >= 1:
-                break
-        except Exception:
-            if len(navs) >= 1:
-                break
-        time.sleep(0.1)
-    wait_navs(KILLSWITCH_WATCH_S, navs)
+    net.clear_hits()
     try:
-        after = page.evaluate("""async () => {
-          const path = '/kitphonic-dev/';
-          const rs = await navigator.serviceWorker.getRegistrations();
-          const scopes = rs.map(r => new URL(r.scope).pathname).sort();
-          const names = await caches.keys();
-          const c = navigator.serviceWorker.controller;
-          let kill = false;
-          if (c) {
-            kill = await new Promise(resolve => {
-              const ch = new MessageChannel();
-              ch.port1.onmessage = e => resolve(!!(e.data && e.data.killswitch === true));
-              c.postMessage({ type: 'kitphonic-killswitch' }, [ch.port2]);
-              setTimeout(() => resolve(false), 400);
-            });
-          }
-          return { scopes, names, controlled: !!c, script: c && c.scriptURL, kill };
+        page.close()
+    except Exception:
+        pass
+    kind = getattr(getattr(browser, 'browser_type', None), 'name', None) or 'chromium'
+    probe = context.new_page()
+    probe.goto(root + 'probe.html', wait_until='load', timeout=15000)
+    # A client under the dev scope must exist so skipWaiting can finish activating.
+    result_path = os.path.join(os.environ.get('TMPDIR', '/tmp'), f'kp-killswitch-app-{kind}.json')
+    try:
+        os.remove(result_path)
+    except FileNotFoundError:
+        pass
+    started = time.time()
+    proc = _loop_client_proc(dev + '?sw=1&skipHello=1', kind, result_path)
+    try:
+        probe.evaluate("""async () => {
+          const r = await navigator.serviceWorker.getRegistration('/kitphonic-dev/');
+          if (r) await r.update();
         }""")
     except Exception as err:
-        after = {'error': str(err)}
-    print(label, 'killswitch after deploy', {'navs': len(navs), 'after': after, 'caches': None if 'error' in after else None})
-    if 'error' in after:
-        problems.append(f'killswitch after deploy {after}')
-    else:
-        if len(navs) > 2:
-            problems.append(f'killswitch app looped: {len(navs)} navigations')
-        if '/kitphonic/' not in after['scopes'] or '/kitphonic-dev/' not in after['scopes']:
-            problems.append(f'killswitch must stay registered and leave prod registered {after["scopes"]}')
-        if after.get('kill') is not True:
-            problems.append(f'killswitch did not identify itself {after}')
-        names = after['names']
-        if any(n.startswith('kitphonic:/kitphonic-dev/:') for n in names):
-            problems.append(f'killswitch left a dev app cache {names}')
-        if marker not in names:
-            problems.append(f'killswitch missing marker {names}')
-        if prod_name not in names:
-            problems.append(f'killswitch dropped prod cache {names}')
+        print(label, 'killswitch update()', err, flush=True)
+    ident = """async () => {
+      const identify = async (worker) => {
+        if (!worker) return null;
+        return await new Promise(resolve => {
+          const ch = new MessageChannel();
+          ch.port1.onmessage = e => resolve(e.data || null);
+          try { worker.postMessage({ type: 'kitphonic-killswitch' }, [ch.port2]); }
+          catch (err) { resolve({ error: String(err) }); }
+          setTimeout(() => resolve(null), 800);
+        });
+      };
+      const rs = await navigator.serviceWorker.getRegistrations();
+      const scopes = rs.map(r => new URL(r.scope).pathname).sort();
+      const names = await caches.keys();
+      const dev = rs.find(r => new URL(r.scope).pathname === '/kitphonic-dev/');
+      const pieces = {
+        installing: dev && dev.installing ? await identify(dev.installing) : null,
+        waiting: dev && dev.waiting ? await identify(dev.waiting) : null,
+        active: dev && dev.active ? await identify(dev.active) : null,
+      };
+      const kill = !!(pieces.active && pieces.active.killswitch === true);
+      return { scopes, names, pieces, kill };
+    }"""
+    after = None
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        after = probe.evaluate(ident)
+        if after.get('kill') is True:
+            break
+        time.sleep(0.2)
+    print(label, 'killswitch after update', after, flush=True)
+    # Finish the 30 s loop watch from the child start.
+    while time.time() < started + KILLSWITCH_WATCH_S:
+        if proc.poll() is not None:
+            break
+        time.sleep(0.05)
+    doc_hits = net.hit_count_exact('/kitphonic-dev/', '/kitphonic-dev/index.html')
+    print(label, 'killswitch after deploy child', {
+        'doc_hits': doc_hits, 'sw_hits': net.hit_count('/kitphonic-dev/sw.js'),
+        'client': 'exited' if proc.poll() is not None else 'running',
+        'result': _read_result(result_path),
+    }, flush=True)
+    _stop_proc(proc)
+    after = probe.evaluate(ident)
+    print(label, 'killswitch after deploy', {'doc_hits': doc_hits, 'after': after}, flush=True)
+    if doc_hits > 2:
+        problems.append(f'killswitch app looped: {doc_hits} document hits')
+    if '/kitphonic/' not in after['scopes'] or '/kitphonic-dev/' not in after['scopes']:
+        problems.append(f'killswitch must stay registered and leave prod registered {after["scopes"]}')
+    if after.get('kill') is not True:
+        problems.append(f'killswitch did not identify itself {after}')
+    names = after['names']
+    if any(n.startswith('kitphonic:/kitphonic-dev/:') for n in names):
+        problems.append(f'killswitch left a dev app cache {names}')
+    if marker not in names:
+        problems.append(f'killswitch missing marker {names}')
+    if prod_name not in names:
+        problems.append(f'killswitch dropped prod cache {names}')
+    probe.close()
 
     # Prod must still work offline while the dev kill switch is deployed.
     context.set_offline(True)
     off = offline_check(context, prod + '?sw=1&skipHello=1')
-    print(label, 'killswitch prod offline', off)
+    print(label, 'killswitch prod offline', off, flush=True)
     if off['controller'] != prod_name or not takes_ok(off['takes']) or off['errors']:
         problems.append(f'killswitch prod offline {off}')
     context.set_offline(False)
 
     # Restore the real sw.js. The real worker is an update, so it waits until a cold launch.
     net.set_sw(DEV_MOUNT, None)
-    try:
-        page.close()
-    except Exception:
-        pass
-    time.sleep(1)
     page = context.new_page()
     watch(page, errs)
-    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
     try:
+        page.goto(dev + '?sw=1&skipHello=1', wait_until='commit', timeout=15000)
         page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
         waiting = poll(page, "() => navigator.serviceWorker.getRegistration().then(r => !!r.waiting)", timeout=180, every=0.5)
     except Exception as err:
         waiting = f'error {err}'
-    print(label, 'killswitch restore waiting', waiting)
+    print(label, 'killswitch restore waiting', waiting, flush=True)
     try:
         page.close()
     except Exception:
@@ -877,12 +901,15 @@ def killswitch_scenario(browser, root, net, label):
     time.sleep(1)
     page = context.new_page()
     watch(page, errs)
-    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
-    page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+    try:
+        page.goto(dev + '?sw=1&skipHello=1', wait_until='commit', timeout=15000)
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+    except Exception as err:
+        problems.append(f'killswitch restore goto {err}')
     switched = poll(page, f"() => ({PROBE})().then(c => c === '{dev_name}' ? c : null)", timeout=40)
     ready = page.evaluate(WAIT_CACHE, dev_name) if switched == dev_name else {'complete': False, 'controller': switched}
     names = page.evaluate("() => caches.keys()")
-    print(label, 'killswitch restored', {'controller': switched, 'ready': ready, 'names': names})
+    print(label, 'killswitch restored', {'controller': switched, 'ready': ready, 'names': names}, flush=True)
     if switched != dev_name or not ready.get('complete'):
         problems.append(f'killswitch restore {switched} {ready}')
     if marker in names:
@@ -893,7 +920,7 @@ def killswitch_scenario(browser, root, net, label):
     context.set_offline(True)
     off_dev = offline_check(context, dev + '?sw=1&skipHello=1')
     off_prod = offline_check(context, prod + '?sw=1&skipHello=1')
-    print(label, 'killswitch restored offline', {'dev': off_dev, 'prod': off_prod})
+    print(label, 'killswitch restored offline', {'dev': off_dev, 'prod': off_prod}, flush=True)
     if off_dev['controller'] != dev_name or not takes_ok(off_dev['takes']) or off_dev['errors']:
         problems.append(f'killswitch restored dev offline {off_dev}')
     if off_prod['controller'] != prod_name or not takes_ok(off_prod['takes']) or off_prod['errors']:
