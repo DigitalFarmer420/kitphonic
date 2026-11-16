@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker, cachePrefixFor, cacheNameFor, prefixOfName, legacyOwned } from '../sw.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, cachePrefixFor as pagePrefixFor, wantsKillSwitch, killServiceWorker } from '../js/sw-register.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, cachePrefixFor as pagePrefixFor, wantsKillSwitch, killServiceWorker, shouldReloadAfterKill, navigationType, KILL_SETTLE_MS, isKillSwitchReply, isKillSwitchWorker } from '../js/sw-register.js';
 
 const origin = 'https://pages.example';
 const req = (path, extra = {}) => ({ url: origin + path, method: extra.method || 'GET', mode: extra.mode || 'cors' });
@@ -461,31 +461,123 @@ test('the kill switch unregisters and clears only this scope', async () => {
   const { caches, prodScope, devScope, prodName } = await twoSites();
   const legacy = await caches.open('kitphonic-1111111111111111');
   await legacy.put(`${devScope}index.html`, response(200, 'x'));
+  const incomplete = await caches.open('kitphonic:/kitphonic-dev/:f5f4063852ee2262');
+  await incomplete.put(`${devScope}index.html`, response(200, 'partial'));
+  const prodPartial = await caches.open('kitphonic:/kitphonic/:ffffffffffff');
+  await prodPartial.put(`${prodScope}index.html`, response(200, 'prod-partial'));
+  const mixed = await caches.open('kitphonic-bbbb0000bbbb0001');
+  await mixed.put(`${prodScope}index.html`, response(200, 'x'));
+  await mixed.put(`${devScope}js/app.js`, response(200, 'x'));
+  const mark = 'kitphonic-killswitch:/kitphonic-dev/';
+  await caches.open(mark);
   const gone = [];
   const reg = scope => ({ scope, async unregister() { gone.push(scope); return true; } });
   const nav = { serviceWorker: { async getRegistrations() { return [reg(prodScope), reg(devScope), reg(`${origin}/kitphonic-dev/sub/`)]; } } };
   const out = await killServiceWorker({ navigator: nav, caches, scope: devScope });
   assert.deepEqual(gone, [devScope]);
   assert.deepEqual(out.unregistered, [devScope]);
-  assert.deepEqual(out.deleted.sort(), ['kitphonic-1111111111111111', 'kitphonic:/kitphonic-dev/:0123456789abcdef'].sort());
+  assert.deepEqual(out.deleted.sort(), ['kitphonic-1111111111111111', 'kitphonic:/kitphonic-dev/:0123456789abcdef', 'kitphonic:/kitphonic-dev/:f5f4063852ee2262'].sort());
+  assert.deepEqual((await caches.keys()).sort(), [mark, prodName, 'kitphonic:/kitphonic/:ffffffffffff', 'kitphonic-bbbb0000bbbb0001'].sort());
+  assert.equal(caches.buckets.get(prodName).size, SHELL.length + TAKES.length);
+});
+
+test('the kill switch deletes an incomplete scoped cache that appears after the first keys() pass', async () => {
+  const { caches, prodScope, devScope, prodName } = await twoSites();
+  const lateName = 'kitphonic:/kitphonic-dev/:f5f4063852ee2262';
+  const late = await caches.open(lateName);
+  await late.put(`${devScope}index.html`, response(200, 'partial'));
+  let passes = 0;
+  const inner = caches.keys.bind(caches);
+  caches.keys = async () => {
+    const names = await inner();
+    passes++;
+    if (passes === 1) return names.filter(n => n !== lateName);
+    return names;
+  };
+  const nav = { serviceWorker: { async getRegistrations() { return []; } } };
+  const out = await killServiceWorker({ navigator: nav, caches, scope: devScope, settleMs: 30, intervalMs: 5 });
+  assert.ok(passes >= 2, `keys() should be polled more than once, got ${passes}`);
+  assert.ok(out.deleted.includes(lateName));
+  assert.ok(out.deleted.includes('kitphonic:/kitphonic-dev/:0123456789abcdef'));
   assert.deepEqual(await caches.keys(), [prodName]);
   assert.equal(caches.buckets.get(prodName).size, SHELL.length + TAKES.length);
+  assert.equal(prodScope.endsWith('/kitphonic/'), true);
+});
+
+test('a fresh ?nosw=1 visit reloads once; a reload pass does not', () => {
+  assert.equal(shouldReloadAfterKill({ search: '?nosw=1', type: 'navigate' }), true);
+  assert.equal(shouldReloadAfterKill({ search: '?skipHello=1&nosw=1', type: 'navigate' }), true);
+  assert.equal(shouldReloadAfterKill({ search: '?nosw=1', type: 'reload' }), false);
+  assert.equal(shouldReloadAfterKill({ search: '', type: 'navigate' }), false);
+  assert.equal(KILL_SETTLE_MS > 0, true);
+  assert.equal(navigationType({ getEntriesByType: () => [{ type: 'reload' }] }), 'reload');
+  assert.equal(navigationType({ getEntriesByType: () => [{ type: 'navigate' }] }), 'navigate');
+  assert.equal(navigationType({ navigation: { type: 1 } }), 'reload');
+  assert.equal(navigationType({}), 'navigate');
 });
 
 test('registerServiceWorker with ?nosw=1 runs the kill switch and registers nothing', async () => {
   const seen = [];
   let asked = 0;
+  let reloads = 0;
   const nav = { serviceWorker: {
     register() { seen.push('register'); return Promise.resolve(); },
     async getRegistrations() { asked++; return []; },
   } };
   const caches = fakeCaches();
   await caches.open('other-app');
-  assert.equal(registerServiceWorker({ navigator: nav, location: { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '?nosw=1' }, capacitor: false, caches }), false);
+  const loc = { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '?nosw=1', reload() { reloads++; } };
+  const perf = { getEntriesByType: () => [{ type: 'navigate' }] };
+  assert.equal(registerServiceWorker({ navigator: nav, location: loc, capacitor: false, caches, performance: perf, settleMs: 0 }), false);
   await new Promise(r => setTimeout(r, 0));
   assert.equal(asked, 1);
   assert.deepEqual(seen, []);
+  assert.equal(reloads, 1);
   assert.deepEqual(await caches.keys(), ['other-app']);
   const src = (await import('node:fs/promises')).readFile;
   assert.equal(/localStorage/.test(await src(new URL('../js/sw-register.js', import.meta.url), 'utf8')), false);
+
+  reloads = 0;
+  asked = 0;
+  const locReload = { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '?nosw=1', reload() { reloads++; } };
+  assert.equal(registerServiceWorker({ navigator: nav, location: locReload, capacitor: false, caches, performance: { getEntriesByType: () => [{ type: 'reload' }] }, settleMs: 0 }), false);
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(asked, 1);
+  assert.equal(reloads, 0, 'a reload pass must not reload again');
+});
+
+test('isKillSwitchWorker is true only when the worker identifies itself as the kill switch', async () => {
+  assert.equal(isKillSwitchReply({ killswitch: true }), true);
+  assert.equal(isKillSwitchReply({ type: 'kitphonic-killswitch', killswitch: true }), true);
+  assert.equal(isKillSwitchReply({ type: 'kitphonic-killswitch', killswitch: false }), false);
+  assert.equal(isKillSwitchReply({ cache: 'kitphonic-abc' }), false);
+  assert.equal(isKillSwitchReply(null), false);
+
+  const reply = data => ({
+    postMessage(_msg, ports) { ports[0].postMessage(data); },
+  });
+  assert.equal(await isKillSwitchWorker({ serviceWorker: { controller: reply({ type: 'kitphonic-killswitch', killswitch: true }) } }), true);
+  assert.equal(await isKillSwitchWorker({ serviceWorker: { controller: reply({ type: 'kitphonic-killswitch', killswitch: false }) } }), false);
+  assert.equal(await isKillSwitchWorker({ serviceWorker: { controller: reply({ cache: 'x' }) } }), false);
+  assert.equal(await isKillSwitchWorker({ serviceWorker: {} }), false);
+  assert.equal(await isKillSwitchWorker({ serviceWorker: { controller: { postMessage() { /* never replies */ } } } }, { timeoutMs: 30 }), false);
+});
+
+test('registerServiceWorker with ?nosw=1 does not reload when the worker is the kill switch', async () => {
+  let reloads = 0;
+  let asked = 0;
+  const worker = {
+    postMessage(_msg, ports) { ports[0].postMessage({ type: 'kitphonic-killswitch', killswitch: true }); },
+  };
+  const nav = { serviceWorker: {
+    controller: worker,
+    register() { throw new Error('must not register'); },
+    async getRegistrations() { asked++; return []; },
+  } };
+  const caches = fakeCaches();
+  const loc = { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '?nosw=1', reload() { reloads++; } };
+  assert.equal(registerServiceWorker({ navigator: nav, location: loc, capacitor: false, caches, performance: { getEntriesByType: () => [{ type: 'navigate' }] }, settleMs: 0 }), false);
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(asked, 1);
+  assert.equal(reloads, 0, 'a kill-switch worker already navigates at most once');
 });
