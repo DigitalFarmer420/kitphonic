@@ -10,7 +10,9 @@ cache stays while the new takes are incomplete, takes still play offline from th
 cache, and a cold relaunch applies the new worker and removes the old cache.
 It also serves the tree at /kitphonic/ and /kitphonic-dev/ on that one origin: both install,
 updating dev leaves prod's cache alone, both work offline, and ?nosw=1 on dev unregisters dev
-and clears only dev's caches (KP-QA-011, KP-QA-010).
+and clears only dev's caches (KP-QA-011, KP-QA-010). A follow-up scenario aborts a mid-install
+dev update (leaving an incomplete scoped cache) and checks that one ?nosw=1 visit removes every
+dev-scoped cache, complete or not, without touching prod or unowned legacy caches.
 
 Chromium is required. WebKit is attempted and reported when this Playwright build
 cannot install a service worker. Exit 0 when Chromium passes. A missing Playwright
@@ -210,6 +212,46 @@ def poll(page, expr, arg=None, timeout=30, every=0.2):
         time.sleep(every)
 
 
+def wait_map(page, timeout=20000):
+    """Wait for the map, tolerating a mid-wait navigation (?nosw=1 auto-reloads once)."""
+    deadline = time.time() + timeout / 1000
+    last = None
+    while time.time() < deadline:
+        try:
+            page.wait_for_function("() => window.kitphonic && !document.getElementById('map').hidden", timeout=2000)
+            return
+        except Exception as err:
+            last = err
+    raise TimeoutError(f'map not visible after nosw: {last}')
+
+
+def goto_nosw(page, url, timeout=30000):
+    """Open ?nosw=1 and wait out the single automatic reload.
+
+    The first load can paint the map before the kill switch reloads the tab.
+    Wait until this scope has no registration and the page is uncontrolled.
+    """
+    page.goto(url, wait_until='load', timeout=timeout)
+    wait_map(page, timeout=timeout)
+    deadline = time.time() + timeout / 1000
+    last = None
+    while time.time() < deadline:
+        try:
+            done = page.evaluate("""async () => {
+              if (!window.kitphonic || document.getElementById('map').hidden) return false;
+              const path = new URL('.', location.href).pathname;
+              const rs = await navigator.serviceWorker.getRegistrations();
+              const mine = rs.some(r => new URL(r.scope).pathname === path);
+              return !mine && !navigator.serviceWorker.controller;
+            }""")
+            if done:
+                return
+        except Exception as err:
+            last = err
+        time.sleep(0.1)
+    raise TimeoutError(f'nosw did not settle this scope uncontrolled: {last}')
+
+
 LESSON = '?sw=1&skipHello=1&activity=trace&gpc=s&reducedMotion=1'
 ON_LESSON = "() => !document.getElementById('lesson').hidden"
 
@@ -397,8 +439,7 @@ def two_sites_scenario(browser, root, net, label):
     # ?nosw=1 on dev: dev unregisters and its caches go; prod stays registered, cached, and offline-ready.
     page = context.new_page()
     watch(page, errs)
-    page.goto(dev + '?nosw=1&skipHello=1', wait_until='load')
-    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    goto_nosw(page, dev + '?nosw=1&skipHello=1')
     cleared = poll(page, "() => Promise.all([navigator.serviceWorker.getRegistrations(), caches.keys()]).then(([rs, n]) => rs.length === 1 && n.length === 1 ? true : null)", timeout=20)
     kill = {
         'scopes': page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname))"),
@@ -427,7 +468,97 @@ def two_sites_scenario(browser, root, net, label):
     return problems
 
 
+def nosw_incomplete_scenario(browser, root, net, label):
+    """One ?nosw=1 visit must delete an incomplete leftover from an aborted dev install."""
+    build = json_cache()
+    prod, dev = root + 'kitphonic/', root + 'kitphonic-dev/'
+    prod_name, dev_name, dev_new = scoped('/kitphonic/', build), scoped('/kitphonic-dev/', build), scoped('/kitphonic-dev/', NEW_CACHE)
+    mixed_legacy = 'kitphonic-bbbb0000bbbb0001'
+    prod_partial = 'kitphonic:/kitphonic/:ffffffffffff'
+    problems = []
+    context = browser.new_context()
+    errs = []
+    page = context.new_page()
+    watch(page, errs)
+    installed = {}
+    for url, name in ((prod, prod_name), (dev, dev_name)):
+        page.goto(url + '?sw=1&skipHello=1', wait_until='load')
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+        installed[url] = {'controller': page.evaluate(PROBE), **page.evaluate(WAIT_CACHE, name)}
+    if not all(v.get('complete') for v in installed.values()):
+        problems.append(f'nosw-incomplete install {installed}')
+
+    page.evaluate("""async ({ mixed, prodPartial, prodScope, devScope }) => {
+      const mixedCache = await caches.open(mixed);
+      await mixedCache.put(prodScope + 'index.html', new Response('x'));
+      await mixedCache.put(devScope + 'js/app.js', new Response('x'));
+      const partial = await caches.open(prodPartial);
+      await partial.put(prodScope + 'index.html', new Response('x'));
+    }""", {
+        'mixed': mixed_legacy,
+        'prodPartial': prod_partial,
+        'prodScope': prod,
+        'devScope': dev,
+    })
+
+    # Abort a dev update after 20 takes so an incomplete scoped cache remains.
+    net.bump(hold_after=20, prefix='/kitphonic-dev/')
+    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
+    page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
+    deadline = time.time() + 60
+    while net.audio <= 20 and time.time() < deadline:
+        time.sleep(0.1)
+    mid = page.evaluate(CACHES)
+    net.drop()
+    context.set_offline(True)
+    gone = poll(page, "() => navigator.serviceWorker.getRegistration().then(r => !r.installing && !r.waiting)", timeout=60)
+    leftover = page.evaluate(CACHES)
+    print(label, 'nosw-incomplete mid-install', {'audio': net.audio, 'mid': mid, 'dropped': gone, 'leftover': leftover})
+    if not gone:
+        problems.append(f'nosw-incomplete install not dropped {leftover}')
+    if dev_new not in leftover or leftover[dev_new].get('audio', 0) >= 830:
+        problems.append(f'nosw-incomplete missing leftover {leftover}')
+    if leftover.get(dev_name, {}).get('audio', 0) < 830 or leftover.get(prod_name, {}).get('audio', 0) < 830:
+        problems.append(f'nosw-incomplete lost a complete cache {leftover}')
+
+    net.restore()
+    context.set_offline(False)
+
+    # One user visit with ?nosw=1 (the page may auto-reload once). Do not navigate again before asserting.
+    goto_nosw(page, dev + '?nosw=1&skipHello=1')
+    kill = {
+        'scopes': page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname).sort())"),
+        'caches': page.evaluate(CACHES),
+        'controller': page.evaluate("() => !!navigator.serviceWorker.controller"),
+    }
+    print(label, 'nosw-incomplete after one pass', kill)
+    print(label, 'nosw-incomplete errors', errs)
+    names = list(kill['caches'])
+    dev_left = [n for n in names if n.startswith('kitphonic:/kitphonic-dev/:')]
+    if dev_left or kill['controller'] or kill['scopes'] != ['/kitphonic/']:
+        problems.append(f'nosw-incomplete leftover after one pass {kill}')
+    if kill['caches'].get(prod_name, {}).get('audio', 0) < 830:
+        problems.append(f'nosw-incomplete touched prod {kill["caches"]}')
+    if prod_partial not in names:
+        problems.append(f'nosw-incomplete touched prod incomplete cache {names}')
+    if mixed_legacy not in names:
+        problems.append(f'nosw-incomplete touched unowned legacy {names}')
+    if errs:
+        problems.append(errs)
+
+    page.close()
+    context.set_offline(True)
+    off = offline_check(context, prod + '?sw=1&skipHello=1')
+    print(label, 'nosw-incomplete prod offline', off)
+    if off['controller'] != prod_name or not takes_ok(off['takes']) or off['errors']:
+        problems.append(f'nosw-incomplete prod offline {off}')
+    context.close()
+    net.__init__()
+    return problems
+
+
 def wait_http(port):
+
     url = f'http://127.0.0.1:{port}/sw.js'
     for _ in range(50):
         try:
@@ -515,8 +646,7 @@ def scenario(browser, base, label):
     page = quiet.new_page()
     nosw_errs = []
     watch(page, nosw_errs)
-    page.goto(base + '?nosw=1&skipHello=1', wait_until='load')
-    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    goto_nosw(page, base + '?nosw=1&skipHello=1')
     page.wait_for_timeout(500)
     regs = page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => r.scope))")
     controlled = page.evaluate("() => !!navigator.serviceWorker.controller")
@@ -551,6 +681,8 @@ def webkit(browser_type, base, upd=None, net=None):
         problems += update_scenario(browser, upd, net, 'WEBKIT')
         net.__init__()
         problems += two_sites_scenario(browser, upd, net, 'WEBKIT')
+        net.__init__()
+        problems += nosw_incomplete_scenario(browser, upd, net, 'WEBKIT')
     browser.close()
     return problems
 
@@ -576,6 +708,8 @@ def main():
             problems += update_scenario(browser, upd, net, 'CHROMIUM')
             net.__init__()
             problems += two_sites_scenario(browser, upd, net, 'CHROMIUM')
+            net.__init__()
+            problems += nosw_incomplete_scenario(browser, upd, net, 'CHROMIUM')
             browser.close()
             problems += webkit(p.webkit, base, upd, net)
         if problems:
