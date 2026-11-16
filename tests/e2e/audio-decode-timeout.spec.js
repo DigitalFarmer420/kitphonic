@@ -3,26 +3,34 @@ import { test, expect } from '@playwright/test';
 // Mirrors the WebKit gap in /workspace/kitphonic-qa/hello-return-webkit/REPORT.md:
 // resume() rejects with InvalidStateError and decodeAudioData never settles. Unlock used
 // to wait on that decode with no timeout, so #play stayed .going and the map never appeared.
-// The stub is injected before the app boots so this is reproducible on Chromium and WebKit.
-// Chromium often starts AudioContext already 'running', so after the hung decode times out
-// play() may fall back to a short tone (via 'tone') and still reach the map.
+// A complete fake AudioContext is installed before the app boots so CI WebKit (which has a
+// working audio device) cannot bypass the stub the way a patched native instance can.
 test('hung decode plus failed resume still reaches the map', async ({ page }) => {
   await page.addInitScript(() => {
-    const Orig = window.AudioContext || window.webkitAudioContext;
-    if (!Orig || Orig.__kitDecodeHang) return;
-    const wrap = function AudioContextHang(...args) {
-      const ctx = new Orig(...args);
-      ctx.resume = () => Promise.reject(new DOMException('Failed to start the audio device', 'InvalidStateError'));
-      ctx.decodeAudioData = () => new Promise(() => {});
-      return ctx;
-    };
-    wrap.__kitDecodeHang = true;
-    wrap.prototype = Orig.prototype;
-    window.AudioContext = wrap;
-    window.webkitAudioContext = wrap;
+    class KitHungAudioContext {
+      state = 'suspended';
+      currentTime = 0;
+      destination = {};
+      resume() {
+        return Promise.reject(new DOMException('Failed to start the audio device', 'InvalidStateError'));
+      }
+      decodeAudioData() { return new Promise(() => {}); }
+      createBufferSource() {
+        return { playbackRate: { value: 1 }, connect() {}, start() {}, stop() {}, onended: null };
+      }
+      createOscillator() {
+        return { frequency: { value: 0 }, type: 'sine', connect() { return this; }, start() {}, stop() {} };
+      }
+      createGain() {
+        return { gain: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() { return this; } };
+      }
+    }
+    window.AudioContext = KitHungAudioContext;
+    window.webkitAudioContext = KitHungAudioContext;
+    window.__kitDecodeHangStub = true;
   });
   await page.goto('/', { waitUntil: 'domcontentloaded' });
-  await page.waitForFunction(() => window.kitphonic?.helloGate);
+  await page.waitForFunction(() => window.kitphonic?.helloGate && window.__kitDecodeHangStub);
   await page.locator('#play').click();
   const t0 = Date.now();
   // JS budget is ~1.7 s (DECODE_MS + RESUME_MS). Allow extra for WebKit under load;
@@ -33,11 +41,12 @@ test('hung decode plus failed resume still reaches the map', async ({ page }) =>
     screen: [...document.querySelectorAll('.screen')].find(s => !s.hidden)?.id,
     phase: window.kitphonic.helloGate.phase,
     mapHidden: document.getElementById('map').hidden,
-    hellos: (window.__kitAudioLog || []).filter(e => e.id === 'm-hello'),
+    unlocked: !!window.kitphonic.audio.unlocked,
+    hellos: (window.__kitAudioLog || []).filter(e => e.id === 'm-hello').map(e => e.via),
   }));
   expect(state.screen).toBe('map');
   expect(state.phase).toBe('done');
   expect(state.mapHidden).toBe(false);
-  // The recorded take must not play: the decode never settled. A running context may tone.
-  expect(state.hellos.every(e => e.via === 'tone')).toBe(true);
+  expect(state.unlocked).toBe(false);
+  expect(state.hellos).toEqual([]);
 });
