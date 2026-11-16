@@ -8,6 +8,9 @@ bump the cache name (forcing a new worker), hold takes part-way through the new 
 and drop the network. It checks that the old worker keeps the lesson mid-update, the old
 cache stays while the new takes are incomplete, takes still play offline from the old
 cache, and a cold relaunch applies the new worker and removes the old cache.
+It also serves the tree at /kitphonic/ and /kitphonic-dev/ on that one origin: both install,
+updating dev leaves prod's cache alone, both work offline, and ?nosw=1 on dev unregisters dev
+and clears only dev's caches (KP-QA-011, KP-QA-010).
 
 Chromium is required. WebKit is attempted and reported when this Playwright build
 cannot install a service worker. Exit 0 when Chromium passes. A missing Playwright
@@ -82,7 +85,8 @@ TAKES3 = """async () => {
 
 WAIT_CACHE = """async (name) => {
   const list = await (await fetch('sw-assets.json')).json();
-  const want = [...list.shell, ...list.audio].map(p => '/' + p);
+  const reg = await navigator.serviceWorker.getRegistration();
+  const want = [...list.shell, ...list.audio].map(p => new URL(p, reg.scope).pathname);
   const deadline = Date.now() + 170000;
   let files = 0;
   while (Date.now() < deadline) {
@@ -95,6 +99,12 @@ WAIT_CACHE = """async (name) => {
 }"""
 
 NEW_CACHE = 'kitphonic-deadbeef00000001'
+SITES = ('/kitphonic/', '/kitphonic-dev/')
+
+
+def scoped(path, build):
+    """Cache name a worker registered at `path` uses for build `kitphonic-<hash>` (KP-QA-011)."""
+    return f"kitphonic:{path}:{build[len('kitphonic-'):]}"
 CACHE_LINE = re.compile(r"^export const CACHE = '(kitphonic-[0-9a-f]+)';$", re.M)
 
 
@@ -103,15 +113,16 @@ class Net:
     def __init__(self):
         self.lock = threading.Lock()
         self.bumped = False
+        self.bump_prefix = '/'
         self.hold_after = None
         self.down = False
         self.audio = 0
         self.release = threading.Event()
         self.release.set()
 
-    def bump(self, hold_after):
+    def bump(self, hold_after, prefix='/'):
         with self.lock:
-            self.bumped, self.hold_after, self.audio = True, hold_after, 0
+            self.bumped, self.hold_after, self.audio, self.bump_prefix = True, hold_after, 0, prefix
             self.release.clear()
 
     def drop(self):
@@ -150,10 +161,18 @@ def update_server(port, net):
             self.wfile.write(data)
 
         def do_GET(self):
-            path = self.path.split('?')[0]
+            full = self.path.split('?')[0]
+            # The same tree is also served at /kitphonic/ and /kitphonic-dev/ (two deployments, one origin).
+            path = full
+            for mount in SITES:
+                if full.startswith(mount):
+                    path = '/' + full[len(mount):]
+                    self.path = path + self.path[len(full):]
+                    break
+            bumped = net.bumped and full.startswith(net.bump_prefix)
             if net.down:
                 return self.hang_up()
-            if path.startswith('/audio/takes/') and net.bumped:
+            if path.startswith('/audio/takes/') and bumped:
                 with net.lock:
                     net.audio += 1
                     n, hold = net.audio, net.hold_after
@@ -161,10 +180,10 @@ def update_server(port, net):
                     net.release.wait(120)
                     if net.down:
                         return self.hang_up()
-            if net.bumped and path == '/sw.js':
+            if bumped and path == '/sw.js':
                 src = open(os.path.join(ROOT, 'sw.js'), encoding='utf8').read()
                 return self.body(CACHE_LINE.sub(f"export const CACHE = '{NEW_CACHE}';", src).encode(), 'text/javascript')
-            if net.bumped and path == '/sw-assets.json':
+            if bumped and path == '/sw-assets.json':
                 src = open(os.path.join(ROOT, 'sw-assets.json'), encoding='utf8').read()
                 return self.body(src.replace(f'"cache": "{old}"', f'"cache": "{NEW_CACHE}"').encode(), 'application/json')
             return super().do_GET()
@@ -196,7 +215,8 @@ ON_LESSON = "() => !document.getElementById('lesson').hidden"
 
 
 def update_scenario(browser, base, net, label):
-    old = json_cache()
+    old = scoped('/', json_cache())
+    new = scoped('/', NEW_CACHE)
     problems = []
     context = browser.new_context()
     page = context.new_page()
@@ -236,7 +256,7 @@ def update_scenario(browser, base, net, label):
         problems.append(f'mid-install control {mid}')
     if old not in mid['caches'] or mid['caches'][old]['audio'] < 830:
         problems.append(f'old cache not kept mid-install {mid["caches"]}')
-    if NEW_CACHE in mid['caches'] and mid['caches'][NEW_CACHE]['audio'] >= 830:
+    if new in mid['caches'] and mid['caches'][new]['audio'] >= 830:
         problems.append(f'new cache unexpectedly complete {mid["caches"]}')
     if any(v.get('status') != 200 or v.get('bytes', 0) < 100 for v in mid['takes'].values()):
         problems.append(f'mid-install takes {mid["takes"]}')
@@ -278,7 +298,7 @@ def update_scenario(browser, base, net, label):
     print(label, 'update waiting', wait_state)
     if not waiting or wait_state['controller'] != old or not wait_state['on_lesson'] or wait_state['controllerchange'] != 0 or wait_state['unloads'] != 0:
         problems.append(f'waiting state {wait_state}')
-    if old not in wait_state['caches'] or wait_state['caches'].get(NEW_CACHE, {}).get('audio', 0) < 830:
+    if old not in wait_state['caches'] or wait_state['caches'].get(new, {}).get('audio', 0) < 830:
         problems.append(f'waiting caches {wait_state["caches"]}')
 
     # 4. Cold relaunch: every tab closed, then a new launch. The new worker activates and the old cache goes.
@@ -288,21 +308,122 @@ def update_scenario(browser, base, net, label):
     watch(page, errs)
     page.goto(base + '?sw=1&skipHello=1', wait_until='load')
     page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
-    after = poll(page, f"() => ({PROBE})().then(c => c === '{NEW_CACHE}' ? c : null)", timeout=20)
-    names = poll(page, f"() => caches.keys().then(n => n.length === 1 && n[0] === '{NEW_CACHE}' ? n : null)", timeout=30)
+    after = poll(page, f"() => ({PROBE})().then(c => c === '{new}' ? c : null)", timeout=20)
+    names = poll(page, f"() => caches.keys().then(n => n.length === 1 && n[0] === '{new}' ? n : null)", timeout=30)
     context.set_offline(True)
     page.reload(wait_until='load', timeout=30000)
     page.wait_for_function("() => window.kitphonic && !document.getElementById('map').hidden", timeout=30000)
     relaunch = {'controller': page.evaluate(PROBE), 'caches': page.evaluate(CACHES), 'offline_takes': page.evaluate(TAKES3)}
     print(label, 'update cold relaunch', relaunch)
     print(label, 'update errors', errs)
-    if after != NEW_CACHE or not names:
+    if after != new or not names:
         problems.append(f'cold relaunch {after} {names} {relaunch}')
     if any(v.get('status') != 200 or v.get('bytes', 0) < 100 for v in relaunch['offline_takes'].values()):
         problems.append(f'relaunch takes {relaunch}')
     if errs:
         problems.append(errs)
     context.close()
+    return problems
+
+
+def offline_check(context, url):
+    page = context.new_page()
+    errs = []
+    watch(page, errs)
+    page.goto(url, wait_until='load', timeout=30000)
+    page.wait_for_function("() => window.kitphonic && !document.getElementById('map').hidden", timeout=30000)
+    out = {'controller': page.evaluate(PROBE), 'takes': page.evaluate(TAKES3), 'onLine': page.evaluate('() => navigator.onLine'), 'errors': errs}
+    page.close()
+    return out
+
+
+def takes_ok(takes):
+    return all(v.get('status') == 200 and v.get('bytes', 0) >= 100 for v in takes.values())
+
+
+def two_sites_scenario(browser, root, net, label):
+    """KP-QA-011 + KP-QA-010: /kitphonic/ and /kitphonic-dev/ on one origin keep separate caches."""
+    build = json_cache()
+    prod, dev = root + 'kitphonic/', root + 'kitphonic-dev/'
+    prod_name, dev_name, dev_new = scoped('/kitphonic/', build), scoped('/kitphonic-dev/', build), scoped('/kitphonic-dev/', NEW_CACHE)
+    problems = []
+    context = browser.new_context()
+    errs = []
+    page = context.new_page()
+    watch(page, errs)
+    installed = {}
+    for url, name in ((prod, prod_name), (dev, dev_name)):
+        page.goto(url + '?sw=1&skipHello=1', wait_until='load')
+        page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+        installed[url] = {'controller': page.evaluate(PROBE), **page.evaluate(WAIT_CACHE, name)}
+    both = page.evaluate(CACHES)
+    scopes = page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname).sort())")
+    print(label, 'two-sites installed', installed, 'scopes', scopes, 'caches', both)
+    if installed[prod]['controller'] != prod_name or installed[dev]['controller'] != dev_name or not all(v['complete'] for v in installed.values()):
+        problems.append(f'two-sites install {installed}')
+    if sorted(both) != sorted([prod_name, dev_name]) or scopes != ['/kitphonic-dev/', '/kitphonic/']:
+        problems.append(f'two-sites caches {both} {scopes}')
+
+    # Update dev only (new build, full install, cold relaunch). Prod's cache must survive.
+    net.bump(hold_after=None, prefix='/kitphonic-dev/')
+    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
+    page.evaluate("() => navigator.serviceWorker.getRegistration().then(r => { r.update().catch(() => {}); })")
+    waiting = poll(page, "() => navigator.serviceWorker.getRegistration().then(r => !!r.waiting)", timeout=150, every=0.5)
+    page.close()
+    time.sleep(1)
+    page = context.new_page()
+    watch(page, errs)
+    page.goto(dev + '?sw=1&skipHello=1', wait_until='load')
+    page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=30000)
+    switched = poll(page, f"() => ({PROBE})().then(c => c === '{dev_new}' ? c : null)", timeout=20)
+    settled = poll(page, f"() => caches.keys().then(n => n.length === 2 && n.includes('{dev_new}') && n.includes('{prod_name}') ? n : null)", timeout=30)
+    after = page.evaluate(CACHES)
+    print(label, 'two-sites dev updated', {'waiting': waiting, 'dev_controller': switched, 'caches': after})
+    if not waiting or switched != dev_new or not settled or after.get(prod_name, {}).get('audio', 0) < 830:
+        problems.append(f'two-sites dev update {waiting} {switched} {after}')
+    page.close()
+
+    # Both deployments work offline.
+    context.set_offline(True)
+    off = {'prod': offline_check(context, prod + '?sw=1&skipHello=1'), 'dev': offline_check(context, dev + '?sw=1&skipHello=1')}
+    print(label, 'two-sites offline', off)
+    if off['prod']['controller'] != prod_name or off['dev']['controller'] != dev_new:
+        problems.append(f'two-sites offline control {off}')
+    for site in off.values():
+        if not takes_ok(site['takes']) or site['onLine'] is not False or site['errors']:
+            problems.append(f'two-sites offline {site}')
+    context.set_offline(False)
+
+    # ?nosw=1 on dev: dev unregisters and its caches go; prod stays registered, cached, and offline-ready.
+    page = context.new_page()
+    watch(page, errs)
+    page.goto(dev + '?nosw=1&skipHello=1', wait_until='load')
+    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    cleared = poll(page, "() => Promise.all([navigator.serviceWorker.getRegistrations(), caches.keys()]).then(([rs, n]) => rs.length === 1 && n.length === 1 ? true : null)", timeout=20)
+    kill = {
+        'scopes': page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname))"),
+        'caches': page.evaluate(CACHES),
+    }
+    page.reload(wait_until='load')
+    page.wait_for_function("() => !document.getElementById('map').hidden", timeout=20000)
+    page.wait_for_timeout(500)
+    kill['dev_controlled_after_reload'] = page.evaluate("() => !!navigator.serviceWorker.controller")
+    kill['dev_registrations_after_reload'] = page.evaluate("() => navigator.serviceWorker.getRegistrations().then(rs => rs.map(r => new URL(r.scope).pathname))")
+    page.close()
+    context.set_offline(True)
+    kill['prod_offline'] = offline_check(context, prod + '?sw=1&skipHello=1')
+    print(label, 'two-sites nosw on dev', kill)
+    print(label, 'two-sites errors', errs)
+    if not cleared or kill['scopes'] != ['/kitphonic/'] or list(kill['caches']) != [prod_name] or kill['caches'][prod_name]['audio'] < 830:
+        problems.append(f'nosw kill {kill}')
+    if kill['dev_controlled_after_reload'] or kill['dev_registrations_after_reload'] != ['/kitphonic/']:
+        problems.append(f'nosw after reload {kill}')
+    if kill['prod_offline']['controller'] != prod_name or not takes_ok(kill['prod_offline']['takes']) or kill['prod_offline']['errors']:
+        problems.append(f'prod after dev nosw {kill["prod_offline"]}')
+    if errs:
+        problems.append(errs)
+    context.close()
+    net.__init__()
     return problems
 
 
@@ -344,16 +465,18 @@ def scenario(browser, base, label):
       const want = new Set([...list.shell, ...list.audio].map(p => '/' + p));
       const deadline = Date.now() + 170000;
       let files = 0;
+      const reg = await navigator.serviceWorker.getRegistration();
+      const name = 'kitphonic:' + new URL(reg.scope).pathname + ':' + list.cache.slice('kitphonic-'.length);
       while (Date.now() < deadline) {
-        const cache = await caches.open(list.cache);
+        const cache = await caches.open(name);
         const have = new Set((await cache.keys()).map(k => new URL(k.url).pathname));
         files = have.size;
         if ([...want].every(p => have.has(p))) {
-          return { cache: list.cache, files, audio: list.audio.length, shell: list.shell.length };
+          return { cache: name, files, audio: list.audio.length, shell: list.shell.length };
         }
         await new Promise(r => setTimeout(r, 100));
       }
-      return { cache: list.cache, files, audio: list.audio.length, shell: list.shell.length, timeout: true };
+      return { cache: name, files, audio: list.audio.length, shell: list.shell.length, timeout: true };
     }""")
     page.evaluate("""() => {
       const key = 'kitphonic.v1.responses';
@@ -426,6 +549,8 @@ def webkit(browser_type, base, upd=None, net=None):
     if upd:
         net.__init__()
         problems += update_scenario(browser, upd, net, 'WEBKIT')
+        net.__init__()
+        problems += two_sites_scenario(browser, upd, net, 'WEBKIT')
     browser.close()
     return problems
 
@@ -449,6 +574,8 @@ def main():
                 return 0
             problems = scenario(browser, base, 'CHROMIUM')
             problems += update_scenario(browser, upd, net, 'CHROMIUM')
+            net.__init__()
+            problems += two_sites_scenario(browser, upd, net, 'CHROMIUM')
             browser.close()
             problems += webkit(p.webkit, base, upd, net)
         if problems:
