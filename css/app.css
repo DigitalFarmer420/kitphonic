@@ -564,10 +564,22 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .portrait #fm-tray{margin-top:auto;width:100%;max-height:none;justify-content:center}
 .portrait #fm-card,.portrait #fm-word,.portrait #fm-made,.portrait #fm-tray{left:auto !important;right:auto !important;top:auto !important;bottom:auto !important}
 .portrait #fm-bubble{max-width:min(18rem, 68%)}
+/* A 320×568 board with 24/48 insets is only ~496px tall. Seven 64px tiles need two rows,
+   so the header, card and empty made-strip give up the space above the tray. */
+.tight.portrait #family:not([hidden]){padding:max(4.6rem, 74px) 0.35rem 0.2rem;gap:0.25rem}
+.tight.portrait #fm-mascot{top:0.35rem;left:4.75rem}
+.tight.portrait #fm-mascot svg{width:2.25rem;height:2.25rem}
+.tight.portrait #fm-bubble{font-size:0.85rem;padding:0.2rem 0.45rem;max-width:min(14rem, 62%)}
+.tight.portrait #fm-card{height:64px;width:7rem}
+.tight.portrait #fm-word,.tight.portrait #fm-slot,.tight.portrait #fm-rime{height:64px}
+.tight.portrait #fm-slot,.tight.portrait #fm-rime{font-size:2.6rem}
+.tight.portrait #fm-made{min-height:0;flex:0 0 auto}
+.tight.portrait .ftile{width:64px;height:64px;font-size:1.8rem}
+.tight.portrait #fm-tray{gap:4px;row-gap:6px}
 .short #word-mascot{top:max(5.625rem, 72px)}
 .short #fm-card,.tall #fm-card{top:max(6rem, 76px)}
-.short #tiles{bottom:max(12.125rem, 156px);height:clamp(64px, 6.875rem, 8rem)}
-.short #markers{bottom:max(7rem, 88px)}
+.short #tiles{height:clamp(64px, 6.875rem, 8rem);bottom:min(max(12.125rem, 156px), calc(100% - 50px - clamp(64px, 6.875rem, 8rem)))}
+.short #markers{height:clamp(64px, 4.5rem, 9rem);bottom:min(max(7rem, 88px), calc(100% - 50px - clamp(64px, 6.875rem, 8rem) - clamp(64px, 4.5rem, 9rem)))}
 .short #slider{bottom:max(0.625rem, 6px)}
 .short #fm-made{top:min(13.25rem, calc(100% - (var(--rows, 1) * 6rem + 5.75rem)));left:min(13.125rem, 36%);right:0.75rem}
 #hello .kitwrap{width:min(13.75rem, 70%);height:min(13.75rem, 34%)}

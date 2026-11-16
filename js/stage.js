@@ -89,6 +89,7 @@ export function createStage(el, onChange = () => {}) {
     });
     for (const m of ['portrait', 'short', 'tall']) el.classList.toggle(m, s.mode === m);
     el.classList.toggle('ptab', s.mode === 'portrait' && s.designW >= 600);
+    el.classList.toggle('tight', s.mode === 'portrait' && s.h < 520);
     el.dataset.insetSource = insets.source;
     el.style.setProperty('--dy', '0px');
     el.style.setProperty('--scale', '1');

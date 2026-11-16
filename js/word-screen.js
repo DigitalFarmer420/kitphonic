@@ -40,27 +40,41 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function renderPebbles() {
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
   }
-  function render() {
-    if (baseLevel == null) { level = entry.level; mode = cfg.tapMode[level]; } // mixed-level list ("new words" stops)
-    const w = entry.w, ids = entry.parse?.split(' '); ms = markersFor(w, level, { ...cfg.markerOpts, ids }); layout = wordLayout(w.length, layoutFor(stage.info));
-    const uFit = stage.info?.u || 1;
+  function layoutWord() {
+    const w = entry.w, ids = entry.parse?.split(' ');
+    ms = markersFor(w, level, { ...cfg.markerOpts, ids });
+    layout = wordLayout(w.length, layoutFor(stage.info));
     units = graphemeUnits(w, ids); // a digraph is one joined sky tile (words-board 3, note 20)
-    tiles.replaceChildren(...units.map((u, i) => {
+    return ids;
+  }
+  function paintTiles() {
+    const uFit = stage.info?.u || 1;
+    const tileOf = (u, i) => {
       const dg = u.b - u.a > 1, t = el('button', 'tile L' + (dg ? ' dg' : ''), caseFor(u.text, cfg.tileCase));
       t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92 * uFit, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
       t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
-    }));
-    mk.replaceChildren(...ms.map((m, i) => {
+    };
+    if (tiles.children.length === units.length) { const old = [...tiles.children]; units.forEach((u, i) => old[i].replaceWith(tileOf(u, i))); }
+    else tiles.replaceChildren(...units.map(tileOf));
+    const markerOf = (m, i) => {
       const b = layout.markerBox(m), dw = Math.round(30 * uFit), bw = Math.round(52 * uFit), bh = Math.round(32 * uFit);
       const d = el('button', 'marker', m.type === 'dot' ? `<div class="dot"><svg width="${dw}" height="${dw}"><use href="#snd-one"/></svg></div>` : `<div class="bar"><svg width="${bw}" height="${bh}"><use href="#snd-chunk"/></svg></div>`);
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', m.type === 'dot' ? `play sound ${m.text}` : `play ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
-    }));
+    };
+    if (mk.children.length === ms.length) { const old = [...mk.children]; ms.forEach((m, i) => old[i].replaceWith(markerOf(m, i))); }
+    else mk.replaceChildren(...ms.map(markerOf));
     const tb = trackBox(); track.style.left = tb.left + 'px'; track.style.width = tb.width + 'px';
+  }
+  function render() {
+    if (baseLevel == null) { level = entry.level; mode = cfg.tapMode[level]; } // mixed-level list ("new words" stops)
+    layoutWord();
+    paintTiles();
     fill.style.left = '0px';
     $('card').className = ''; $('card').innerHTML = '<span class="q">?</span>';
     $('next').hidden = true; $('check').hidden = true;
     sweep = createSweep(ms, { gapMs: cfg.sweepGapMs }); setHandle(0); light([]);
+    const w = entry.w;
     choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: focus ? `focus:${focus}` : cfg.choiceStrategy[level], trial: checkTrial++ })
       : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.(), focus }) : null;
     // support level for this word; without a check there is nothing to read against, so Kit models it (S4)
@@ -313,7 +327,11 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     $('check').hidden = true; showSlider(true); state = 'slide'; say('Say the sounds, then pick.', { id: 'm-say-sounds' }); hand.start(handPath, { now: false }); };
 
   return {
-    relayout() { if (!entry) return; if (state === 'slide') render(); else if (state === 'revealed') fitRevealPic(); },
+    relayout() {
+      if (!entry) return;
+      if (state === 'slide') render();
+      else if (state === 'revealed') { layoutWord(); paintTiles(); fitRevealPic(); }
+    },
     start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)

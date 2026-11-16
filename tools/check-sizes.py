@@ -262,6 +262,53 @@ def extra_passes(base, out):
                     pg.screenshot(path=f"{out}/inset-{scene}-{vp}.png"); ctx.close()
                     rows.append((vp + '+bars', scene, len(m['targets']), min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0),
                                  next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None), errs))
+            # B1/B2: the two smallest boards with 24/48 insets. The 64px floor must stay tappable
+            # inside the board, clear of the bars and the progress dots.
+            inset_cases = [
+                ('320x568+bars', 320, 568, 'family-7', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1', None),
+                ('568x320+bars', 568, 320, 'word-map', 'skipHello=1&level=2&word=map&seed=1', None),
+                ('568x320+bars', 568, 320, 'reveal', 'skipHello=1&level=2&word=map&seed=1', "kitphonic.screen.debugShow('revealed')"),
+            ]
+            for vp, w, h, scene, q, js in inset_cases:
+                ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, service_workers='block')
+                pg = ctx.new_page()
+                pg.goto(base + '?' + q, wait_until='load', timeout=GOTO_TIMEOUT_MS); pg.wait_for_timeout(400)
+                pg.evaluate("""([t, b]) => { const s = document.documentElement.style;
+                  s.setProperty('--safe-area-inset-top', t + 'px'); s.setProperty('--safe-area-inset-right', '0px');
+                  s.setProperty('--safe-area-inset-bottom', b + 'px'); s.setProperty('--safe-area-inset-left', '0px'); }""", [24, 48])
+                pg.wait_for_timeout(300)
+                if js: pg.evaluate(js); pg.wait_for_timeout(400)
+                else: pg.wait_for_timeout(900)
+                detail = pg.evaluate(r"""() => {
+                  const stage = document.getElementById('stage').getBoundingClientRect();
+                  const sel = document.getElementById('family') && !document.getElementById('family').hidden ? '.ftile' : '#tiles .tile';
+                  const buttons = [...document.querySelectorAll('.top button')];
+                  const dots = [...document.querySelectorAll('.path .peb')];
+                  const hitBox = (a, b) => a.left + 1 < b.right && b.left + 1 < a.right && a.top + 1 < b.bottom && b.top + 1 < a.bottom;
+                  const rows = [];
+                  for (const el of document.querySelectorAll(sel)) {
+                    const r = el.getBoundingClientRect();
+                    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+                    const hit = document.elementFromPoint(x, y);
+                    const own = hit && (hit === el || el.contains(hit));
+                    const outside = r.top < stage.top - 1 || r.bottom > stage.bottom + 1 || r.left < stage.left - 1 || r.right > stage.right + 1;
+                    const onDot = dots.some(d => hitBox(r, d.getBoundingClientRect()));
+                    const onBar = buttons.some(b => hitBox(r, b.getBoundingClientRect()));
+                    rows.push({ name: el.getAttribute('aria-label') || el.textContent.trim(), w: r.width, h: r.height, outside, own, onDot, onBar });
+                  }
+                  return rows;
+                }""")
+                errs = []
+                for t in detail:
+                    if min(t['w'], t['h']) < 63.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 64")
+                    if t['outside']: errs.append(f"{t['name']} outside the board")
+                    if not t['own']: errs.append(f"{t['name']} centre missed")
+                    if t['onDot']: errs.append(f"{t['name']} covers a progress dot")
+                    if t['onBar']: errs.append(f"{t['name']} under the top bar")
+                if not detail: errs.append('no tiles')
+                pg.screenshot(path=f"{out}/inset-{scene}-{vp}.png")
+                ctx.close()
+                rows.append((vp, scene, len(detail), min((min(t['w'], t['h']) for t in detail), default=0), None, errs))
         finally:
             b.close()
     return rows

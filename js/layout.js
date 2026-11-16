@@ -30,8 +30,11 @@ export function tileFit(n, { stageW = STAGE_W, areaLeft = 0, maxTile = TILE_W, g
   let tileW = fit(side, gap);
   if (tileW < minTile) { gap = Math.min(gap, 4); side = Math.min(side, 2); tileW = fit(side, gap); }
   if (tileW < minTile) { gap = 0; side = 0; tileW = fit(side, gap); }
-  const width = Math.min(tileW, maxTile);
-  return { tileW: width >= minTile ? Math.max(minTile, width) : Math.max(0, width), gap, side };
+  // The design cap (maxTile) can fall under the touch floor on a small board. Use the floor
+  // when the row still has room; only a row that cannot fit the floor stays under it.
+  const floor = Math.min(minTile, Math.max(0, tileW));
+  const width = Math.min(Math.max(0, tileW), Math.max(maxTile, floor));
+  return { tileW: width, gap, side };
 }
 export function wordLayout(n, opts = {}) {
   const o = typeof opts === 'number' ? { stageW: opts } : opts, stageW = o.stageW ?? STAGE_W, areaLeft = o.areaLeft ?? 0;
