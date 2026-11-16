@@ -37,7 +37,11 @@ export function shuffle(arr, rand = Math.random) {
 }
 // Copy non-index own properties (e.g. .cards, .contrast) that array methods would drop.
 function copyArrayTags(src, dest) {
-  for (const key of Object.keys(src)) if (!/^\d+$/.test(key)) dest[key] = src[key];
+  for (const key of Reflect.ownKeys(src)) {
+    if (key === 'length') continue;
+    if (typeof key === 'string' && /^\d+$/.test(key)) continue;
+    dest[key] = src[key];
+  }
   return dest;
 }
 // Reshuffle after a wrong pick: always a different order (so the child sees the choices move).
