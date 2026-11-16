@@ -28,9 +28,28 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   // --- design 1a: big ear (replays the sound only), 3 tiles below it, star tray, ghost hand ---
   const soundClip = g => (audio.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
   function earPos() { const s = stage.info, u = U(); return s.mode === 'short' ? { x: Math.round(s.w * 0.22) + 40 * u, y: 240 * u } : { x: s.w / 2, y: s.mode === 'portrait' ? Math.max(310 * u, s.h * 0.36) : 250 * u }; }
+  // Half the tile's border box. Matches the CSS rule that wins for this mode (the tile is centred on its point).
+  function huntHalf() {
+    const s = stage.info, u = U();
+    const design = s.mode === 'short' ? 66 : s.mode === 'portrait' ? (s.designW >= 600 ? 68 : 62) : 75;
+    return design * u;
+  }
+  // #l-tray is bottom 1.125rem and 4.5rem tall. Sound-tap's gridSpec keeps the last row above that band;
+  // hunt used to ignore it, so a 540-tall board doubled at u = 2 buried the tiles, and 1280×800 sat flush.
+  function trayCeiling() {
+    const s = stage.info, u = U();
+    return s.h - (18 + 72) * u - 16;
+  }
+  function huntLift() {
+    const s = stage.info, u = U(), e = earPos();
+    const y = s.mode === 'short' ? 230 * u : e.y + (s.mode === 'portrait' ? 200 : 185) * u;
+    return Math.max(0, y + huntHalf() - trayCeiling());
+  }
+  // Ear and the row under it move up together, so the gap between them stays put and the tiles clear the tray.
+  function placedEar() { const e = earPos(); return stage.info.mode === 'short' ? e : { x: e.x, y: e.y - huntLift() }; }
   function earLayout(letters) {
-    const s = stage.info, u = U(), e = earPos(), n = letters.length;
-    if (s.mode === 'short') { const x0 = e.x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u })); }
+    const s = stage.info, u = U(), e = placedEar(), n = letters.length, lift = huntLift();
+    if (s.mode === 'short') { const x0 = earPos().x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u - lift })); }
     const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = e.y + (s.mode === 'portrait' ? 200 : 185) * u;
     return letters.map((l, i) => ({ l, x: s.w / 2 + (i - (n - 1) / 2) * cw, y }));
   }
@@ -47,7 +66,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     return { per, cellH, top: b.top };
   }
   function addEar() {
-    const e = earPos(), b = el('button', 'ear emoji', '👂'); b.id = 'l-ear'; b.setAttribute('aria-label', 'Hear the sound again');
+    const e = placedEar(), b = el('button', 'ear emoji', '👂'); b.id = 'l-ear'; b.setAttribute('aria-label', 'Hear the sound again');
     b.style.left = e.x + 'px'; b.style.top = e.y + 'px'; b.onpointerdown = ev => { ev.stopPropagation(); audio.stop(); audio.play(`snd-${run.target}`); idleHand(); };
     arena.append(b);
   }
@@ -56,7 +75,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   const hideHand = () => $('l-hand')?.remove();
   function showHand() { // ghost hand: taps the ear, then hovers the tiles (not the answer). First item + after 5 s idle.
     if (!run || run.busy || !run.def.ear) return; hideHand();
-    const h = el('div', 'ghosthand emoji', '👆'); h.id = 'l-hand'; const e = earPos(); h.style.left = e.x + 'px'; h.style.top = e.y + 'px'; $('letters').append(h);
+    const h = el('div', 'ghosthand emoji', '👆'); h.id = 'l-hand'; const e = placedEar(); h.style.left = e.x + 'px'; h.style.top = e.y + 'px'; $('letters').append(h);
     if (settings.reducedMotion()) { setTimeout(hideHand, 1500); return; }
     run.items.forEach((it, i) => setTimeout(() => { if (h.isConnected) { h.style.left = it.x + 'px'; h.style.top = (it.y + 40 * U()) + 'px'; } }, 1000 + i * 900));
     setTimeout(hideHand, 1200 + run.items.length * 900);
@@ -71,7 +90,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     if (run.def.ear) {
       const laid = earLayout(letters);
       run.items.forEach((it, i) => { it.x = laid[i].x; it.y = laid[i].y; });
-      const ear = $('l-ear'); if (ear) { const e = earPos(); ear.style.left = e.x + 'px'; ear.style.top = e.y + 'px'; }
+      const ear = $('l-ear'); if (ear) { const e = placedEar(); ear.style.left = e.x + 'px'; ear.style.top = e.y + 'px'; }
     } else if (run.def.drift && !settings.reducedMotion()) {
       const fresh = floatInit(letters, { box: b, rand, half: tileHalf() });
       run.items.forEach((it, i) => { it.x = fresh[i].x; it.y = fresh[i].y; it.vx = fresh[i].vx * u; it.vy = fresh[i].vy * u; it.half = fresh[i].half; });

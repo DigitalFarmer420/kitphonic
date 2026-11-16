@@ -13,8 +13,8 @@ from playwright.sync_api import sync_playwright
 
 REQUIRED = ['360x780', '780x360', '820x1180']
 EXTRA = ['390x844', '844x390', '1180x820']
-# u is capped at 2. These are the windows where a 540-tall landscape board used to be doubled onto the tray.
-LARGE = ['1920x1080', '2560x1440', '3840x2160']
+# u is capped at 2. 1280x800 sits flush on the tray; the three larger windows double the 540-tall board onto it.
+LARGE = ['1280x800', '1920x1080', '2560x1440', '3840x2160']
 MIN, KNOB = 64, 80
 # make n words in the family screen (tap a tile, tap the slot), waiting for each word to finish
 MAKE = "(async n => { const k = kitphonic.familyScreen, idle = () => new Promise(r => { const t = setInterval(() => (!k.run || !k.run.busy) && (clearInterval(t), r()), 50); }); for (let i = 0; i < n; i++) { await idle(); const t = document.querySelector('#fm-tray .ftile:not(.made)'); t.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); dispatchEvent(new PointerEvent('pointerup')); document.getElementById('fm-slot').click(); await new Promise(r => setTimeout(r, 150)); } })(%d)"
@@ -159,7 +159,7 @@ def check(m, vp, scene):
         for y in m['ltr']: rows[y] = rows.get(y, 0) + 1
         c = list(rows.values())
         if len(c) > 1 and (min(c) == 1 or max(c) - min(c) > 1): errs.append(f"unbalanced grid {c}")
-    # Past 2000×1400, u is capped at 2 and the board (1920×1260 at the tall minimum) is centered on purpose.
+    # A capped desktop board (u = 2, the 1080p composition) is centered in a larger window on purpose.
     capped = m['vw'] > 2000 or m['vh'] > 1400
     if not capped and m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
     if not capped and m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")

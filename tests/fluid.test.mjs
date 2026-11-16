@@ -1,4 +1,4 @@
-// Fluid board: rem scale tracks the viewport, controls stay at the touch floor, 4K does not grow past u = 2.
+// Fluid board: rem scale tracks the viewport, controls stay at the touch floor, 4K does not grow past 1080p.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -69,17 +69,14 @@ test('tested phone and tablet boards still fill the screen at the old scale', ()
   const pad = stageFor(820, 1180);
   assert.ok(Math.abs(pad.u - 1.3) < 0.03);
   const desk = stageFor(1920, 1080);
-  // 16:9 is taller than 540 design px now, so u is 1080/630 rather than 2, and the height still fills.
-  assert.ok(desk.h >= 1080 * 0.97, desk.h);
-  assert.ok(desk.u < MAX_SCALE && desk.u > 1.6, desk.u);
-  assert.ok(buttonPx(desk.u) >= MIN_TOUCH && knobPx(desk.u) >= MIN_KNOB);
+  assert.ok(Math.abs(desk.u - 2) < 0.02);
+  assert.ok(desk.w >= 1920 * 0.97 && desk.h >= 1080 * 0.97);
 });
 
-test('4K caps the composition at u = 2 instead of scale 4', () => {
+test('4K caps the composition at the 1080p board instead of scale 4', () => {
   const s = stageFor(3840, 2160);
   assert.equal(s.u, MAX_SCALE);
-  assert.ok(Math.abs(s.w - 1920) < 2, s.w);
-  assert.ok(s.h > 1080, s.h); // tall minimum is above the old 540, so the capped board is taller than 1080
+  assert.ok(Math.abs(s.w - 1920) < 2 && Math.abs(s.h - 1080) < 2, `${s.w}x${s.h}`);
   assert.equal(buttonPx(s.u), 144);
   assert.equal(knobPx(s.u), 180);
 });
