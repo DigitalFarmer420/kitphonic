@@ -4,7 +4,7 @@ import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { LETTER_PICS, WORDS } from './content.js';
 import { GPC } from './sequence.js';
-import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox } from './trace.js';
+import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox, traceHold, traceTouch } from './trace.js';
 import { shuffle } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
@@ -24,8 +24,51 @@ export function introLabel(word, g) {
 }
 export const soundClip = (g, audio) => (audio?.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
 
+// ?tracelog=1 only. Last 40 pointer and touch events on the letter, with a Copy button.
+function mountTraceLog(svg, toLetter, owner, tracer) {
+  if (!/[?&]tracelog=1(?:&|$)/.test(location.search)) return { remove() {} };
+  const lines = [];
+  const box = document.createElement('div');
+  box.id = 'tracelog';
+  box.style.cssText = 'position:absolute;left:8px;right:8px;bottom:8px;z-index:40;max-height:40%;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:rgba(58,46,40,.92);color:#fff;font:12px/1.35 ui-monospace,monospace';
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.textContent = 'Copy';
+  btn.style.cssText = 'align-self:flex-end;height:36px;padding:0 14px;border:0;border-radius:8px;background:#fff;color:#3A2E28;font-weight:700';
+  const pre = document.createElement('pre');
+  pre.style.cssText = 'margin:0;overflow:auto;white-space:pre-wrap';
+  btn.onclick = () => {
+    const text = lines.join('\n');
+    const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; box.append(ta); ta.select(); try { document.execCommand('copy'); } catch { /* the text stays on screen */ } ta.remove(); btn.textContent = 'Copied'; };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => { btn.textContent = 'Copied'; }, fallback);
+    else fallback();
+  };
+  box.append(btn, pre);
+  $('lesson').append(box);
+  const tgt = el => el?.id || (el?.className?.baseVal ?? el?.className) || el?.tagName || '';
+  const note = (kind, e, mapped) => {
+    const st = tracer();
+    const xy = mapped ? mapped.map(n => Math.round(n * 10) / 10).join(',') : '';
+    lines.push([Math.round(e.timeStamp || 0), kind, e.pointerId ?? '', e.pointerType || '', String(tgt(e.target)).slice(0, 24), Math.round(e.clientX || 0), Math.round(e.clientY || 0), xy, st.active ? 1 : 0, st.k, owner.id ?? '', e.defaultPrevented ? 1 : 0].join(' '));
+    if (lines.length > 40) lines.shift();
+    pre.textContent = lines.join('\n');
+  };
+  const onPointer = e => { let mapped = null; try { mapped = toLetter(e); } catch { /* mapping must not break the log */ } note(e.type, e, mapped); };
+  const onTouch = e => {
+    const t = e.changedTouches?.[0];
+    let mapped = null; try { if (t) mapped = toLetter(t); } catch { /* same */ }
+    note(e.type, { timeStamp: e.timeStamp, pointerId: t?.identifier, pointerType: 'touch', target: e.target, clientX: t?.clientX, clientY: t?.clientY, defaultPrevented: e.defaultPrevented }, mapped);
+  };
+  for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'gotpointercapture']) svg.addEventListener(type, onPointer);
+  for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) svg.addEventListener(type, onTouch);
+  return { remove() {
+    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'gotpointercapture']) svg.removeEventListener(type, onPointer);
+    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) svg.removeEventListener(type, onTouch);
+    box.remove();
+  } };
+}
+
 export function createLessonScreen({ audio, stage, settings, rand = Math.random, record = () => {}, onHome, seen = noSeen }) {
-  let run = null;
+  let run = null, detachTrace = () => {};
   const hand = createGhostHand({ host: $('lesson'), reduced: () => settings.reducedMotion?.() });
   const at = node => centerIn(node, $('lesson'), stage.scale);
   const reduced = () => settings.reducedMotion?.();
@@ -89,18 +132,60 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     // sits on top of the green start dot before the child has touched.
     const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
     const owner = strokeOwner(); // rc6: only the finger that started the stroke drives it (iPad palm / second finger)
-    svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return; if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
-      const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { owner.reset(); owner.claim(e.pointerId); svg.setPointerCapture?.(e.pointerId); guide(true); } };
-    svg.onpointermove = e => {
-      if (!dragging || !run || !owner.owns(e.pointerId)) return;
-      let st; for (const c of (e.getCoalescedEvents?.() ?? []).concat(e)) { const [x, y] = toLetter(c); st = tracer.move(x, y); if (st.strokeDone) break; } // coalesced: smooth fast strokes
+    let held = false, touchId = null, lastClient = null;
+    const seenTouches = new Map();
+    const paintMove = (samples) => {
+      let st = tracer.state();
+      for (const c of samples) { const q = toLetter(c); if (!q) continue; st = tracer.move(q[0], q[1]); if (st.strokeDone) break; }
       lanes.forEach((ln, i) => ln.classList.toggle('off', i === st.stroke && !st.onPath));
       if (!st.onPath && !run.offSaid) { run.offSaid = true; say('Back on the dots!', 'm-back-on'); setTimeout(() => run && (run.offSaid = false), 2500); }
-      if (st.strokeDone) { dragging = false; drawMarks(); }
+      if (st.strokeDone) { dragging = false; held = false; drawMarks(); }
       drawInk(); guide(dragging);
       if (st.letterDone) done();
+      return st;
     };
-    svg.onpointerup = svg.onpointercancel = e => { if (!owner.release(e.pointerId)) return; dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); }; // cancel keeps the ink: the child resumes from where it paused
+    const finishStroke = () => { if (owner.id != null) owner.release(owner.id); held = false; dragging = false; touchId = null; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
+    const onTouchStart = e => {
+      if (run && !$('trace').hidden) e.preventDefault();
+      for (const t of e.changedTouches) seenTouches.set(t.identifier, [t.clientX, t.clientY]);
+    };
+    const onTouchMove = e => {
+      if (run && !$('trace').hidden) e.preventDefault();
+      if (!held || !dragging || !run) return;
+      const t = traceTouch(e.touches, { id: touchId, last: lastClient });
+      if (!t) return;
+      if (touchId != null && t.identifier !== touchId && [...e.touches].some(x => x.identifier === touchId)) return;
+      touchId = t.identifier; lastClient = [t.clientX, t.clientY];
+      paintMove([t]);
+    };
+    const onTouchEnd = e => {
+      if (touchId == null || ![...e.changedTouches].some(t => t.identifier === touchId)) return;
+      seenTouches.delete(touchId); finishStroke();
+    };
+    svg.addEventListener('touchstart', onTouchStart, { passive: false });
+    svg.addEventListener('touchmove', onTouchMove, { passive: false });
+    svg.addEventListener('touchend', onTouchEnd);
+    svg.addEventListener('touchcancel', onTouchEnd);
+    const log = mountTraceLog(svg, toLetter, owner, () => tracer);
+    svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return; if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
+      const [x, y] = toLetter(e); const st = tracer.down(x, y); dragging = st.active; if (dragging) { held = false; lastClient = [e.clientX, e.clientY]; touchId = e.pointerType === 'touch' ? (seenTouches.has(e.pointerId) ? e.pointerId : (traceTouch([...seenTouches].map(([identifier, xy]) => ({ identifier, clientX: xy[0], clientY: xy[1] })), { last: lastClient })?.identifier ?? e.pointerId)) : null; owner.reset(); owner.claim(e.pointerId); if (e.pointerType !== 'touch') svg.setPointerCapture?.(e.pointerId); guide(true); } };
+    svg.onpointermove = e => {
+      if (!dragging || !run || !owner.owns(e.pointerId)) return;
+      lastClient = [e.clientX, e.clientY];
+      paintMove((e.getCoalescedEvents?.() ?? []).concat(e)); // coalesced: smooth fast strokes
+    };
+    const endStroke = e => {
+      const act = traceHold({ type: e.type, target: e.target, svg, pointerType: e.pointerType || 'touch' });
+      if (act === 'ignore') return; // unconfirmed: bubbled child lostpointercapture
+      if (act === 'hold' && owner.owns(e.pointerId)) { held = true; return; } // touch cancel: keep owner and ink; touchmove continues
+      if (!owner.release(e.pointerId)) return; held = false; dragging = false; touchId = null; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off'));
+    }; // a real lift keeps the ink: resume where it paused
+    svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = endStroke;
+    window.addEventListener('pointerup', endStroke); window.addEventListener('pointercancel', endStroke);
+    detachTrace = () => { window.removeEventListener('pointerup', endStroke); window.removeEventListener('pointercancel', endStroke);
+      svg.removeEventListener('touchstart', onTouchStart); svg.removeEventListener('touchmove', onTouchMove);
+      svg.removeEventListener('touchend', onTouchEnd); svg.removeEventListener('touchcancel', onTouchEnd); log.remove();
+      if (svg.onpointerup === endStroke) svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = null; };
     $('tr-undo').onclick = () => { tracer.undo(); drawInk(); drawMarks(); };
     function done() {
       rep++; tray(); run.busy = true; audio.play('sfx-chime'); audio.play(soundClip(g, audio), { gapMs: 300 }); // rc5: sound after the chime ends (spec §3.3 L1: trace while its sound plays)
@@ -138,7 +223,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16, c.offsetLeft + c.offsetWidth / 2 + 20) + 'px'; });
   }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }
-  function stop() { run = null; hand.stop(); audio.stop(); }
+  function stop() { detachTrace(); detachTrace = () => {}; run = null; hand.stop(); audio.stop(); }
   $('ls-home').onclick = () => { stop(); onHome(); };
   return {
     // opts: { activity: 'intro' | 'trace', gpc, onComplete }
