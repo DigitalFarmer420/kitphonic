@@ -49,8 +49,16 @@ function hitTest() {
     const r = el.getBoundingClientRect();
     const x = r.left + r.width / 2;
     const y = r.top + r.height / 2;
-    // A control scrolled below the fold is not on screen. Only centres the child can tap count.
+    // A control scrolled below the fold, or out of the grown-ups scroller into the safe-area pad, is not on screen.
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) continue;
+    let clipped = false;
+    for (let n = el.parentElement; n && !clipped; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (!/(auto|scroll|hidden)/.test(cs.overflowY + cs.overflow)) continue;
+      const b = n.getBoundingClientRect();
+      if (x < b.left || x > b.right || y < b.top || y > b.bottom) clipped = true;
+    }
+    if (clipped) continue;
     const hit = document.elementFromPoint(x, y);
     const own = hit && (hit === el || el.contains(hit));
     const blocked = hit && (hit.id?.startsWith('kit-sessionlog') || hit.closest?.('#kit-sessionlog'));
