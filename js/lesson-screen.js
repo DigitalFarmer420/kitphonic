@@ -103,6 +103,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
 
   // ---- 1c tracing ----
   function trace(g) {
+    detachTrace(); detachTrace = () => {}; // a re-entered trace must not stack touch / window listeners
     const l = GPC[g]?.grapheme ?? g;
     $('intro').hidden = true; $('trace').hidden = false; $('lesson').classList.add('tracing');
     const svg = $('tr-svg'); svg.replaceChildren();
