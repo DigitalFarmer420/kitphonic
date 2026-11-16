@@ -429,7 +429,16 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .pa-x{width:56px;height:56px;border-radius:16px;border:2px solid #eadfcd;background:#fff;font-size:28px;color:#6b5a4d}
 #pa-body{flex:1;overflow-y:auto;padding:4px 16px 24px;-webkit-overflow-scrolling:touch;display:grid;gap:14px;align-content:start}
 .pcol{display:grid;gap:14px;align-content:start}
-.short #pa-body,.tall #pa-body{grid-template-columns:1.1fr 1fr}
+.short #pa-body,.tall #pa-body{grid-template-columns:1.1fr 1fr;overflow:hidden;align-items:stretch;padding-bottom:4px}
+/* Each column scrolls inside the safe stage. One shared scroller was as tall as the sounds
+   list, so scrolling to the end carried the shorter settings column above the status bar.
+   #parent is zoomed by 1/scale and the stage is scaled by --scale, so a CSS px here is a
+   screen px: do not divide the 48px minimum or these scrollports by the scale.
+   The body's 24px bottom pad sat below the scrollport, so a control cut by the fold had its
+   centre in that pad. The pad moves into the scroller: 20px less on the body, and a 6px grid
+   item whose 14px gap makes the same 20px, so scroll-to-end stays put and the centre is tappable. */
+.short #pa-body>.pcol,.tall #pa-body>.pcol{min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.short #pa-body>.pcol::after,.tall #pa-body>.pcol::after{content:"";display:block;height:6px}
 .pcard{background:#fff;border:2px solid #efe4d3;border-radius:20px;padding:16px}
 .pcard h2{font-size:17px;margin:0 0 10px;font-weight:800}
 .pcard h3{font-size:13px;margin:14px 0 6px;color:#7a6a5c;text-transform:uppercase;letter-spacing:.04em}
@@ -449,7 +458,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .plegend i{display:inline-block;width:14px;height:14px;border-radius:4px;vertical-align:-2px;margin-right:4px;border:2px solid transparent}
 .pnote{margin-top:12px;font-size:14px;background:#fdf6ea;border-radius:12px;padding:10px}
 .pmode{margin-top:10px;font-size:14px}.pfoot{margin:14px 4px 4px;font-size:12px;color:var(--muted);text-align:right}
-.ptip{color:#5d4e42}.plink{border:0;background:none;color:#4b7fa3;font:inherit;font-weight:700;text-decoration:underline;padding:12px 4px;min-height:44px}
+.ptip{color:#5d4e42}.plink{border:0;background:none;color:#4b7fa3;font:inherit;font-weight:700;text-decoration:underline;padding:12px 4px;min-height:48px}
 .prow{margin-bottom:14px}.plabel{font-size:14px;font-weight:700;margin-bottom:6px}
 .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:#f4ede2;border-radius:14px;padding:4px;gap:4px}
 .seg button{height:48px;border:0;border-radius:11px;background:transparent;font:inherit;font-weight:700;font-size:14px;color:#6b5a4d}
