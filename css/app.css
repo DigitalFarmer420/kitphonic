@@ -15,7 +15,7 @@ html{font-size:clamp(12px, 4vw, 32px)}
 .L{font-family:'Andika',sans-serif;font-weight:700;color:var(--ink);line-height:1}
 .emoji{font-family:'Noto Color Emoji','Apple Color Emoji','Segoe UI Emoji',sans-serif;line-height:1}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}
-#handle:focus-visible,#sn-handle:focus-visible,.ftile:focus-visible,#fm-slot:focus-visible{outline:0.25rem solid var(--skyd);outline-offset:0.1875rem}
+#handle:focus-visible,#sn-handle:focus-visible,.ftile:focus-visible,#fm-slot:focus-visible{outline:4px solid var(--skyd);outline-offset:3px}
 .btn{width:4.5rem;height:4.5rem;border-radius:1.375rem;background:#fff;border:0.125rem solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.875rem;color:var(--muted)}
 .btn.coral{color:var(--coral)}
 #check-help,#check-home{position:absolute;top:0.875rem;right:1.125rem}#check-home{right:auto;left:1.125rem}.portrait #check-help{right:0.875rem}.portrait #check-home{left:0.875rem}.short #check-help,.short #check-home{top:0.625rem;right:1rem}.short #check-home{right:auto;left:1rem}#check-help[hidden]{display:none}
@@ -543,10 +543,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .portrait .ipic{top:min(28.75rem, calc(100% - 15.5rem));width:min(21.25rem, 92%);height:min(8.125rem, 20%);margin-left:0;transform:translateX(-50%)}
 .portrait #family:not([hidden]){display:flex;flex-direction:column;align-items:center;padding:min(12.25rem, 30vh) 0.5rem 0.5rem;gap:0.75rem}
 .portrait #fm-card,.portrait #fm-word,.portrait #fm-made,.portrait #fm-tray{position:relative;margin-left:0;width:auto;max-width:100%}
-.portrait #fm-card{height:min(7.5rem, 16%);width:min(12.5rem, 78%)}
-.portrait #fm-word{height:auto}
-.portrait #fm-slot,.portrait #fm-rime{height:min(7.5rem, 14%);min-height:64px}
-.portrait .ftile{width:min(5.25rem, 22%);height:min(6.5rem, 12%);min-width:64px;min-height:64px}
+.portrait #fm-card{height:7.5rem;width:12.5rem}
+.portrait #fm-word{height:7.5rem}
+.portrait #fm-slot,.portrait #fm-rime{height:max(64px, 7.5rem)}
+.portrait .ftile{width:clamp(64px, 5.25rem, 7rem);height:clamp(64px, 6.5rem, 8.5rem)}
 .portrait #fm-made{flex:1 1 auto;min-height:0;align-content:start}
 .portrait #fm-tray{margin-top:auto;width:100%;max-height:none;justify-content:center}
 .portrait #fm-card,.portrait #fm-word,.portrait #fm-made,.portrait #fm-tray{left:auto !important;right:auto !important;top:auto !important;bottom:auto !important}
@@ -557,11 +557,14 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #markers{bottom:max(7rem, 88px)}
 .short #slider{bottom:max(0.625rem, 6px)}
 .short #fm-made{top:min(13.25rem, calc(100% - (var(--rows, 1) * 6rem + 5.75rem)));left:min(13.125rem, 36%);right:0.75rem}
-.short #fm-tray,.tall #fm-tray,.portrait #fm-tray{max-height:48%}
 #hello .kitwrap{width:min(13.75rem, 70%);height:min(13.75rem, 34%)}
 /* Grown-ups is an adult overlay in real screen px, not the child rem scale. position:fixed
    escapes the board (no transform on #stage) so 48px controls stay 48px on every window. */
-#parent{position:fixed;inset:0;z-index:40;zoom:1;width:auto;height:auto;font-size:clamp(15px, 1.5vw, 18px)}
+#parent{position:fixed;inset:0;z-index:40;zoom:1;width:auto;height:auto;box-sizing:border-box;font-size:clamp(15px, 1.5vw, 18px);
+  padding-top:var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  padding-right:var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  padding-bottom:var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  padding-left:var(--safe-area-inset-left, env(safe-area-inset-left, 0px))}
 .ptile{min-width:48px;min-height:48px;height:auto;padding:4px 10px}
 .seg button,.preset,.pconfirm-row button{min-height:48px;height:clamp(48px, 5vh, 56px)}
 .pa-x{width:clamp(48px, 56px, 64px);height:clamp(48px, 56px, 64px)}

@@ -94,7 +94,26 @@ MEASURE = r"""() => {
   const empty = [...root.querySelectorAll('button, .marker .bar, .marker .dot')].filter(vis).filter(e => !e.textContent.trim() && !e.matches('[data-dropslot]') && !e.querySelector('svg, img, .emoji')).map(name);
   // Uiux rc1: grown-ups sound grid tiles never shrink below 32 px (the card scrolls instead)
   const ptiles = [...document.querySelectorAll('#parent:not([hidden]) .ptile')].map(e => ({ name: 'ptile[' + e.textContent.trim() + ']', ...box(e) }));
-  return { ptiles, empty, cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  // A hidden screen that still paints (a display rule beating [hidden]) steals the tap. The centre of every control must hit that control or something inside it.
+  const covered = [];
+  const clipped = (e, x, y) => {
+    if (x < 0 || y < 0 || x > innerWidth || y > innerHeight) return true;
+    for (let n = e.parentElement; n; n = n.parentElement) {
+      const cs = getComputedStyle(n);
+      if (!/(auto|scroll|hidden)/.test(cs.overflowY + cs.overflow)) continue;
+      const b = n.getBoundingClientRect();
+      if (x < b.left || x > b.right || y < b.top || y > b.bottom) return true;
+    }
+    return false;
+  };
+  for (const e of [...root.querySelectorAll('button, #handle, #sn-handle, .stop, .ear, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')].filter(vis).filter(el => !el.classList.contains('marker'))) {
+    const r = e.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    if (clipped(e, x, y)) continue; // scrolled out of #pa-body is not a tap the child can miss
+    const hit = document.elementFromPoint(x, y);
+    if (!hit || (hit !== e && !e.contains(hit))) covered.push(name(e) + ' -> ' + (hit ? (hit.id ? '#' + hit.id : (hit.className.baseVal ?? hit.className).toString().split(' ')[0]) : 'nothing'));
+  }
+  return { ptiles, empty, cueHits, covered, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
 ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
@@ -112,6 +131,7 @@ def check(m, vp, scene):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
         if t['play'] and vp in CLASSIC and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
+    errs += [f'covered {c}' for c in m.get('covered', [])]
     errs += [f'empty button {n}' for n in m.get('empty', [])]
     errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 48" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 47.5]
     k = m['key']

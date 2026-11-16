@@ -43,14 +43,16 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function render() {
     if (baseLevel == null) { level = entry.level; mode = cfg.tapMode[level]; } // mixed-level list ("new words" stops)
     const w = entry.w, ids = entry.parse?.split(' '); ms = markersFor(w, level, { ...cfg.markerOpts, ids }); layout = wordLayout(w.length, layoutFor(stage.info));
+    const uFit = stage.info?.u || 1;
     units = graphemeUnits(w, ids); // a digraph is one joined sky tile (words-board 3, note 20)
     tiles.replaceChildren(...units.map((u, i) => {
       const dg = u.b - u.a > 1, t = el('button', 'tile L' + (dg ? ' dg' : ''), caseFor(u.text, cfg.tileCase));
-      t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
+      t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92 * uFit, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
       t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
     }));
     mk.replaceChildren(...ms.map((m, i) => {
-      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="30" height="30"><use href="#snd-one"/></svg></div>' : '<div class="bar"><svg width="52" height="32"><use href="#snd-chunk"/></svg></div>');
+      const b = layout.markerBox(m), dw = Math.round(30 * uFit), bw = Math.round(52 * uFit), bh = Math.round(32 * uFit);
+      const d = el('button', 'marker', m.type === 'dot' ? `<div class="dot"><svg width="${dw}" height="${dw}"><use href="#snd-one"/></svg></div>` : `<div class="bar"><svg width="${bw}" height="${bh}"><use href="#snd-chunk"/></svg></div>`);
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', m.type === 'dot' ? `play sound ${m.text}` : `play ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
     }));
@@ -213,8 +215,17 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function reveal(picked = false) {
     state = 'revealed'; $('check').hidden = true;
     const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
-    card.querySelector('.pic').style.fontSize = '96px'; const svg = card.querySelector('svg'); if (svg) { svg.setAttribute('width', 150); svg.setAttribute('height', 125); }
-    for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = (20 + k * 55) + 'px'; s.style.top = (20 + (k % 2) * 80) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
+    const uFit = stage.info?.u || 1;
+    card.querySelector('.pic').style.fontSize = Math.round(96 * uFit) + 'px';
+    const svg = card.querySelector('svg');
+    if (svg) { // 150×125 stage px, shrunk so it stays inside the card on a short board
+      let pw = 150 * uFit, ph = 125 * uFit;
+      const maxW = card.clientWidth * 0.92, maxH = card.clientHeight * 0.9;
+      if (maxW > 0 && pw > maxW) { ph *= maxW / pw; pw = maxW; }
+      if (maxH > 0 && ph > maxH) { pw *= maxH / ph; ph = maxH; }
+      svg.setAttribute('width', Math.round(pw)); svg.setAttribute('height', Math.round(ph));
+    }
+    for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = ((20 + k * 55) * uFit) + 'px'; s.style.top = ((20 + (k % 2) * 80) * uFit) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
     stickers.push(entry.pic && !entry.pic.startsWith('#') ? entry.pic : '⭐');
     if (!entry.pic && !picked) audio.play('sfx-chime'); // no check, no picture: the chime is the reward (never a 2nd chime)
     const c = clipForReveal(entry.w);
