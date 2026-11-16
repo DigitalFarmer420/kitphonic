@@ -212,6 +212,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       }, 1200);
     }
     run.debugState = () => tracer.state(); // automated checks only
+    run.debugOwner = () => owner.id; // automated checks only
     run.debugPoints = () => { const st = tracer.state(); if (st.done || run.busy) return []; const m = svg.getScreenCTM(); // automated play-through only
       return strokes[st.stroke].filter((_, i) => i % 3 === 0 || i === strokes[st.stroke].length - 1).map(([x, y]) => [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]); };
     $('tr-next').hidden = true; $('tr-undo').hidden = false; $('tr-next').onclick = () => { seen.mark('trace'); finish(); };

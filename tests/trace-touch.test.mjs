@@ -106,3 +106,11 @@ test('trace screen wiring: pointer ownership, coalesced events, cancel keeps the
   const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
   assert.match(css, /#tr-svg\{[^}]*touch-action:none/); assert.match(css, /\.short #lesson\.tracing \.top\{pointer-events:none\}/); assert.match(css, /html,body\{[^}]*touch-action:none/);
 });
+
+test('multi-stroke letters: no svg child is a touch target, so drawInk()/drawMarks() cannot detach a finger (#17 p deadlock)', () => {
+  const css = readFileSync(new URL('../css/app.css', import.meta.url), 'utf8');
+  // WebKit sends every event of a touch to the element hit at pointerdown. p's stroke 2 starts on stroke 1's ink,
+  // which drawInk() replaces on every move, so its moves went to a detached node and never reached the svg.
+  assert.match(css, /#tr-svg \*\{pointer-events:none\}/);
+  assert.doesNotMatch(css, /#tr-svg [^{]*\{[^}]*pointer-events:(auto|all|visible)/);
+});
