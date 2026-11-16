@@ -47,17 +47,34 @@ async function store(cache, key, res) {
   catch { /* a full cache must not hide a good network response */ }
 }
 
+// Look in this worker's cache first, then in any other kitphonic-* cache. During an update the
+// previous cache and the next one can both exist; a take missing from one may still be in the other.
+export async function matchAny(caches, key, { current = CACHE, prefix = CACHE_PREFIX } = {}) {
+  const hit = await (await caches.open(current)).match(key);
+  if (hit) return hit;
+  let names = [];
+  try { names = await caches.keys(); }
+  catch { return null; }
+  for (const name of names) {
+    if (name === current || !name.startsWith(prefix)) continue;
+    const other = await (await caches.open(name)).match(key);
+    if (other) return other;
+  }
+  return null;
+}
+
 export async function handleFetch(request, { origin, caches, fetch: doFetch, cacheName = CACHE, online = true } = {}) {
   const req = asRequest(request);
   const kind = classify(req, { origin });
   if (kind === 'bypass') return doFetch(req);
   const cache = await caches.open(cacheName);
   const key = cacheKeyFor(req);
+  const lookup = () => matchAny(caches, key, { current: cacheName });
   // Reload skips the HTTP cache. GitHub Pages keeps files for minutes, and a conditional
   // request would still count as "online" while handing back stale HTML, JS, CSS, or JSON.
   const network = () => doFetch(req.url, { cache: 'reload', credentials: 'same-origin' });
   if (kind === 'cache-first') {
-    const hit = await cache.match(key);
+    const hit = await lookup();
     if (hit) return hit;
     const res = await network();
     await store(cache, key, res);
@@ -66,7 +83,7 @@ export async function handleFetch(request, { origin, caches, fetch: doFetch, cac
   // The browser already knows it is offline. Reading the cache avoids a failed network request
   // (and the console error that comes with it). A lie-fi still falls through to the fetch below.
   if (online === false) {
-    const hit = await cache.match(key);
+    const hit = await lookup();
     if (hit) return hit;
   }
   try {
@@ -74,7 +91,7 @@ export async function handleFetch(request, { origin, caches, fetch: doFetch, cac
     await store(cache, key, res);
     return res;
   } catch (err) {
-    const hit = await cache.match(key);
+    const hit = await lookup();
     if (hit) return hit;
     throw err;
   }
@@ -96,7 +113,7 @@ export async function readAssetList(doFetch, href, cacheName = CACHE) {
   return data;
 }
 
-// Background fill. Missing or failed takes are skipped so one bad response cannot abort activation.
+// Fill a cache. A failed file is skipped here; callers decide with missingFrom() whether that is fatal.
 export async function precacheUrls(urls, { cache, fetch: doFetch, concurrency = 6 } = {}) {
   const have = new Set();
   if (cache.keys) {
@@ -138,34 +155,72 @@ async function loadList(scope) {
   }
 }
 
-export async function installWorker(scope) {
-  const href = new URL('sw-assets.json', scope.registration.scope).href;
-  const data = await readAssetList(scope.fetch.bind(scope), href, CACHE);
-  const cache = await scope.caches.open(CACHE);
-  const urls = data.shell.map(path => new URL(path, scope.registration.scope).href);
-  const fresh = url => scope.fetch(url, { cache: 'reload', credentials: 'same-origin' });
-  await precacheUrls(urls, { cache, fetch: fresh, concurrency: 6 });
+export async function missingFrom(cache, urls) {
   const have = new Set((await cache.keys()).map(req => cacheKeyFor(typeof req === 'string' ? req : req.url)));
-  const missing = urls.filter(url => !have.has(cacheKeyFor(url)));
-  if (missing.length) throw new Error(`shell precache missed ${missing.length}`);
-  await scope.skipWaiting();
+  return urls.filter(url => !have.has(cacheKeyFor(url)));
 }
 
+// An active worker on this registration means this install is an update, not the first visit.
+export function isUpdate(scope) {
+  return !!(scope.registration && scope.registration.active);
+}
+
+const freshFetch = scope => url => scope.fetch(url, { cache: 'reload', credentials: 'same-origin' });
+
+// First visit: store the shell, then take over at once so one online visit is enough to work offline
+// (the takes are filled in activate). Update: store the shell AND every take in the new cache before
+// install can finish, and do not skipWaiting. The new worker waits until every Kitphonic tab is closed
+// (the next cold launch), so it never takes over mid-lesson. Any missing file rejects the install;
+// the browser then drops the new worker and the old worker and its cache stay as they were.
+export async function installWorker(scope) {
+  const base = scope.registration.scope;
+  const href = new URL('sw-assets.json', base).href;
+  const data = await readAssetList(scope.fetch.bind(scope), href, CACHE);
+  const cache = await scope.caches.open(CACHE);
+  const shell = data.shell.map(path => new URL(path, base).href);
+  await precacheUrls(shell, { cache, fetch: freshFetch(scope), concurrency: 6 });
+  const shellMissing = await missingFrom(cache, shell);
+  if (shellMissing.length) throw new Error(`shell precache missed ${shellMissing.length}`);
+  if (!isUpdate(scope)) {
+    await scope.skipWaiting();
+    return { update: false };
+  }
+  const audio = data.audio.map(path => new URL(path, base).href);
+  await precacheUrls(audio, { cache, fetch: freshFetch(scope), concurrency: 6 });
+  const audioMissing = await missingFrom(cache, audio);
+  if (audioMissing.length) throw new Error(`audio precache missed ${audioMissing.length}`);
+  return { update: true };
+}
+
+// Older kitphonic-* caches are deleted only once this cache holds the whole shell and every take.
+// After an update install that is already true. After a first install the takes are filled here; if
+// the network drops part-way, any older cache is kept and lookups fall back to it.
 export async function activateWorker(scope) {
-  const names = await scope.caches.keys();
-  await deleteOldCaches(names, { current: CACHE, drop: name => scope.caches.delete(name) });
   await scope.clients.claim();
+  const base = scope.registration.scope;
   const data = await loadList(scope);
   const cache = await scope.caches.open(CACHE);
-  const urls = data.audio.map(path => new URL(path, scope.registration.scope).href);
-  await precacheUrls(urls, { cache, fetch: url => scope.fetch(url, { cache: 'reload', credentials: 'same-origin' }) });
+  const audio = data.audio.map(path => new URL(path, base).href);
+  await precacheUrls(audio, { cache, fetch: freshFetch(scope) });
+  const shell = data.shell.map(path => new URL(path, base).href);
+  const missing = await missingFrom(cache, [...shell, ...audio]);
+  let dropped = [];
+  if (!missing.length) {
+    dropped = await deleteOldCaches(await scope.caches.keys(), { current: CACHE, drop: name => scope.caches.delete(name) });
+  }
   const clients = await scope.clients.matchAll({ includeUncontrolled: true, type: 'window' });
-  for (const client of clients) client.postMessage({ type: 'kitphonic-audio-ready', cache: CACHE });
+  for (const client of clients) client.postMessage({ type: 'kitphonic-audio-ready', cache: CACHE, complete: !missing.length, missing: missing.length });
+  return { complete: !missing.length, missing: missing.length, dropped };
 }
 
 export function attachWorker(scope) {
   scope.addEventListener('install', event => { event.waitUntil(installWorker(scope)); });
   scope.addEventListener('activate', event => { event.waitUntil(activateWorker(scope)); });
+  // Read-only probe for tests and diagnostics: which cache does the controlling worker use?
+  scope.addEventListener('message', event => {
+    const port = event.ports && event.ports[0];
+    if (event.data && event.data.type === 'kitphonic-cache' && port) port.postMessage({ cache: CACHE });
+  });
   scope.addEventListener('fetch', event => {
     if (classify(event.request, { origin: scope.location.origin }) === 'bypass') return;
     event.respondWith(handleFetch(event.request, {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls } from '../sw.js';
+import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker } from '../sw.js';
 import { shouldRegisterServiceWorker, registerServiceWorker } from '../js/sw-register.js';
 
 const origin = 'https://pages.example';
@@ -211,4 +211,148 @@ test('registration uses the app directory and does not run on a local harness', 
   assert.ok(seen[0].script.startsWith(seen[0].scope));
   assert.equal(registerServiceWorker({ navigator: nav, location: { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '' }, capacitor: true }), false);
   assert.equal(seen.length, 1);
+});
+
+// --- update path (Uiux review on #24): first install claims at once, updates wait for a cold launch ---
+
+const scopeUrl = `${origin}/kitphonic/`;
+const SHELL = ['index.html', 'js/app.js', 'sw-assets.json'];
+const TAKES = ['audio/takes/m-hello.mp3', 'audio/takes/snd-s.mp3', 'audio/takes/sfx-chime.mp3'];
+
+function fakeScope({ active = null, caches = fakeCaches(), offline = () => false, failAudio = () => false } = {}) {
+  const calls = { skipWaiting: 0, claim: 0, fetched: [], posted: [] };
+  const list = JSON.stringify({ cache: CACHE, shell: SHELL, audio: TAKES });
+  const scope = {
+    calls, caches,
+    registration: { scope: scopeUrl, active },
+    async fetch(url) {
+      calls.fetched.push(String(url));
+      if (offline(String(url))) throw new TypeError('Failed to fetch');
+      if (String(url).endsWith('sw-assets.json')) return response(200, list);
+      if (String(url).includes('/audio/takes/') && failAudio(String(url))) throw new TypeError('Failed to fetch');
+      return response(200, `new:${new URL(String(url)).pathname}`);
+    },
+    async skipWaiting() { calls.skipWaiting++; },
+    clients: {
+      async claim() { calls.claim++; },
+      async matchAll() { return [{ postMessage: msg => calls.posted.push(msg) }]; },
+    },
+  };
+  return scope;
+}
+
+async function seedOld(caches, name = 'kitphonic-0123456789abcdef') {
+  const old = await caches.open(name);
+  for (const path of [...SHELL, ...TAKES]) await old.put(scopeUrl + path, response(200, `old:${path}`));
+  return name;
+}
+
+test('first install (no active worker) stores the shell and takes over at once', async () => {
+  const scope = fakeScope();
+  assert.equal(isUpdate(scope), false);
+  assert.deepEqual(await installWorker(scope), { update: false });
+  assert.equal(scope.calls.skipWaiting, 1);
+  const bucket = scope.caches.buckets.get(CACHE);
+  for (const path of SHELL) assert.ok(bucket.has(scopeUrl + path), path);
+  assert.equal(scope.calls.fetched.some(u => u.includes('/audio/takes/')), false, 'takes wait for activate on a first visit');
+  await activateWorker(scope);
+  assert.equal(scope.calls.claim, 1);
+  for (const path of TAKES) assert.ok(bucket.has(scopeUrl + path), path);
+  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: CACHE, complete: true, missing: 0 });
+});
+
+test('an update (active worker present) precaches shell and every take during install and does not skipWaiting', async () => {
+  const caches = fakeCaches();
+  const oldName = await seedOld(caches);
+  const scope = fakeScope({ active: { state: 'activated' }, caches });
+  assert.equal(isUpdate(scope), true);
+  assert.deepEqual(await installWorker(scope), { update: true });
+  assert.equal(scope.calls.skipWaiting, 0);
+  assert.equal(scope.calls.claim, 0);
+  const bucket = caches.buckets.get(CACHE);
+  for (const path of [...SHELL, ...TAKES].filter(p => p !== 'sw-assets.json')) assert.equal(bucket.get(scopeUrl + path).body, `new:/kitphonic/${path}`);
+  assert.equal(JSON.parse(bucket.get(scopeUrl + 'sw-assets.json').body).cache, CACHE);
+  assert.equal(caches.buckets.get(oldName).size, SHELL.length + TAKES.length, 'install never touches the old cache');
+});
+
+test('an update whose takes cannot be fetched rejects install and leaves the old cache alone', async () => {
+  const caches = fakeCaches();
+  const oldName = await seedOld(caches);
+  const scope = fakeScope({ active: { state: 'activated' }, caches, failAudio: url => url.endsWith('snd-s.mp3') });
+  await assert.rejects(() => installWorker(scope), /audio precache missed 1/);
+  assert.equal(scope.calls.skipWaiting, 0);
+  assert.equal(caches.buckets.has(oldName), true);
+  assert.equal(caches.buckets.get(oldName).size, SHELL.length + TAKES.length);
+  const offline = fakeScope({ active: { state: 'activated' }, caches, offline: () => true });
+  await assert.rejects(() => installWorker(offline));
+  assert.equal(offline.calls.skipWaiting, 0);
+  assert.equal(caches.buckets.get(oldName).size, SHELL.length + TAKES.length);
+});
+
+test('activate after a complete update deletes older kitphonic caches only after checking the new one', async () => {
+  const caches = fakeCaches();
+  const oldName = await seedOld(caches);
+  await caches.open('other-app');
+  const scope = fakeScope({ active: { state: 'activated' }, caches });
+  await installWorker(scope);
+  const before = scope.calls.fetched.filter(u => u.includes('/audio/takes/')).length;
+  const result = await activateWorker(scope);
+  assert.equal(scope.calls.fetched.filter(u => u.includes('/audio/takes/')).length, before, 'no take is fetched again');
+  assert.deepEqual(result, { complete: true, missing: 0, dropped: [oldName] });
+  assert.deepEqual((await caches.keys()).sort(), [CACHE, 'other-app'].sort());
+});
+
+test('activate keeps the older cache when the new one is still missing takes', async () => {
+  const caches = fakeCaches();
+  const oldName = await seedOld(caches);
+  const scope = fakeScope({ caches, failAudio: url => url.endsWith('sfx-chime.mp3') });
+  await installWorker(scope);
+  const result = await activateWorker(scope);
+  assert.deepEqual(result, { complete: false, missing: 1, dropped: [] });
+  assert.equal(caches.buckets.has(oldName), true);
+  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: CACHE, complete: false, missing: 1 });
+  // The take missing from the new cache is still served, from the old one, with the network down.
+  const res = await handleFetch(req('/kitphonic/audio/takes/sfx-chime.mp3'), {
+    origin, caches, cacheName: CACHE, fetch: async () => { throw new TypeError('Failed to fetch'); },
+  });
+  assert.equal(res.body, 'old:audio/takes/sfx-chime.mp3');
+});
+
+test('lookups fall back across kitphonic-* caches but never into another app cache', async () => {
+  const caches = fakeCaches();
+  const other = await caches.open('other-app');
+  await other.put(`${origin}/kitphonic/audio/takes/x.mp3`, response(200, 'foreign'));
+  const prev = await caches.open('kitphonic-aaaaaaaaaaaaaaaa');
+  await prev.put(`${origin}/kitphonic/js/app.js`, response(200, 'prev-js'));
+  await prev.put(`${origin}/kitphonic/audio/takes/snd-s.mp3`, response(200, 'prev-mp3'));
+  const current = await caches.open(CACHE);
+  await current.put(`${origin}/kitphonic/audio/takes/m-hello.mp3`, response(200, 'cur-mp3'));
+  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/m-hello.mp3`)).body, 'cur-mp3');
+  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/snd-s.mp3`)).body, 'prev-mp3');
+  assert.equal(await matchAny(caches, `${origin}/kitphonic/audio/takes/x.mp3`), null);
+  let fetches = 0;
+  const down = async () => { fetches++; throw new TypeError('Failed to fetch'); };
+  const deps = { origin, caches, cacheName: CACHE, fetch: down };
+  assert.equal((await handleFetch(req('/kitphonic/audio/takes/snd-s.mp3'), deps)).body, 'prev-mp3');
+  assert.equal(fetches, 0, 'a cache-first hit in an older cache needs no network');
+  assert.equal((await handleFetch(req('/kitphonic/js/app.js'), deps)).body, 'prev-js');
+  assert.equal((await handleFetch(req('/kitphonic/js/app.js'), { ...deps, online: false })).body, 'prev-js');
+  await assert.rejects(() => handleFetch(req('/kitphonic/audio/takes/x.mp3'), deps));
+});
+
+test('missingFrom compares by cache key', async () => {
+  const caches = fakeCaches();
+  const cache = await caches.open(CACHE);
+  await cache.put(`${origin}/kitphonic/index.html`, response(200, 'x'));
+  assert.deepEqual(await missingFrom(cache, [`${origin}/kitphonic/`, `${origin}/kitphonic/js/app.js`]), [`${origin}/kitphonic/js/app.js`]);
+});
+
+test('the worker source never calls skipWaiting outside a first install and never touches localStorage', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
+  assert.equal((src.match(/skipWaiting\(\)/g) || []).length, 1);
+  assert.match(src, /if \(!isUpdate\(scope\)\) \{\s*await scope\.skipWaiting\(\);/);
+  assert.equal(/localStorage/.test(src), false);
+  const reg = await readFile(new URL('../js/sw-register.js', import.meta.url), 'utf8');
+  assert.equal(/SKIP_WAITING|skipWaiting/.test(reg), false);
 });
