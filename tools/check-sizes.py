@@ -13,7 +13,8 @@ import argparse, json, os, sys
 from concurrent.futures import ThreadPoolExecutor
 from playwright.sync_api import sync_playwright
 
-REQUIRED = ['320x568', '360x640', '360x780', '780x360', '820x1180']
+# 320x568 and 568x320 are the small phone where a scaled stage drops buttons to 58px and the knob to 72px.
+REQUIRED = ['320x568', '568x320', '360x640', '360x780', '780x360', '820x1180']
 EXTRA = ['390x844', '844x390', '1180x820']
 # u is capped at 2. 1280x800 sits flush on the tray; the three larger windows double the 540-tall board onto it.
 LARGE = ['1280x800', '1920x1080', '2560x1440', '3840x2160']
