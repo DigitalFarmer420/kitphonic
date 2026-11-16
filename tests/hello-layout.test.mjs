@@ -27,7 +27,7 @@ test('hello greeting text is unchanged and is not hard-wrapped', () => {
 test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
   const [bubble] = decls('#hello .bubble');
   assert.ok(bubble, 'missing #hello .bubble');
-  assert.match(bubble, /font-size:24px/);
+  assert.match(bubble, /font-size:1\.5rem/); // 24 stage px, screen size follows the root rem scale
   assert.match(bubble, /white-space:normal/);
   assert.match(bubble, /height:auto/);
   assert.match(bubble, /width:max-content/);
@@ -42,23 +42,23 @@ test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
 test('shared bubble chrome is unchanged', () => {
   const [bubble] = decls('.bubble');
   assert.match(bubble, /background:#fff/);
-  assert.match(bubble, /border:2px solid var\(--line\)/);
-  assert.match(bubble, /border-radius:22px/);
-  assert.match(bubble, /padding:12px 18px/);
+  assert.match(bubble, /border:0\.125rem solid var\(--line\)/);
+  assert.match(bubble, /border-radius:1\.375rem/);
+  assert.match(bubble, /padding:0\.75rem 1\.125rem/);
   assert.match(bubble, /font-weight:700/);
-  assert.match(bubble, /max-width:330px/);
+  assert.match(bubble, /max-width:20\.625rem/);
 });
 
 test('portrait and short hello bubbles do not cap lines or shrink type', () => {
   const [portrait] = decls('.portrait #hello .bubble');
   const [short] = decls('.short #hello .bubble');
-  assert.match(portrait, /top:calc\(var\(--h\) \* \.13 \+ 228px\)/);
+  assert.match(portrait, /top:calc\(var\(--h\) \* \.13 \+ 14\.25rem\)/);
   assert.equal(portrait.includes('font-size'), false);
   assert.equal(portrait.includes('text-align'), false);
   assert.equal(portrait.includes('nowrap'), false);
   assert.equal(portrait.includes('max-height'), false);
-  assert.match(short, /font-size:20px/);
-  assert.match(short, /max-width:calc\(var\(--w\) - 48px\)/);
+  assert.match(short, /font-size:1\.25rem/);
+  assert.match(short, /max-width:calc\(var\(--w\) - 3rem\)/);
   assert.equal(short.includes('text-align'), false);
   assert.equal(short.includes('nowrap'), false);
   assert.equal(short.includes('max-height'), false);

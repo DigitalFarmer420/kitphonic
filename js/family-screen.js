@@ -58,6 +58,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     const hw0 = host.clientWidth, land = !$('stage').classList.contains('portrait'); // landscape: one row across the whole width if it fits
     const avail = land ? hw0 - 16 : tray.clientWidth, tw = ts[0].offsetWidth, gap = parseFloat(getComputedStyle(tray).columnGap) || 14;
     const cap = Math.max(1, Math.floor((avail + gap) / (tw + gap))), rows = Math.ceil(ts.length / cap), per = Math.ceil(ts.length / rows);
+    tray.style.setProperty('--rows', String(rows));
     const width = per * tw + (per - 1) * gap, wd = $('fm-word'), slot = $('fm-slot'), rime = $('fm-rime');
     const cx = wd.offsetLeft + (slot.offsetLeft + rime.offsetLeft + rime.offsetWidth) / 2, hw = host.clientWidth;
     tray.style.width = width + 'px'; tray.style.right = 'auto'; tray.style.left = Math.max(8, Math.min(hw - width - 8, cx - width / 2)) + 'px';

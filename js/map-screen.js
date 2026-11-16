@@ -18,7 +18,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
   const reduced = () => settings.reducedMotion?.(); // 'auto' follows the device; On/Off from the grown-ups area win
 
   function render({ drawFrom = null } = {}) {
-    const m = getMap(), info = stage.info, win = mapWindow(m.stops, m.index), pts = mapLayout(win, info);
+    const m = getMap(), info = stage.info, u = info.u || 1, win = mapWindow(m.stops, m.index), pts = mapLayout(win, info);
     $('m-stars').textContent = `⭐ ${m.stops.filter(s => s.status === 'passed').length}`;
     const svg = $('m-path'); svg.setAttribute('viewBox', `0 0 ${info.w} ${info.h}`); svg.replaceChildren();
     const ci = pts.findIndex(p => p.now), cut = ci < 0 ? pts.length - 1 : ci;
@@ -38,10 +38,10 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       b.onclick = () => tapStop(p); box.append(b);
       const g = groupOf(p);
       if (g && (g !== prevGroup || p.now)) { // parent-facing label (no reading needed by the child)
-        const l = el('div', 'mlabel', p.now ? `${g}<br>(now)` : g), off = p.r + 10;
-        if (p.side === 'right') { l.style.left = p.x + off + 'px'; l.style.top = p.y - 10 + 'px'; }
-        else if (p.side === 'left') { l.style.left = p.x - off - 120 + 'px'; l.style.top = p.y - 10 + 'px'; }
-        else { l.style.left = p.x - 60 + 'px'; l.style.top = p.y + p.r + 8 + 'px'; }
+        const l = el('div', 'mlabel', p.now ? `${g}<br>(now)` : g), off = p.r + 10 * u;
+        if (p.side === 'right') { l.style.left = p.x + off + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
+        else if (p.side === 'left') { l.style.left = (p.x - off - 120 * u) + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
+        else { l.style.left = (p.x - 60 * u) + 'px'; l.style.top = (p.y + p.r + 8 * u) + 'px'; }
         box.append(l);
       }
       prevGroup = g;
@@ -51,8 +51,8 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
       // beside the stop (portrait: opposite its label; landscape: to its right, at the same height)
       // landscape: low-row stop -> Kit just above it; high-row stop -> beside it (right), raised away from the low row
-      const kx = p => info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36) : p.low ? p.x : p.x + p.r + 36;
-      const ky = p => info.mode === 'portrait' ? p.y - p.r + 10 : p.low ? p.y - p.r - 38 : p.y - 20;
+      const kx = p => info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36 * u) : p.low ? p.x : p.x + p.r + 36 * u;
+      const ky = p => info.mode === 'portrait' ? p.y - p.r + 10 * u : p.low ? p.y - p.r - 38 * u : p.y - 20 * u;
       kit.style.left = kx(from) + 'px'; kit.style.top = ky(from) + 'px'; box.append(kit);
       // the current stop's cue picture moves to the side away from Kit (Kit left -> top-right; Kit above -> middle-left)
       const cue = box.querySelector('.stop.current .cue');
@@ -83,7 +83,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       b.onclick = () => { audio.stop(); audio.play(c.clip); }; return b; }));
     const conf = $('lv-confetti'); conf.replaceChildren();
     if (!reduced()) for (let k = 0; k < 14; k++) { const c = el('span', 'conf emoji', ['🎉', '✨', '⭐', '🎊'][k % 4]);
-      c.style.left = (6 + (k * 37) % 88) + '%'; c.style.top = (4 + (k * 23) % 30) + '%'; c.style.setProperty('--fall', 160 + (k * 53) % 220 + 'px');
+      c.style.left = (6 + (k * 37) % 88) + '%'; c.style.top = (4 + (k * 23) % 30) + '%'; c.style.setProperty('--fall', (160 + (k * 53) % 220) * (stage.info.u || 1) + 'px');
       c.style.setProperty('--rot', ((k % 2 ? 1 : -1) * (90 + k * 20)) + 'deg'); c.style.animationDelay = (k * 70) + 'ms'; conf.append(c); }
     const next = $('lv-next'); next.disabled = true; setTimeout(() => (next.disabled = false), LEVELUP_LOCK_MS);
     next.onclick = () => { if (!next.disabled) { audio.stop(); onBack(); } };

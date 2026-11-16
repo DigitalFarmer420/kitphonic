@@ -97,7 +97,8 @@ MEASURE = r"""() => {
   return { ptiles, empty, cueHits, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
 }"""
 
-ADULT = 44  # grown-ups area: adult targets (Apple HIG 44pt); the mockup uses 48px segmented controls
+ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
+CLASSIC = {'360x780', '780x360', '820x1180', '390x844', '844x390', '1180x820'}
 
 def overlaps(a, b, pad=2):
     return a['x'] + pad < b['x'] + b['w'] and b['x'] + pad < a['x'] + a['w'] and a['y'] + pad < b['y'] + b['h'] and b['y'] + pad < a['y'] + a['h']
@@ -109,10 +110,10 @@ def check(m, vp, scene):
         if short < need - 0.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < {need}")
         if not t.get('scroll') and (t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
-        if t['play'] and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
+        if t['play'] and vp in CLASSIC and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
     errs += [f'empty button {n}' for n in m.get('empty', [])]
-    errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 32" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 31.5]
+    errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 48" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 47.5]
     k = m['key']
     for i in range(len(k)):
         for j in range(i + 1, len(k)):
@@ -124,8 +125,10 @@ def check(m, vp, scene):
         for y in m['ltr']: rows[y] = rows.get(y, 0) + 1
         c = list(rows.values())
         if len(c) > 1 and (min(c) == 1 or max(c) - min(c) > 1): errs.append(f"unbalanced grid {c}")
-    if m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
-    if m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")
+    # A capped desktop board (u = 2, the 1080p composition) is centered in a larger window on purpose.
+    capped = m['vw'] > 2000 or m['vh'] > 1400
+    if not capped and m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
+    if not capped and m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")
     if m['handle'] and m['vh'] > m['vw']:
         bottom_gap = m['vh'] - (m['handle']['y'] + m['handle']['h'])
         if bottom_gap > m['vh'] * .25: errs.append(f"slider not in thumb zone ({bottom_gap:.0f}px above the bottom)")
@@ -151,6 +154,48 @@ def main():
                 smallest = min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
                 knob = next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
                 rows.append((vp, scene, len(m['targets']), smallest, knob, errs)); fails += bool(errs)
+        if not only:
+            # Mid-activity rotate: letter tiles must pick up the new board, stay on screen, and stay >= 64px.
+            pg = b.new_page(viewport={'width': 390, 'height': 844}, has_touch=True)
+            pg.goto(a.base + '?skipHello=1&activity=find&seed=1', wait_until='networkidle'); pg.wait_for_timeout(700)
+            before = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr')].map(e => {
+              const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })""")
+            pg.set_viewport_size({'width': 844, 'height': 390}); pg.wait_for_timeout(500)
+            m = pg.evaluate(MEASURE); errs = check(m, '844x390', 'letters-find')
+            after = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr .tile')].map(e => {
+              const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top), Math.round(Math.min(r.width, r.height))]; })""")
+            afterCentres = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr')].map(e => {
+              const r = e.getBoundingClientRect(); return [Math.round(r.left), Math.round(r.top)]; })""")
+            if not before or not afterCentres or before == afterCentres:
+                errs.append('tiles kept stale coordinates after rotate')
+            if any(t[2] < 63 for t in after):
+                errs.append('rotated tile under 64px')
+            stage = m['stage']
+            off = pg.evaluate("""() => [...document.querySelectorAll('#l-arena .ltr .tile')].filter(e => {
+              const r = e.getBoundingClientRect(), s = document.getElementById('stage').getBoundingClientRect();
+              return r.left < s.left - 2 || r.top < s.top - 2 || r.right > s.right + 2 || r.bottom > s.bottom + 2; }).length""")
+            if off: errs.append(f'{off} tiles outside the stage after rotate')
+            pg.screenshot(path=f"{a.out}/rotate-letters-844x390.png"); pg.close()
+            rows.append(('844x390', 'rotate-find', len(m['targets']), min((min(t['w'], t['h']) for t in m['targets']), default=0), None, errs))
+            fails += bool(errs)
+            # System bars: 24px top + 48px bottom. Controls stay inside the safe rect and at the floor.
+            for vp, w, h, top, bottom in [('360x640', 360, 640, 24, 48), ('780x360', 780, 360, 24, 48)]:
+                for scene, q in [('hello', ''), ('word-map', 'skipHello=1&level=2&word=map&seed=1'), ('family-7', 'skipHello=1&activity=family&rime=at&familyMax=7&seed=1')]:
+                    pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True)
+                    pg.goto(a.base + ('?' + q if q else ''), wait_until='networkidle'); pg.wait_for_timeout(500)
+                    pg.evaluate("""([t, b]) => { const s = document.documentElement.style;
+                      s.setProperty('--safe-area-inset-top', t + 'px'); s.setProperty('--safe-area-inset-right', '0px');
+                      s.setProperty('--safe-area-inset-bottom', b + 'px'); s.setProperty('--safe-area-inset-left', '0px'); }""", [top, bottom])
+                    pg.wait_for_timeout(200)
+                    m = pg.evaluate(MEASURE); errs = [e for e in check(m, vp + '-inset', scene) if 'empty band' not in e and 'does not fill' not in e and 'thumb zone' not in e]
+                    safe_bottom = h - bottom
+                    for t in m['targets']:
+                        if t['y'] < top - 2 or t['y'] + t['h'] > safe_bottom + 2:
+                            errs.append(f"{t['name']} outside safe bars")
+                    pg.screenshot(path=f"{a.out}/inset-{scene}-{vp}.png"); pg.close()
+                    rows.append((vp + '+bars', scene, len(m['targets']), min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0),
+                                 next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None), errs))
+                    fails += bool(errs)
         b.close()
     print(f"{'viewport':9} {'scene':13} {'n':>3} {'min':>5} {'knob':>5}  result")
     for vp, sc, n, sm, kn, errs in rows:

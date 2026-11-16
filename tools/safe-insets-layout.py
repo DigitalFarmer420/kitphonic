@@ -68,7 +68,8 @@ def run():
         if not ok: fails.append(name)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'] if os.path.exists(c)), None)
+        browser = p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
         def page_at(path, w, h):
             ctx = browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
             ctx.add_init_script("localStorage.clear()")
@@ -119,9 +120,13 @@ def run():
                     b = m['bubble']
                     play = m['controls']['#play']
                     separated = b and play and (b['y'] + b['h'] <= play['y'] + 2 or play['y'] + play['h'] <= b['y'] + 2)
+                    root = pg.evaluate("() => parseFloat(getComputedStyle(document.documentElement).fontSize)")
+                    # 24 stage px portrait, 20 stage px short: both are rem, so the used px is design × u.
+                    design = 24 if vname == 'portrait' else 20
+                    size = float(str(b['size']).replace('px', '')) if b else 0
                     check(f'{vname} welcome still wraps', b and b['text'].startswith('Hi!')
                           and b['whiteSpace'] == 'normal' and b['align'] == 'center'
-                          and b['size'] == ('24px' if vname == 'portrait' else '20px') and separated, b)
+                          and abs(size - design / 16 * root) < 1.5 and separated, b)
                 if shots and sname in ('hello', 'word', 'trace') and vname in ('portrait', 'short'):
                     pg.screenshot(path=f'{shots}/pass-{vname}-{sname}.png')
                 ctx.close()
