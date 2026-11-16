@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """iPad Safari touch: pointercancel, then touchmoves. Exit 0 only if every case inks.
 
-Also two-stroke letters (default `t`): stroke 1 is interrupted by a pointercancel or a lostpointercapture on the
-svg, finishes through touchmoves, the finger lifts, and a new finger traces stroke 2. The letter must finish
-(PR #18 Uiux review: it deadlocked when drawMarks() removed the start digit under the finger). Every event goes to
-the element a real browser would target: the one hit at touchstart / pointerdown (implicit touch capture), so an
-event on a node removed from the DOM never reaches the svg.
+Also every multi-stroke grapheme in js/trace.js STROKES (PR #18 Uiux / Test Engineer: two-stroke letters deadlocked
+when drawMarks() removed the start digit under the finger and its lift was lost). Per grapheme and iPad size:
+  control             stroke 1 with no interruption; the lift goes to the original down target
+  pointercancel       cancel mid stroke 1, a palm lands and lifts while held, stroke 1 finishes through touchmoves
+  lostpointercapture  the same with a lostpointercapture on the svg
+then a new finger traces each later stroke; the letter must finish. Every event of a finger goes to the element hit at
+its pointerdown (WebKit implicit touch capture), so a lift dispatched on a node removed from the DOM never reaches the
+svg. Chromium also runs real CDP touches: control, and lost-real (the svg takes and releases the live touch's capture).
 
 Prints SKIP and exits 0 when Playwright or the browser is not installed.
 
-  python3 tools/ipad-trace-cancel.py --base http://127.0.0.1:8080/ [--browser webkit|chromium|all] [--two t]
+  python3 tools/ipad-trace-cancel.py --base http://127.0.0.1:8080/ [--browser webkit|chromium|all] [--multi all|t,f]
 """
 import argparse, sys
 
@@ -61,47 +64,114 @@ INJECT = r"""(mode) => {
     vw: innerWidth, vh: innerHeight };
 }"""
 
-TWO = r"""async (cancel) => {
+# WebKit dispatch model: each finger's pointer and touch events go to the element hit at its pointerdown (implicit
+# touch capture), including the lift. When drawMarks() removes that node the lift is dispatched on a detached node and
+# never reaches the svg, exactly as a missed lift on iPad.
+MULTI = r"""async (kind) => {
   const svg = document.getElementById('tr-svg');
   const run = kitphonic.lesson.run;
-  const hit = (x, y) => document.elementFromPoint(x, y) || svg; // a real touch targets what it lands on, for its lifetime
+  const active = new Map();
+  const hit = (x, y) => document.elementFromPoint(x, y) || svg;
+  const name = el => el.tagName + '.' + (el.className?.baseVal ?? '');
+  const owner = () => (typeof run.debugOwner === 'function' ? run.debugOwner() : 'n/a');
   const P = (type, target, id, x, y, buttons) => target.dispatchEvent(new PointerEvent(type, {
-    bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y, buttons }));
+    bubbles: true, cancelable: true, pointerId: id, pointerType: 'touch', isPrimary: active.size === 0 || type !== 'pointerdown', clientX: x, clientY: y, buttons }));
   const T = (type, target, ident, x, y) => {
     const t = { identifier: ident, clientX: x, clientY: y };
+    if (type === 'touchend' || type === 'touchcancel') active.delete(ident); else active.set(ident, t);
     const ev = new Event(type, { bubbles: true, cancelable: true });
-    ev.touches = type === 'touchend' || type === 'touchcancel' ? [] : [t];
-    ev.changedTouches = [t];
+    ev.touches = [...active.values()]; ev.changedTouches = [t];
     target.dispatchEvent(ev);
   };
-  // Stroke 1: Touch.identifier 1 / pointerId 2 (Chrome-style mapping), cancelled a third of the way in.
-  let pts = run.debugPoints(); const a = pts[0]; const t1 = hit(a[0], a[1]); const t1name = t1.tagName + '.' + (t1.className?.baseVal ?? '');
-  P('pointerdown', t1, 2, a[0], a[1], 1); T('touchstart', t1, 1, a[0], a[1]);
+  const finger = (pid, ident) => ({ pid, ident, target: null,
+    down(q) { this.target = hit(q[0], q[1]); P('pointerdown', this.target, pid, q[0], q[1], 1); T('touchstart', this.target, ident, q[0], q[1]); },
+    move(q) { P('pointermove', this.target, pid, q[0], q[1], 1); T('touchmove', this.target, ident, q[0], q[1]); },
+    touchOnly(q) { T('touchmove', this.target, ident, q[0], q[1]); },
+    up(q) { P('pointerup', this.target, pid, q[0], q[1], 0); T('touchend', this.target, ident, q[0], q[1]); } });
+  const strokes = run.debugState().strokes;
+  let pts = run.debugPoints();
+  const f1 = finger(2, 1); f1.down(pts[0]);
   const cut = Math.max(2, Math.floor(pts.length / 3));
-  for (let i = 1; i <= cut; i++) P('pointermove', t1, 2, pts[i][0], pts[i][1], 1);
-  P(cancel, cancel === 'lostpointercapture' ? svg : t1, 2, pts[cut][0], pts[cut][1], 0);
-  await new Promise(r => setTimeout(r, 0)); // iOS delivers the touchmoves in later tasks
-  const cancelled = run.debugState();
-  for (let i = cut + 1; i < pts.length; i++) T('touchmove', t1, 1, pts[i][0], pts[i][1]);
-  const s1 = run.debugState(); const t1attached = t1.isConnected;
-  const last = pts[pts.length - 1]; T('touchend', t1, 1, last[0], last[1]);
-  const lifted = { owner: typeof run.debugOwner === 'function' ? run.debugOwner() : 'n/a' };
-  // Stroke 2: a new finger, Touch.identifier 3 / pointerId 4.
-  pts = run.debugPoints(); const b = pts[0] || [0, 0]; const t2 = hit(b[0], b[1]);
-  P('pointerdown', t2, 4, b[0], b[1], 1); T('touchstart', t2, 3, b[0], b[1]);
-  const down2 = run.debugState();
-  for (let i = 1; i < pts.length; i++) P('pointermove', t2, 4, pts[i][0], pts[i][1], 1);
-  const end = run.debugState();
-  const z = pts[pts.length - 1] || b; P('pointerup', t2, 4, z[0], z[1], 0); T('touchend', t2, 3, z[0], z[1]);
-  return { cancelled, s1, lifted, down2, end, t1: t1name, t1attached, stars: document.querySelectorAll('#tr-tray .emoji:not(.off)').length };
+  for (let i = 1; i <= cut; i++) f1.move(pts[i]);
+  let palmOk = true, cancelled = run.debugState();
+  if (kind === 'control') {
+    for (let i = cut + 1; i < pts.length; i++) f1.move(pts[i]);
+  } else {
+    if (kind === 'pointercancel') P('pointercancel', f1.target, 2, pts[cut][0], pts[cut][1], 0);
+    else svg.dispatchEvent(new PointerEvent('lostpointercapture', { bubbles: true, pointerId: 2, pointerType: 'touch', isPrimary: true, clientX: pts[cut][0], clientY: pts[cut][1] }));
+    await new Promise(r => setTimeout(r, 0)); // iOS delivers the touchmoves in later tasks
+    cancelled = run.debugState();
+    // a palm lands while the stroke is held: it must not take the stroke or move the ink
+    const r = svg.getBoundingClientRect(), palmAt = [r.right - 10, r.bottom - 10], palm = finger(9, 8);
+    const k0 = run.debugState().k; palm.down(palmAt);
+    palmOk = (owner() === 'n/a' || owner() === 2) && run.debugState().stroke === 0 && run.debugState().k === k0;
+    const half = cut + Math.floor((pts.length - cut) / 2);
+    for (let i = cut + 1; i < pts.length; i++) { f1.touchOnly(pts[i]); if (i === half) palm.up(palmAt); }
+    if (active.has(8)) palm.up(palmAt);
+  }
+  const s1 = run.debugState(), t1 = name(f1.target);
+  f1.up(pts[pts.length - 1]);
+  const t1attached = f1.target.isConnected, ownerAfterLift = owner();
+  for (let s = 1; s < strokes; s++) { // every later stroke: a new finger
+    pts = run.debugPoints(); if (!pts.length) break;
+    const f = finger(10 + 2 * s, 10 + 2 * s - 1); f.down(pts[0]);
+    for (let i = 1; i < pts.length; i++) f.move(pts[i]);
+    f.up(pts[pts.length - 1]);
+  }
+  return { strokes, cancelled, s1, end: run.debugState(), t1, t1attached, ownerAfterLift, palmOk,
+    stars: document.querySelectorAll('#tr-tray .emoji:not(.off)').length };
 }"""
 
-def two_line(view, letter, cancel, d):
-    ok = d['cancelled']['active'] and d['s1']['stroke'] >= 1 and (d['end']['done'] or d['end']['letterDone'] or d['stars'] >= 1)
+MULTI_STROKE = r"""async () => {
+  const m = await import(new URL('js/trace.js', location.href).href);
+  return Object.entries(m.STROKES).filter(([, v]) => v.length > 1).map(([k]) => k);
+}"""
+
+def multi_line(browser, view, g, kind, d):
+    held_ok = kind == 'control' or d['cancelled']['active']
+    ok = held_ok and d['palmOk'] and d['s1']['stroke'] >= 1 and (d['end']['done'] or d['end']['letterDone'] or d['stars'] >= 1)
     return (0 if ok else 1,
-            f"{'PASS' if ok else 'FAIL'} {view} two-stroke {letter} {cancel} target={d['t1']} attachedAfterStroke1={d['t1attached']} "
-            f"s1 stroke={d['s1']['stroke']} ownerAfterLift={d['lifted']['owner']} down2 active={d['down2']['active']} "
-            f"end stroke={d['end']['stroke']} k={d['end']['k']} done={d['end']['done']} stars={d['stars']}")
+            f"{'PASS' if ok else 'FAIL'} {browser} {view} multi {g} strokes={d['strokes']} {kind} downTarget={d['t1']} "
+            f"connectedAtLift={d['t1attached']} heldOk={held_ok} palmOk={d['palmOk']} s1 stroke={d['s1']['stroke']} "
+            f"ownerAfterLift={d['ownerAfterLift']} end stroke={d['end']['stroke']} done={d['end']['done']} stars={d['stars']}")
+
+def cdp_lost_real(p, base, g, name, w, h, kind):
+    """Chromium, real CDP touches: the svg takes and releases capture of the live touch (a real lostpointercapture),
+    or no interruption at all (control). The letter must finish with a new finger per later stroke."""
+    b = p.chromium.launch()
+    try:
+        ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, is_mobile=True, user_agent=UA)
+        pg = ctx.new_page(); cdp = ctx.new_cdp_session(pg)
+        cdp.send('Emulation.setTouchEmulationEnabled', {'enabled': True, 'maxTouchPoints': 5})
+        T = lambda typ, tps: cdp.send('Input.dispatchTouchEvent', {'type': typ, 'touchPoints': [{'x': x, 'y': y, 'id': i} for i, x, y in tps]})
+        pg.goto(base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={g}', wait_until='domcontentloaded')
+        pg.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+        strokes = pg.evaluate("() => kitphonic.lesson.run.debugState().strokes")
+        pts = pg.evaluate("() => kitphonic.lesson.run.debugPoints()"); cut = max(2, len(pts) // 3)
+        T('touchStart', [(1, *pts[0])])
+        for q in pts[1:cut + 1]: T('touchMove', [(1, *q)])
+        held = True
+        if kind == 'lost-real':
+            pg.evaluate("""() => { const svg = document.getElementById('tr-svg'), pid = kitphonic.lesson.run.debugOwner();
+              svg.setPointerCapture(pid); svg.releasePointerCapture(pid); }""")
+            pg.wait_for_timeout(60)
+            held = pg.evaluate("() => kitphonic.lesson.run.debugState().active")
+        for q in pts[cut + 1:]: T('touchMove', [(1, *q)])
+        s1 = pg.evaluate("() => kitphonic.lesson.run.debugState()")
+        T('touchEnd', []); pg.wait_for_timeout(30)
+        for s in range(1, strokes):
+            pts = pg.evaluate("() => kitphonic.lesson.run.debugPoints()")
+            if not pts: break
+            T('touchStart', [(s + 1, *pts[0])])
+            for q in pts[1:]: T('touchMove', [(s + 1, *q)])
+            T('touchEnd', []); pg.wait_for_timeout(30)
+        end = pg.evaluate("() => kitphonic.lesson.run.debugState()")
+        stars = pg.evaluate("() => document.querySelectorAll('#tr-tray .emoji:not(.off)').length")
+        ok = held and s1['stroke'] >= 1 and (end['done'] or stars >= 1)
+        return (0 if ok else 1, f"{'PASS' if ok else 'FAIL'} chromium-cdp {name} multi {g} strokes={strokes} {kind} heldOk={held} "
+                f"s1 stroke={s1['stroke']} end stroke={end['stroke']} done={end['done']} stars={stars}")
+    finally:
+        b.close()
 
 def line(view, mode, data):
     end, cancel = data['end'], data['cancelled']
@@ -129,7 +199,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--base', default='http://127.0.0.1:8080/')
     ap.add_argument('--letter', default='s')
-    ap.add_argument('--two', default='t', help='comma-separated two-stroke letters ("" to skip)')
+    ap.add_argument('--multi', default='all', help='"all" = every multi-stroke grapheme in js/trace.js STROKES, a comma list, or "" to skip')
     ap.add_argument('--browser', default='webkit', choices=['webkit', 'chromium', 'all'])
     args = ap.parse_args()
     try:
@@ -156,13 +226,22 @@ def main():
                     failed = failed or code != 0
                     if name == 'land-1376' and mode == 'early':
                         print(tol_line(data))
-                for two in [x for x in args.two.split(',') if x]:
-                    for cancel in ('pointercancel', 'lostpointercapture'):
-                        page.goto(args.base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={two}', wait_until='domcontentloaded')
-                        page.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
-                        code, text = two_line(name, two, cancel, page.evaluate(TWO, cancel))
-                        print(text)
-                        failed = failed or code != 0
+                if args.multi:
+                    page.goto(args.base + q, wait_until='domcontentloaded')
+                    multi = page.evaluate(MULTI_STROKE) if args.multi == 'all' else [x for x in args.multi.split(',') if x]
+                    if name == VIEWS[0][0]: print(f'multi-stroke graphemes ({len(multi)}): {" ".join(multi)}')
+                    for g in multi:
+                        for kind in ('control', 'pointercancel', 'lostpointercapture'):
+                            page.goto(args.base + f'?skipHello=1&reducedMotion=1&activity=trace&gpc={g}', wait_until='domcontentloaded')
+                            page.wait_for_function("() => (kitphonic.lesson?.run?.debugPoints?.() ?? []).length > 2", timeout=15000)
+                            code, text = multi_line(bname, name, g, kind, page.evaluate(MULTI, kind))
+                            print(text)
+                            failed = failed or code != 0
+                        if bname == 'chromium':
+                            for kind in ('control', 'lost-real'):
+                                code, text = cdp_lost_real(p, args.base, g, name, w, h, kind)
+                                print(text)
+                                failed = failed or code != 0
                 ctx.close()
             browser.close()
     except Exception as e:
