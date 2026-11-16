@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { cachePrefixFor as pagePrefixFor } from '../js/sw-register.js';
-import { cachePrefixFor as workerPrefixFor } from '../sw.js';
-import { cachePrefixFor, clearOwnScopeCaches, activateKillSwitch, attachKillSwitch, LEGACY } from '../tools/sw-killswitch.js';
+import { cachePrefixFor as workerPrefixFor, killSwitchMarkerFor } from '../sw.js';
+import { cachePrefixFor, clearOwnScopeCaches, activateKillSwitch, attachKillSwitch, LEGACY, KITPHONIC_KILLSWITCH, markerNameFor, hasNavigatedFlag, setNavigatedFlag, MARKER_PREFIX } from '../tools/sw-killswitch.js';
 
 const origin = 'https://pages.example';
 const prodScope = `${origin}/kitphonic/`;
 const devScope = `${origin}/kitphonic-dev/`;
+const MARK = 'kitphonic-killswitch:/kitphonic-dev/';
 
 function response(status, body = '') {
   return { status, ok: status === 200, body, type: 'basic', clone() { return response(status, body); } };
@@ -60,78 +61,126 @@ async function seedCatalog(caches) {
   return { complete, incomplete, prod, prodIncomplete, ownedLegacy, mixedLegacy, emptyLegacy, other };
 }
 
-test('the kill-switch template agrees on the scope prefix and never touches localStorage', async () => {
-  assert.equal(cachePrefixFor(devScope), 'kitphonic:/kitphonic-dev/:');
-  assert.equal(cachePrefixFor(prodScope), pagePrefixFor(prodScope));
-  assert.equal(cachePrefixFor(prodScope), workerPrefixFor(prodScope));
-  assert.equal(LEGACY.test('kitphonic-62802e1804f499f9'), true);
-  const src = await readFile(new URL('../tools/sw-killswitch.js', import.meta.url), 'utf8');
-  assert.equal(/localStorage/.test(src), false);
-  assert.match(src, /skipWaiting\(\)/);
-  assert.match(src, /unregister\(\)/);
-});
-
-test('clearOwnScopeCaches deletes complete and incomplete caches of this scope only', async () => {
-  const caches = fakeCaches();
-  const names = await seedCatalog(caches);
-  const deleted = await clearOwnScopeCaches(caches, devScope);
-  assert.deepEqual(deleted.sort(), [names.complete, names.incomplete, names.ownedLegacy].sort());
-  assert.deepEqual((await caches.keys()).sort(), [names.emptyLegacy, names.mixedLegacy, names.other, names.prod, names.prodIncomplete].sort());
-  assert.equal(caches.buckets.get(names.prod).size, 2);
-  assert.equal(caches.buckets.has(names.prodIncomplete), true);
-});
-
-test('activateKillSwitch unregisters, deletes only this scope, and reloads only this scope\'s clients', async () => {
-  const caches = fakeCaches();
-  const names = await seedCatalog(caches);
-  const navigated = [];
+function fakeScope(caches, { clients = [], unregister } = {}) {
   let unregistered = 0;
   let claimed = 0;
+  let skipped = 0;
   const scope = {
     caches,
+    calls: { get unregistered() { return unregistered; }, get claimed() { return claimed; }, get skipped() { return skipped; } },
+    async skipWaiting() { skipped++; },
     registration: {
       scope: devScope,
-      async unregister() { unregistered++; return true; },
+      async unregister() {
+        unregistered++;
+        if (unregister) return unregister();
+        throw new Error('kill switch must stay registered');
+      },
     },
     clients: {
       async claim() { claimed++; },
-      async matchAll() {
-        return [
-          { url: `${devScope}index.html?skipHello=1`, async navigate(url) { navigated.push(url); } },
-          { url: `${prodScope}index.html`, async navigate(url) { navigated.push('PROD ' + url); } },
-          { url: `${origin}/other/`, async navigate(url) { navigated.push('OTHER ' + url); } },
-        ];
-      },
+      async matchAll() { return clients; },
     },
   };
-  const out = await activateKillSwitch(scope);
-  assert.equal(claimed, 1);
-  assert.equal(unregistered, 1);
+  return scope;
+}
+
+test('the kill-switch template agrees on the scope prefix and never touches localStorage', async () => {
+  assert.equal(KITPHONIC_KILLSWITCH, true);
+  assert.equal(cachePrefixFor(devScope), 'kitphonic:/kitphonic-dev/:');
+  assert.equal(cachePrefixFor(prodScope), pagePrefixFor(prodScope));
+  assert.equal(cachePrefixFor(prodScope), workerPrefixFor(prodScope));
+  assert.equal(markerNameFor(devScope), MARK);
+  assert.equal(killSwitchMarkerFor(devScope), markerNameFor(devScope));
+  assert.equal(LEGACY.test('kitphonic-62802e1804f499f9'), true);
+  assert.equal(LEGACY.test(MARK), false);
+  assert.equal(MARK.startsWith(cachePrefixFor(devScope)), false);
+  const src = await readFile(new URL('../tools/sw-killswitch.js', import.meta.url), 'utf8');
+  assert.equal(/localStorage/.test(src), false);
+  assert.match(src, /skipWaiting\(\)/);
+  assert.equal(/unregister\(\)/.test(src), false);
+  assert.equal(/addEventListener\(\s*['"]fetch['"]/.test(src), false);
+  assert.match(src, /KITPHONIC_KILLSWITCH/);
+});
+
+test('clearOwnScopeCaches deletes complete and incomplete caches of this scope only, and keeps the marker', async () => {
+  const caches = fakeCaches();
+  const names = await seedCatalog(caches);
+  await setNavigatedFlag(caches, devScope);
+  const deleted = await clearOwnScopeCaches(caches, devScope);
+  assert.deepEqual(deleted.sort(), [names.complete, names.incomplete, names.ownedLegacy].sort());
+  assert.deepEqual((await caches.keys()).sort(), [MARK, names.emptyLegacy, names.mixedLegacy, names.other, names.prod, names.prodIncomplete].sort());
+  assert.equal(caches.buckets.get(names.prod).size, 2);
+  assert.equal(caches.buckets.has(names.prodIncomplete), true);
+  assert.equal(await hasNavigatedFlag(caches, devScope), true);
+  assert.ok(MARKER_PREFIX);
+});
+
+test('activateKillSwitch stays registered, deletes only this scope, and reloads only this scope\'s clients', async () => {
+  const caches = fakeCaches();
+  const names = await seedCatalog(caches);
+  const navigated = [];
+  const clients = [
+    { url: `${devScope}index.html?skipHello=1`, async navigate(url) { navigated.push(url); } },
+    { url: `${prodScope}index.html`, async navigate(url) { navigated.push('PROD ' + url); } },
+    { url: `${origin}/other/`, async navigate(url) { navigated.push('OTHER ' + url); } },
+  ];
+  const scope = fakeScope(caches, { clients });
+  const out = await activateKillSwitch(scope, { settleMs: 0 });
+  assert.equal(scope.calls.claimed, 1);
+  assert.equal(scope.calls.skipped, 1);
+  assert.equal(scope.calls.unregistered, 0);
+  assert.equal(out.navigated, true);
   assert.deepEqual(out.deleted.sort(), [names.complete, names.incomplete, names.ownedLegacy].sort());
   assert.deepEqual(out.reloaded, [`${devScope}index.html?skipHello=1`]);
   assert.deepEqual(navigated, [`${devScope}index.html?skipHello=1`]);
-  assert.deepEqual((await caches.keys()).sort(), [names.emptyLegacy, names.mixedLegacy, names.other, names.prod, names.prodIncomplete].sort());
+  assert.equal(await hasNavigatedFlag(caches, devScope), true);
+  assert.deepEqual((await caches.keys()).sort(), [MARK, names.emptyLegacy, names.mixedLegacy, names.other, names.prod, names.prodIncomplete].sort());
 });
 
-test('attachKillSwitch skipWaiting on install and runs the activate path', async () => {
+test('the at-most-once flag stops a later activation from navigating again', async () => {
+  const caches = fakeCaches();
+  await seedCatalog(caches);
+  const navigated = [];
+  const clients = [
+    { url: `${devScope}?skipHello=1`, async navigate(url) { navigated.push(url); } },
+  ];
+  const scope = fakeScope(caches, { clients });
+  const first = await activateKillSwitch(scope, { settleMs: 0 });
+  assert.equal(first.navigated, true);
+  assert.deepEqual(first.reloaded, [`${devScope}?skipHello=1`]);
+  assert.equal(navigated.length, 1);
+  assert.equal(await hasNavigatedFlag(caches, devScope), true);
+
+  const second = await activateKillSwitch(scope, { settleMs: 0 });
+  assert.equal(second.navigated, false);
+  assert.deepEqual(second.reloaded, []);
+  assert.equal(navigated.length, 1, 'a reinstall or later activate must not navigate again');
+  assert.equal(scope.calls.unregistered, 0);
+  assert.equal(await hasNavigatedFlag(caches, devScope), true);
+  assert.equal((await caches.keys()).some(n => n.startsWith('kitphonic:/kitphonic-dev/:')), false);
+});
+
+test('attachKillSwitch skipWaiting on install, runs the activate path, and answers the kill-switch probe', async () => {
   const caches = fakeCaches();
   await seedCatalog(caches);
   const handlers = {};
-  let skipped = 0;
   const until = [];
-  const scope = {
-    caches,
-    addEventListener(type, fn) { handlers[type] = fn; },
-    async skipWaiting() { skipped++; },
-    registration: { scope: devScope, async unregister() { return true; } },
-    clients: { async claim() {}, async matchAll() { return []; } },
-  };
+  const scope = fakeScope(caches, { clients: [] });
+  scope.addEventListener = (type, fn) => { handlers[type] = fn; };
   attachKillSwitch(scope);
   handlers.install({ waitUntil: p => until.push(p) });
   handlers.activate({ waitUntil: p => until.push(p) });
   await Promise.all(until);
-  assert.equal(skipped, 1);
+  assert.ok(scope.calls.skipped >= 1);
   const left = await caches.keys();
   assert.equal(left.some(n => n.startsWith('kitphonic:/kitphonic-dev/:')), false);
   assert.equal(left.includes('kitphonic:/kitphonic/:0123456789abcdef'), true);
+  assert.equal(left.includes(MARK), true);
+  assert.equal('fetch' in handlers, false);
+
+  let reply = null;
+  const port = { postMessage(data) { reply = data; } };
+  handlers.message({ data: { type: 'kitphonic-killswitch' }, ports: [port] });
+  assert.deepEqual(reply, { type: 'kitphonic-killswitch', killswitch: true });
 });

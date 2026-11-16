@@ -5,6 +5,7 @@ export function cachePrefixFor(scopeUrl) {
 }
 
 const LEGACY = /^kitphonic-[0-9a-f]+$/;
+const MARKER_PREFIX = 'kitphonic-killswitch:';
 
 // How long a ?nosw=1 pass keeps polling Cache Storage after the first delete. WebKit can surface
 // an incomplete cache from an aborted install after the first keys() call, or only drop it after
@@ -43,6 +44,7 @@ async function namesOwnedByScope(store, base) {
   const prefix = cachePrefixFor(base);
   const mine = [];
   for (const name of await store.keys()) {
+    if (name.startsWith(MARKER_PREFIX)) continue;
     if (name.startsWith(prefix) || await legacyOwned(store, name, base)) mine.push(name);
   }
   return mine;
@@ -78,6 +80,42 @@ export async function killServiceWorker({ navigator: nav, caches: store, scope, 
   return out;
 }
 
+export function isKillSwitchReply(data) {
+  return !!(data && data.killswitch === true);
+}
+
+// Belt and braces: if the registered or active worker is the emergency kill switch,
+// the page must not auto-reload (the template already navigates at most once).
+export async function isKillSwitchWorker(nav, { timeoutMs = 200 } = {}) {
+  if (!nav || !nav.serviceWorker) return false;
+  let worker = nav.serviceWorker.controller;
+  if (!worker && nav.serviceWorker.getRegistration) {
+    try {
+      const reg = await nav.serviceWorker.getRegistration();
+      worker = reg && (reg.active || reg.waiting || reg.installing);
+    } catch { return false; }
+  }
+  if (!worker || typeof worker.postMessage !== 'function') return false;
+  try {
+    return await new Promise(resolve => {
+      const ch = new MessageChannel();
+      let settled = false;
+      const done = result => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        try { ch.port1.close(); } catch { /* already closed */ }
+        try { ch.port2.close(); } catch { /* already closed */ }
+        resolve(result);
+      };
+      const timer = setTimeout(() => done(false), timeoutMs);
+      ch.port1.onmessage = event => { done(isKillSwitchReply(event.data)); };
+      try { worker.postMessage({ type: 'kitphonic-killswitch' }, [ch.port2]); }
+      catch { done(false); }
+    });
+  } catch { return false; }
+}
+
 export function shouldRegisterServiceWorker({ hasServiceWorker = false, capacitor = false, protocol = '', hostname = '', search = '' } = {}) {
   if (!hasServiceWorker || capacitor || protocol === 'capacitor:') return false;
   const q = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
@@ -93,8 +131,11 @@ export function registerServiceWorker({ navigator: nav = globalThis.navigator, l
     const willReload = typeof loc.reload === 'function' && shouldReloadAfterKill({ search: loc.search, type: navigationType(perf) });
     const wait = settleMs ?? (willReload ? 100 : KILL_SETTLE_MS);
     try {
-      killServiceWorker({ navigator: nav, caches: store, scope: new URL('../', import.meta.url).href, settleMs: wait })
-        .finally(() => { if (willReload) loc.reload(); })
+      Promise.resolve(willReload ? isKillSwitchWorker(nav) : false)
+        .then(async already => {
+          await killServiceWorker({ navigator: nav, caches: store, scope: new URL('../', import.meta.url).href, settleMs: wait });
+          if (willReload && !already) loc.reload();
+        })
         .catch(() => {});
     } catch { /* nothing to clear */ }
     return false;
