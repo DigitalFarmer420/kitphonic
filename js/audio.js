@@ -16,6 +16,11 @@ export const EARLY_CLIPS = ['m-hello', 'sfx-chime', 'sfx-tap', 'm-letter-says', 
 export const earlyFile = id => `takes/${id}.mp3`; // rc4: the sfx are small MP3 takes too (chime wav 70 KB -> 7 KB)
 // play() must never hang: onended can be skipped if the context is suspended/interrupted (iPad app switch).
 const PLAY_MARGIN_MS = 400, PLAY_TIMEOUT_CAP_MS = 10_000, RESUME_MS = 200, UNLOCK_RESUME_MS = 500;
+export function endedWaitMs(durSec) { // missing / NaN / non-finite / negative -> 10 s cap, never NaN
+  const n = Number(durSec);
+  if (!Number.isFinite(n) || n < 0) return PLAY_TIMEOUT_CAP_MS;
+  return Math.min(PLAY_TIMEOUT_CAP_MS, Math.round(n * 1000) + PLAY_MARGIN_MS);
+}
 const resumers = new Set();
 let visHooked = false;
 function hookVisibility(fn) { // once per module; each audio instance adds its own resume
@@ -72,20 +77,21 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     await Promise.race([p || Promise.resolve(), wait(RESUME_MS)]);
     return ctx.state === 'running';
   }
-  const endedWaitMs = durSec => Math.min(PLAY_TIMEOUT_CAP_MS, Math.round(Math.max(0, durSec) * 1000) + PLAY_MARGIN_MS);
-  function waitEnded(s, ms, onDone) { // resolve on onended or timeout; do not use `timers` (stop() must still s.stop() first)
+  function waitEnded(s, ms, onDone) { // resolve on onended, stop(), or timeout; s.stop() still runs first
     return new Promise(r => {
       let settled = false, tid = 0;
       const finish = () => {
         if (settled) return;
         settled = true;
         if (tid) { clearTimeout(tid); tid = 0; }
+        s.__endTid = 0;
         sources.delete(s);
         try { onDone?.(); } catch {}
         r();
       };
-      s.onended = finish;
+      s.onended = s.__finish = finish;
       tid = setTimeout(finish, ms);
+      s.__endTid = tid;
     });
   }
   // --- rc5 serial queue ---
@@ -124,9 +130,10 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
         at ??= ctx.currentTime + (clips.length > 1 ? 0.05 : 0); // a phrase is scheduled 50 ms ahead so its 1st clip can't start late and run into the 2nd
         const s = ctx.createBufferSource(); s.buffer = buf; s.playbackRate.value = rate; s.connect(ctx.destination); sources.add(s);
         const e = { id: c.id, via, rate, t: Math.round(now() + (at - ctx.currentTime) * 1000) }; log.push(e);
-        s.start(at, lead, dur * rate); at += dur;
-        const sched = e.t + dur * 1000; s.__e = e; s.__end = sched; e.a = at * 1000 - dur * 1000; e.b = at * 1000; // a/b: audio clock (ms), exact // log the exact scheduled end (onended fires a few ms late on the main thread)
-        ends.push(waitEnded(s, endedWaitMs(dur), () => { e.end ??= Math.round(sched); }));
+        const waitMs = endedWaitMs(dur), known = Number.isFinite(dur) && dur >= 0;
+        s.start(at, lead, known ? dur * rate : undefined); at += known ? dur : waitMs / 1000;
+        const sched = e.t + (known ? dur * 1000 : waitMs); s.__e = e; s.__end = sched; e.a = at * 1000 - (known ? dur * 1000 : waitMs); e.b = at * 1000; // a/b: audio clock (ms)
+        ends.push(waitEnded(s, waitMs, () => { const end = Math.round(sched); e.end ??= Number.isFinite(end) ? end : Math.round(now()); }));
       } else { // no buffer: speech / tone, strictly after whatever was scheduled before it
         await Promise.all(ends.splice(0)); at = null; if (my !== gen) return;
         const e = { id: c.id, via, rate, t: Math.round(now()), a: ctx ? ctx.currentTime * 1000 : undefined }; log.push(e);
@@ -187,7 +194,17 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
       gen++; pending = 0; tail = Promise.resolve();
       for (const [t, r] of timers) { clearTimeout(t); r(); } timers.clear();
       const cutAt = Math.round(now()); lastEnd = -Infinity; // a child's tap: the next sound may start at once
-      for (const s of sources) { if (s.__e) { s.__e.end ??= Math.round(Math.min(cutAt, s.__end ?? cutAt)); if (s.__e.b > ctx.currentTime * 1000) s.__e.b = Math.max(s.__e.a, ctx.currentTime * 1000); } /* cut before its start = never heard (end < t) */ try { s.stop(); } catch {} } sources.clear();
+      for (const s of [...sources]) {
+        if (s.__e) {
+          const cap = Number.isFinite(s.__end) ? s.__end : cutAt;
+          const end = Math.round(Math.min(cutAt, cap));
+          s.__e.end ??= Number.isFinite(end) ? end : cutAt; // never log end: NaN
+          if (Number.isFinite(s.__e.b) && s.__e.b > ctx.currentTime * 1000) s.__e.b = Math.max(s.__e.a, ctx.currentTime * 1000);
+        } /* cut before its start = never heard (end < t) */
+        try { s.stop(); } catch {} // stop first so the audio-clock interval is truncated
+        if (s.__endTid) { clearTimeout(s.__endTid); s.__endTid = 0; }
+        try { s.__finish?.(); } catch {} // if onended never fired, resolve play() now and drop the duration fallback
+      } sources.clear();
       if ('speechSynthesis' in window) speechSynthesis.cancel();
     },
   };

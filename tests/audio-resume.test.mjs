@@ -15,7 +15,8 @@ function installDom() {
   globalThis.dispatchEvent = ev => listeners.dispatchEvent(ev);
   return { document, window: globalThis };
 }
-function installAudio({ neverEnd = false, initialState = 'running', hangResume = false } = {}) {
+function installAudio(opts = {}) {
+  const { neverEnd = false, stopFiresEnded = !neverEnd, initialState = 'running', hangResume = false } = opts;
   const ctxs = [];
   class Ctx {
     state = initialState;
@@ -33,13 +34,19 @@ function installAudio({ neverEnd = false, initialState = 'running', hangResume =
       return Promise.resolve();
     }
     async decodeAudioData(b) {
-      const d = new Float64Array(b)[0], n = Math.max(1, Math.round(d * 1000));
-      return { duration: d, sampleRate: 1000, length: n, getChannelData: () => new Float32Array(n) };
+      const encoded = new Float64Array(b)[0];
+      const over = Object.hasOwn(opts, 'durationOverride');
+      const d = over ? opts.durationOverride : encoded;
+      const span = Number.isFinite(d) && d > 0 ? d : 0.08;
+      const n = Math.max(1, Math.round(span * 1000));
+      const buf = { sampleRate: 1000, length: n, getChannelData: () => new Float32Array(n) };
+      if (!over || d !== undefined) buf.duration = d;
+      return buf;
     }
     createBufferSource() {
       const s = { playbackRate: { value: 1 }, connect() {}, onended: null, buffer: null,
         start() { if (!neverEnd) s.off = setTimeout(() => s.onended?.(), 20); },
-        stop() { clearTimeout(s.off); s.onended?.(); } };
+        stop() { clearTimeout(s.off); if (stopFiresEnded) s.onended?.(); } };
       return s;
     }
     createOscillator() { return { frequency: { value: 0 }, type: 'sine', connect() { return this; }, start() {}, stop() {}, onended: null }; }
@@ -151,5 +158,63 @@ test('unlock() resolves when resume() never settles', { timeout: 2000 }, async (
   assert.equal(a.unlocked, false, 'unlocked follows ctx.state === running');
   assert.ok(ctxs[0].resumeCalls >= 1, 'tried ctx.resume()');
   assert.ok(a.loadedCount >= 1, 'first clips still primed while resume is outstanding');
+  assert.equal(rejections.length, 0);
+});
+
+test('endedWaitMs falls back to the 10 s cap for missing, NaN, non-finite, or negative duration', async () => {
+  const { endedWaitMs } = await import('../js/audio.js?ended-wait-ms');
+  assert.equal(endedWaitMs(NaN), 10_000);
+  assert.equal(endedWaitMs(undefined), 10_000);
+  assert.equal(endedWaitMs(Infinity), 10_000);
+  assert.equal(endedWaitMs(-1), 10_000);
+  assert.equal(endedWaitMs(Number.NEGATIVE_INFINITY), 10_000);
+  assert.equal(endedWaitMs(0), 400);
+  assert.equal(endedWaitMs(0.5), 900);
+  assert.equal(endedWaitMs(30), 10_000);
+});
+
+test('play() does not resolve immediately or log end: NaN when buffer.duration is missing or non-finite', { timeout: 3000 }, async () => {
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const cases = [['missing', undefined], ['NaN', NaN], ['Infinity', Infinity], ['negative', -1]];
+  for (const [label, durationOverride] of cases) {
+    installDom();
+    installAudio({ neverEnd: true, stopFiresEnded: false, durationOverride });
+    const { createAudio } = await import(`../js/audio.js?bad-dur-${label}`);
+    const a = await createAudio({ early: [] });
+    await a.unlock({ first: [] });
+    let settled = false;
+    const p = a.play('sfx-chime').then(v => { settled = true; return v; });
+    await sleep(80);
+    assert.equal(settled, false, `${label}: play() resolved immediately (NaN timeout)`);
+    const pending = window.__kitAudioLog.filter(e => e.id === 'sfx-chime');
+    assert.ok(pending.length >= 1, `${label}: clip was logged`);
+    assert.ok(pending.every(e => e.end === undefined || Number.isFinite(e.end)), `${label}: logged end: ${pending.map(e => e.end)}`);
+    a.stop();
+    await p;
+    assert.equal(settled, true, `${label}: play() should resolve after stop()`);
+    assert.ok(window.__kitAudioLog.filter(e => e.id === 'sfx-chime').every(e => Number.isFinite(e.end)), `${label}: end must be finite after stop, got ${JSON.stringify(window.__kitAudioLog)}`);
+    assert.equal(a.busy, false);
+  }
+});
+
+test('stop() resolves play() promptly when onended never fires', { timeout: 2000 }, async () => {
+  installDom();
+  installAudio({ neverEnd: true, stopFiresEnded: false });
+  const rejections = [];
+  const onRej = reason => rejections.push(reason);
+  process.on('unhandledRejection', onRej);
+  const { createAudio } = await import('../js/audio.js?stop-no-ended');
+  const a = await createAudio({ early: [] });
+  await a.unlock({ first: [] });
+  const p = a.play('m-hello'); // 5 s clip would otherwise wait ~5.4 s
+  await new Promise(r => setTimeout(r, 40));
+  const t0 = Date.now();
+  a.stop();
+  await p;
+  const elapsed = Date.now() - t0;
+  process.off('unhandledRejection', onRej);
+  assert.ok(elapsed < 500, `play() resolved late after stop() (${elapsed} ms)`);
+  assert.equal(a.busy, false);
+  assert.ok(window.__kitAudioLog.every(e => e.end === undefined || Number.isFinite(e.end)));
   assert.equal(rejections.length, 0);
 });
