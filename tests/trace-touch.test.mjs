@@ -57,7 +57,9 @@ test('trace screen wiring: pointer ownership, coalesced events, cancel and lost 
   assert.match(src, /getCoalescedEvents/);
   assert.match(src, /screenToLetter\(svg\.getScreenCTM\(\)/);
   assert.doesNotMatch(src, /owner\.reset\(\)/);
-  assert.match(src, /onpointerup = svg\.onpointercancel = svg\.onlostpointercapture = endStroke/);
+  assert.match(src, /onpointerup = svg\.onpointercancel = endStroke/);
+  assert.match(src, /onlostpointercapture = e => scheduleLostCaptureOnSelf\(e, pid => owner\.owns\(pid\), \(\) => endStroke\(e\)\)/);
+  assert.doesNotMatch(src, /onlostpointercapture = endStroke/);
   assert.match(src, /addEventListener\('pointercancel', endStroke\)/);
   const endAt = src.indexOf('const endStroke');
   assert.ok(endAt > 0);

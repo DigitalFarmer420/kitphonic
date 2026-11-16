@@ -5,7 +5,7 @@ import { noSeen } from './seen.js';
 import { LETTER_PICS, WORDS } from './content.js';
 import { GPC } from './sequence.js';
 import { STROKES, createTracer, strokeOwner, resample, pathD, letterBox, screenToLetter } from './trace.js';
-import { tryCapture } from './gesture.js';
+import { tryCapture, scheduleLostCaptureOnSelf } from './gesture.js';
 import { shuffle } from './word-logic.js';
 
 const $ = id => document.getElementById(id);
@@ -108,7 +108,8 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       if (st.letterDone) done();
     };
     const endStroke = e => { if (!owner.release(e.pointerId)) return; dragging = false; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); }; // cancel / lost capture keeps the ink: resume where it paused
-    svg.onpointerup = svg.onpointercancel = svg.onlostpointercapture = endStroke;
+    svg.onpointerup = svg.onpointercancel = endStroke;
+    svg.onlostpointercapture = e => scheduleLostCaptureOnSelf(e, pid => owner.owns(pid), () => endStroke(e));
     // Capture can fail. A cancel or lift that never reaches the svg (finger already outside) still has to drop the owner.
     window.addEventListener('pointerup', endStroke); window.addEventListener('pointercancel', endStroke);
     detachTrace = () => { window.removeEventListener('pointerup', endStroke); window.removeEventListener('pointercancel', endStroke);
