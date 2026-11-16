@@ -53,6 +53,44 @@ test('a failed unlock or welcome can be tried again; a success cannot', async ()
   assert.equal(went, 1);
 });
 
+test('reset after a success arms another visit', async () => {
+  const phases = [];
+  const gate = createHelloGate({ onPhase: (next, from) => phases.push(`${from}->${next}`) });
+  let plays = 0, goes = 0;
+  const once = () => gate.start({ unlock: async () => {}, play: async () => { plays++; }, go: () => { goes++; } });
+  for (let i = 0; i < 3; i++) {
+    if (i) gate.reset();
+    assert.equal(gate.phase, 'idle');
+    assert.equal(await once(), true);
+    assert.equal(await once(), false);
+  }
+  assert.equal(plays, 3);
+  assert.equal(goes, 3);
+  assert.deepEqual(phases, [
+    'idle->running', 'running->done',
+    'done->idle', 'idle->running', 'running->done',
+    'done->idle', 'idle->running', 'running->done',
+  ]);
+});
+
+test('reset during a greeting drops that attempt', async () => {
+  const gate = createHelloGate();
+  let release;
+  const hold = new Promise(r => { release = r; });
+  let plays = 0, goes = 0;
+  const first = gate.start({ unlock: () => hold, play: async () => { plays++; }, go: () => { goes++; } });
+  assert.equal(gate.phase, 'running');
+  gate.reset();
+  release();
+  assert.equal(await first, false);
+  assert.equal(plays, 0);
+  assert.equal(goes, 0);
+  assert.equal(gate.phase, 'idle');
+  assert.equal(await gate.start({ unlock: async () => {}, play: async () => { plays++; }, go: () => { goes++; } }), true);
+  assert.equal(plays, 1);
+  assert.equal(goes, 1);
+});
+
 test('welcome playback in flight ignores more starts and still transitions once', async () => {
   const gate = createHelloGate();
   let releasePlay, plays = 0, goes = 0;
