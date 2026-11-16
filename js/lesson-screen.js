@@ -134,8 +134,11 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     // sits on top of the green start dot before the child has touched.
     const guide = (on, st = tracer.state()) => { const P = strokes[st.stroke]; const q = on && P ? P[Math.min(st.k, P.length - 1)] : [-50, -50]; ghost.setAttribute('cx', q[0]); ghost.setAttribute('cy', q[1]); };
     const owner = strokeOwner(); // rc6: only the finger that started the stroke drives it (iPad palm / second finger)
-    let held = false, touchId = null, lastClient = null;
-    const seenTouches = new Map();
+    // Touch.identifier and PointerEvent.pointerId are different numbers (they can even collide), so the stroke's
+    // touch is matched by position, never by id: a palm whose identifier equals the finger's pointerId must not own it.
+    let held = false, touchId = null, lastClient = null, downClient = null;
+    const live = new Map(); // touch identifier -> [clientX, clientY] for touches currently on the svg
+    const nearTouch = (xy, list) => { let best = null, bd = 4; for (const [id, q] of list) { const d = Math.hypot(q[0] - xy[0], q[1] - xy[1]); if (d < bd) { bd = d; best = id; } } return best; };
     const paintMove = (samples) => {
       let st = tracer.state();
       for (const c of samples) { const q = toLetter(c); if (!q) continue; st = tracer.move(q[0], q[1]); if (st.strokeDone) break; }
@@ -149,10 +152,13 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     const finishStroke = () => { if (owner.id != null) owner.release(owner.id); held = false; dragging = false; touchId = null; guide(false); tracer.up(); lanes.forEach(ln => ln.classList.remove('off')); };
     const onTouchStart = e => {
       if (run && !$('trace').hidden) e.preventDefault();
-      for (const t of e.changedTouches) seenTouches.set(t.identifier, [t.clientX, t.clientY]);
+      for (const t of e.changedTouches) live.set(t.identifier, [t.clientX, t.clientY]);
+      // pointerdown usually fires before touchstart: bind the stroke to the new touch at the pointerdown position.
+      if (dragging && touchId == null && downClient) touchId = nearTouch(downClient, [...e.changedTouches].map(t => [t.identifier, [t.clientX, t.clientY]]));
     };
     const onTouchMove = e => {
       if (run && !$('trace').hidden) e.preventDefault();
+      for (const t of e.changedTouches) if (live.has(t.identifier)) live.set(t.identifier, [t.clientX, t.clientY]);
       if (!held || !dragging || !run) return;
       const t = traceTouch(e.touches, { id: touchId, last: lastClient });
       if (!t) return;
@@ -161,8 +167,9 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
       paintMove([t]);
     };
     const onTouchEnd = e => {
-      if (touchId == null || ![...e.changedTouches].some(t => t.identifier === touchId)) return;
-      seenTouches.delete(touchId); finishStroke();
+      const mine = touchId != null && [...e.changedTouches].some(t => t.identifier === touchId);
+      for (const t of e.changedTouches) live.delete(t.identifier);
+      if (mine && held) finishStroke(); // a paused (cancelled) stroke ends when its own finger lifts; a live one ends on pointerup
     };
     svg.addEventListener('touchstart', onTouchStart, { passive: false });
     svg.addEventListener('touchmove', onTouchMove, { passive: false });
@@ -172,12 +179,14 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     svg.onpointerdown = e => { e.preventDefault(); hand.hide(); hand.poke(); if (!run || run.busy) return;
       // strokeDone clears `dragging` while this finger may still be down. Do not reset the owner:
       // a palm or second finger must not start the next stroke until this one lifts.
+      // A cancelled stroke whose finger has already lifted no longer blocks a new touch (iOS: cancel, lift, touch again).
+      if (held && owner.id !== null && !owner.owns(e.pointerId) && (touchId == null || !live.has(touchId))) finishStroke();
       if (owner.id !== null && !owner.owns(e.pointerId)) return;
       if (dragging && !owner.owns(e.pointerId)) return; // another finger mid-stroke: ignore
       const p = toLetter(e); if (!p) return; const [x, y] = p; const st = tracer.down(x, y); dragging = st.active;
       if (dragging) {
-        held = false; lastClient = [e.clientX, e.clientY];
-        touchId = e.pointerType === 'touch' ? (seenTouches.has(e.pointerId) ? e.pointerId : (traceTouch([...seenTouches].map(([identifier, xy]) => ({ identifier, clientX: xy[0], clientY: xy[1] })), { last: lastClient })?.identifier ?? e.pointerId)) : null;
+        held = false; lastClient = [e.clientX, e.clientY]; downClient = lastClient;
+        touchId = e.pointerType === 'touch' ? nearTouch(downClient, live) : null; // null until its touchstart arrives
         owner.claim(e.pointerId); if (e.pointerType !== 'touch') tryCapture(svg, e.pointerId); guide(true);
       } };
     svg.onpointermove = e => {
