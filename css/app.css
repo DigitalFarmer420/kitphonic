@@ -209,7 +209,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .portrait .ipic{top:clamp(28.75rem, calc(var(--h) * .23 + 18.125rem), 33.75rem);width:21.25rem;margin-left:-10.625rem}
 .short .icard{left:15.625rem;top:6rem;width:12.5rem;height:12.5rem;margin:0;font-size:9.375rem}
 .short .ipic{left:auto;right:1.75rem;top:7.5rem;margin:0;width:calc(var(--w) - 32.5rem);max-width:22.5rem;height:9.375rem}
-.short #ls-mascot{top:5.625rem}.short #ls-mascot svg{width:3.5rem;height:3.5rem}.short #ls-mascot .bubble{font-size:0.9375rem;max-width:10.3125rem;padding:0.5rem 0.75rem}
+.short #ls-mascot{top:5.625rem}.short #ls-mascot svg{width:3.5rem;height:3.5rem}.short #ls-mascot .bubble{font-size:0.9375rem;max-width:8rem;padding:0.5rem 0.75rem}
 .short .ibar{left:auto;width:calc(var(--w) - 32.5rem);max-width:25rem;right:1.75rem;bottom:0.875rem}
 .short .tcard{top:5.625rem;bottom:0.875rem;left:50%}
 .short #trace .ibar{width:auto;left:auto;right:1rem;flex-direction:column;bottom:0.875rem;width:9.375rem}
@@ -306,7 +306,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #play{bottom:1.375rem}
 .short #word-mascot{left:1rem;top:5.625rem}
 .short #word-mascot svg{width:3.5rem;height:3.5rem}
-.short #word-mascot .bubble{max-width:11.25rem;font-size:0.9375rem;padding:0.5rem 0.75rem}
+.short #word-mascot .bubble{max-width:9.75rem;max-height:3.4rem;overflow:auto;font-size:0.9375rem;padding:0.5rem 0.75rem}
 .short #card{left:1.5rem;margin-left:0;top:10.375rem;width:11.25rem;height:7.25rem}
 .short #tiles{bottom:12.125rem;height:6.875rem}
 .short #markers{bottom:7rem}
@@ -419,7 +419,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* Uiux r5 */
 /* 1) landscape screens with Kit in the top bar: progress dots move right, clear of Kit's bubble */
 .short #fm-pebbles,.tall #fm-pebbles,.short #sn-pebbles,.tall #sn-pebbles{position:absolute;right:6rem;top:1.5625rem}
-.short #fm-mascot .bubble,.tall #fm-mascot .bubble{max-width:20.625rem}
+.short #fm-mascot .bubble{max-width:12rem}.tall #fm-mascot .bubble{max-width:20.625rem}
 /* 2) landscape trace: card as tall as the screen allows; undo + stars in a column right beside it (JS places it) */
 .short #lesson.tracing .tcard{top:0.75rem;bottom:0.75rem}
 .short #lesson.tracing .top .path{visibility:hidden}

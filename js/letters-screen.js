@@ -23,8 +23,19 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   const box = () => { const s = stage.info, m = s.mode, u = U();
     const top = (m === 'short' ? 130 : m === 'portrait' ? 220 : 170) * u, bottom = m === 'short' ? s.h - 16 * u : s.h - (m === 'portrait' ? 130 : 120) * u;
     return { left: 20 * u, right: s.w - 20 * u, top, bottom }; };
+  const floatBox = () => { const b = box(), u = U(); if (stage.info.mode === 'short') b.top = Math.max(b.top, 175 * u); return b; };
   const cellW = n => { const s = stage.info, u = U(), per = s.designW < 700 ? 3 : 6; return Math.min(150 * u, (s.w - 40 * u) / Math.min(per, n)); };
-  const tileHalf = () => { const m = stage.info.mode, u = U(), pt = m === 'portrait' && stage.info.designW < 600; const [a, b] = m === 'short' || pt ? [55, 62] : [60, 68]; return [Math.max(32, a * u), Math.max(32, b * u)]; };
+  const tileHalf = () => {
+    const m = stage.info.mode, u = U(), pt = m === 'portrait' && stage.info.designW < 600;
+    const [a, b] = m === 'short' || pt ? [55, 60] : [60, 68];
+    let hw = Math.max(32, a * u), hh = Math.max(32, b * u);
+    if (m === 'short') { // six tiles have to fit a 320-tall phone without covering each other
+      const bx = box(), room = Math.max(1, bx.right - bx.left);
+      const cap = Math.max(32, (room / 6 - 8) / 2);
+      hw = Math.min(hw, cap); hh = Math.min(hh, hw * (b / a));
+    }
+    return [hw, hh];
+  };
   // --- design 1a: big ear (replays the sound only), 3 tiles below it, star tray, ghost hand ---
   const soundClip = g => (audio.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
   function earPos() { const s = stage.info, u = U(); return s.mode === 'short' ? { x: Math.round(s.w * 0.22) + 40 * u, y: 240 * u } : { x: s.w / 2, y: s.mode === 'portrait' ? Math.max(310 * u, s.h * 0.36) : 250 * u }; }
@@ -92,7 +103,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       run.items.forEach((it, i) => { it.x = laid[i].x; it.y = laid[i].y; });
       const ear = $('l-ear'); if (ear) { const e = placedEar(); ear.style.left = e.x + 'px'; ear.style.top = e.y + 'px'; }
     } else if (run.def.drift && !settings.reducedMotion()) {
-      const fresh = floatInit(letters, { box: b, rand, half: tileHalf() });
+      const fresh = floatInit(letters, { box: floatBox(), rand, half: tileHalf() });
       run.items.forEach((it, i) => { it.x = fresh[i].x; it.y = fresh[i].y; it.vx = fresh[i].vx * u; it.vy = fresh[i].vy * u; it.half = fresh[i].half; });
     } else {
       const g = gridSpec(letters.length);
@@ -110,6 +121,11 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       const n = el('div', 'ltr'); n.dataset.l = it.l;
       const tx = it.l === 'I' ? 'I' : tileText(it.l), t = el('button', 'tile L' + (tx.length > 1 ? ' two' : ''), caseFor(tx, run.case)); t.setAttribute('aria-label', tx);
       t.onpointerdown = e => { e.stopPropagation(); tap(it, 'letter', n); };
+      if (run.def.drift && it.half) {
+        const [hw, hh] = it.half;
+        t.style.width = (2 * hw) + 'px'; t.style.height = (2 * hh) + 'px';
+        t.style.left = (-hw) + 'px'; t.style.top = (-hh) + 'px';
+      }
       n.append(t);
       if (run.dots) { const d = el('button', 'ldot', WAVE); d.setAttribute('aria-label', `${it.l} sound`); d.onpointerdown = e => { e.stopPropagation(); tap(it, 'dot', n); }; n.append(d); }
       it.node = n; return n;
@@ -124,7 +140,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const b = box(), u = U();
     $('letters').classList.toggle('hunt', !!run.def.ear);
     if (run.def.ear) run.items = earLayout(letters);
-    else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: b, rand, half: tileHalf() }).map(it => ({ ...it, vx: it.vx * u, vy: it.vy * u }));
+    else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: floatBox(), rand, half: tileHalf() }).map(it => ({ ...it, vx: it.vx * u, vy: it.vy * u }));
     else { const g = gridSpec(letters.length); const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
     run.target = target; run.firstTry = true; run.misses = 0; run.promptEnd = 0; place(run.items); renderPebbles(); if (run.def.ear) { addEar(); tray(); }
     const p = prompt();
@@ -173,7 +189,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   }
   function loop(t0) {
     let last = t0;
-    const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), box(), now); last = now; move(); raf = requestAnimationFrame(step); };
+    const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), floatBox(), now); last = now; move(); raf = requestAnimationFrame(step); };
     raf = requestAnimationFrame(step);
   }
   function finish() { // a finished scored round is a milestone: varied spoken praise, then the next activity
