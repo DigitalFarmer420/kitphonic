@@ -35,3 +35,16 @@ export function wordLayout(n, opts = {}) {
     track: { left: x0, width: span },
   };
 }
+// The groove ends where the knob sits at fraction 1. That point is on screen (knobX clamps the
+// centre), so value 100 is the drawn end of the track and the 90px knob still fits on the stage.
+export function sliderTrack(layout) {
+  const left = Math.max(8, layout.track.left - 20), right = layout.knobX(1);
+  return { left, width: Math.max(1, right - left) };
+}
+// A finger at the on-screen end of the knob, or past the sweep's end (0.98), is at fraction 1.
+// Otherwise a finished drag can leave the knob a hair short of the track while the value is not 100.
+export function fractionAt(layout, x) {
+  const f = layout.fracFromX(x);
+  if (f >= 0.98 || x >= layout.knobX(1) - 0.5) return 1;
+  return f;
+}
