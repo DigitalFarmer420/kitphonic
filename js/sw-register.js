@@ -116,6 +116,92 @@ export async function isKillSwitchWorker(nav, { timeoutMs = 200 } = {}) {
   } catch { return false; }
 }
 
+export const SW_UPDATE_READY = 'kitphonic:sw-update-ready';
+
+function exposeSwUpdate(api) {
+  const root = globalThis;
+  if (root.kitphonic && typeof root.kitphonic === 'object') root.kitphonic.swUpdate = api;
+  else root.kitphonic = { swUpdate: api };
+  return api;
+}
+
+const announced = new WeakSet();
+const applying = new WeakMap();
+
+// Posts { type: 'SKIP_WAITING' } to the waiting worker and reloads once when it takes
+// control. A second controllerchange, or a second apply() while one is in flight, does
+// not reload again. No MessageChannel: holding a reply port open can stall Chromium (#31).
+export function applySwUpdate(reg, { serviceWorker, location: loc = globalThis.location } = {}) {
+  const waiting = reg && reg.waiting;
+  if (!waiting || typeof waiting.postMessage !== 'function') return Promise.resolve(false);
+  const inflight = applying.get(reg);
+  if (inflight) return inflight;
+
+  let resolve;
+  const done = new Promise(r => { resolve = r; });
+  applying.set(reg, done);
+
+  let reloaded = false;
+  const reloadOnce = () => {
+    if (reloaded) return;
+    reloaded = true;
+    if (serviceWorker && typeof serviceWorker.removeEventListener === 'function') {
+      serviceWorker.removeEventListener('controllerchange', reloadOnce);
+    }
+    if (loc && typeof loc.reload === 'function') loc.reload();
+    resolve(true);
+  };
+  if (serviceWorker && typeof serviceWorker.addEventListener === 'function') {
+    serviceWorker.addEventListener('controllerchange', reloadOnce);
+  }
+  waiting.postMessage({ type: 'SKIP_WAITING' });
+  return done;
+}
+
+// Watch a registration for a waiting update and tell the page, with no UI.
+// Dispatches window CustomEvent kitphonic:sw-update-ready when:
+//   - a worker is already waiting on this registration, or
+//   - updatefound -> installed while a controller exists (an update, not the first install).
+// Exposes window.kitphonic.swUpdate = { ready, apply() }, merging onto an existing namespace.
+export function watchForUpdate(reg, {
+  serviceWorker,
+  location: loc = globalThis.location,
+  target = globalThis.window || globalThis,
+} = {}) {
+  if (!reg) return null;
+
+  const api = exposeSwUpdate({
+    get ready() { return !!(reg.waiting && reg.waiting.state !== 'redundant'); },
+    apply() { return applySwUpdate(reg, { serviceWorker, location: loc }); },
+  });
+
+  const announce = worker => {
+    const waiting = worker || reg.waiting;
+    if (!waiting) return;
+    if (announced.has(waiting)) return;
+    announced.add(waiting);
+    if (target && typeof target.dispatchEvent === 'function') {
+      target.dispatchEvent(new CustomEvent(SW_UPDATE_READY));
+    }
+  };
+
+  if (reg.waiting) announce(reg.waiting);
+
+  const onInstalled = worker => {
+    if (!worker) return;
+    const check = () => {
+      if (worker.state === 'installed' && serviceWorker && serviceWorker.controller) announce(worker);
+    };
+    if (typeof worker.addEventListener === 'function') worker.addEventListener('statechange', check);
+    check();
+  };
+  if (typeof reg.addEventListener === 'function') {
+    reg.addEventListener('updatefound', () => onInstalled(reg.installing));
+  }
+  if (reg.installing) onInstalled(reg.installing);
+  return api;
+}
+
 export function shouldRegisterServiceWorker({ hasServiceWorker = false, capacitor = false, protocol = '', hostname = '', search = '' } = {}) {
   if (!hasServiceWorker || capacitor || protocol === 'capacitor:') return false;
   const q = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
@@ -126,7 +212,7 @@ export function shouldRegisterServiceWorker({ hasServiceWorker = false, capacito
 
 // Script and scope come from this module's URL, so /kitphonic/ and /kitphonic-dev/ each get the
 // directory that contains index.html, not the origin root.
-export function registerServiceWorker({ navigator: nav = globalThis.navigator, location: loc = globalThis.location, capacitor = !!globalThis.Capacitor, caches: store = globalThis.caches, performance: perf = globalThis.performance, settleMs } = {}) {
+export function registerServiceWorker({ navigator: nav = globalThis.navigator, location: loc = globalThis.location, capacitor = !!globalThis.Capacitor, caches: store = globalThis.caches, performance: perf = globalThis.performance, settleMs, target } = {}) {
   if (nav && loc && wantsKillSwitch({ hasServiceWorker: !!nav && 'serviceWorker' in nav, capacitor, protocol: loc.protocol, search: loc.search })) {
     const willReload = typeof loc.reload === 'function' && shouldReloadAfterKill({ search: loc.search, type: navigationType(perf) });
     const wait = settleMs ?? (willReload ? 100 : KILL_SETTLE_MS);
@@ -146,7 +232,9 @@ export function registerServiceWorker({ navigator: nav = globalThis.navigator, l
   const script = new URL('../sw.js', import.meta.url);
   const scope = new URL('../', import.meta.url);
   try {
-    nav.serviceWorker.register(script.href, { type: 'module', scope: scope.href, updateViaCache: 'none' }).catch(() => {});
+    nav.serviceWorker.register(script.href, { type: 'module', scope: scope.href, updateViaCache: 'none' })
+      .then(reg => watchForUpdate(reg, { serviceWorker: nav.serviceWorker, location: loc, target }))
+      .catch(() => {});
   } catch { return false; }
   return true;
 }

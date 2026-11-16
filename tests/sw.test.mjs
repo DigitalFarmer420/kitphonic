@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker, cachePrefixFor, cacheNameFor, prefixOfName, legacyOwned } from '../sw.js';
-import { shouldRegisterServiceWorker, registerServiceWorker, cachePrefixFor as pagePrefixFor, wantsKillSwitch, killServiceWorker, shouldReloadAfterKill, navigationType, KILL_SETTLE_MS, isKillSwitchReply, isKillSwitchWorker } from '../js/sw-register.js';
+import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker, cachePrefixFor, cacheNameFor, prefixOfName, legacyOwned, attachWorker } from '../sw.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, cachePrefixFor as pagePrefixFor, wantsKillSwitch, killServiceWorker, shouldReloadAfterKill, navigationType, KILL_SETTLE_MS, isKillSwitchReply, isKillSwitchWorker, watchForUpdate, applySwUpdate, SW_UPDATE_READY } from '../js/sw-register.js';
 
 const origin = 'https://pages.example';
 const req = (path, extra = {}) => ({ url: origin + path, method: extra.method || 'GET', mode: extra.mode || 'cors' });
@@ -354,14 +354,19 @@ test('missingFrom compares by cache key', async () => {
   assert.deepEqual(await missingFrom(cache, [`${origin}/kitphonic/`, `${origin}/kitphonic/js/app.js`]), [`${origin}/kitphonic/js/app.js`]);
 });
 
-test('the worker source never calls skipWaiting outside a first install and never touches localStorage', async () => {
+test('skipWaiting is only used on a first install or a SKIP_WAITING message, and nothing touches localStorage', async () => {
   const { readFile } = await import('node:fs/promises');
   const src = await readFile(new URL('../sw.js', import.meta.url), 'utf8');
-  assert.equal((src.match(/skipWaiting\(\)/g) || []).length, 1);
+  assert.equal((src.match(/skipWaiting\(\)/g) || []).length, 2);
   assert.match(src, /if \(!isUpdate\(scope\)\) \{\s*await scope\.skipWaiting\(\);/);
+  assert.match(src, /type === 'SKIP_WAITING'[\s\S]*skipWaiting\(\)/);
   assert.equal(/localStorage/.test(src), false);
   const reg = await readFile(new URL('../js/sw-register.js', import.meta.url), 'utf8');
-  assert.equal(/SKIP_WAITING|skipWaiting/.test(reg), false);
+  assert.match(reg, /SKIP_WAITING/);
+  assert.match(reg, /kitphonic:sw-update-ready/);
+  const registerBody = reg.split('export function registerServiceWorker')[1] || '';
+  assert.equal(/SKIP_WAITING/.test(registerBody), false, 'registration must not post SKIP_WAITING on its own');
+  assert.equal(/localStorage/.test(reg), false);
 });
 
 // --- KP-QA-011: prod and dev share one origin; caches are named and cleaned per scope ---
@@ -580,4 +585,173 @@ test('registerServiceWorker with ?nosw=1 does not reload when the worker is the 
   await new Promise(r => setTimeout(r, 20));
   assert.equal(asked, 1);
   assert.equal(reloads, 0, 'a kill-switch worker already navigates at most once');
+});
+
+// --- SW update-ready plumbing (no UI; Front-End owns the prompt) ---
+
+function emitter(extra = {}) {
+  const map = new Map();
+  return {
+    ...extra,
+    addEventListener(type, fn) {
+      const list = map.get(type) || [];
+      list.push(fn);
+      map.set(type, list);
+    },
+    removeEventListener(type, fn) {
+      map.set(type, (map.get(type) || []).filter(f => f !== fn));
+    },
+    dispatch(type, event = {}) {
+      for (const fn of [...(map.get(type) || [])]) fn(event);
+    },
+  };
+}
+
+test('a SKIP_WAITING message calls skipWaiting and does not need a reply port', async () => {
+  const handlers = {};
+  const scope = fakeScope();
+  let skipped = 0;
+  scope.skipWaiting = async () => { skipped++; };
+  scope.addEventListener = (type, fn) => { handlers[type] = fn; };
+  attachWorker(scope);
+
+  handlers.message({ data: { type: 'SKIP_WAITING' }, ports: [] });
+  assert.equal(skipped, 1);
+
+  let closed = 0;
+  const port = { postMessage() { throw new Error('SKIP_WAITING must not reply on a port'); }, close() { closed++; } };
+  handlers.message({ data: { type: 'SKIP_WAITING' }, ports: [port] });
+  assert.equal(skipped, 2);
+  assert.equal(closed, 1, 'a leftover port is closed so Chromium cannot stall (#31)');
+
+  let reply = null;
+  let probeClosed = 0;
+  const ident = { postMessage(data) { reply = data; }, close() { probeClosed++; } };
+  handlers.message({ data: { type: 'kitphonic-killswitch' }, ports: [ident] });
+  assert.deepEqual(reply, { type: 'kitphonic-killswitch', killswitch: false });
+  assert.equal(probeClosed, 1);
+  assert.equal(skipped, 2, 'ident probes do not skipWaiting');
+});
+
+test('watchForUpdate announces a worker that is already waiting and exposes the API', () => {
+  const prev = globalThis.kitphonic;
+  try {
+    globalThis.kitphonic = { cfg: 'keep-me' };
+    const target = new EventTarget();
+    const events = [];
+    target.addEventListener(SW_UPDATE_READY, ev => events.push(ev.type));
+    const waiting = { state: 'installed', postMessage() {} };
+    const reg = emitter({ waiting, installing: null });
+    const sw = emitter({ controller: { state: 'activated' } });
+    const api = watchForUpdate(reg, { serviceWorker: sw, target });
+    assert.equal(api.ready, true);
+    assert.equal(globalThis.kitphonic.cfg, 'keep-me', 'existing window.kitphonic keys are kept');
+    assert.equal(globalThis.kitphonic.swUpdate, api);
+    assert.equal(globalThis.kitphonic.swUpdate.ready, true);
+    assert.deepEqual(events, [SW_UPDATE_READY]);
+    watchForUpdate(reg, { serviceWorker: sw, target });
+    assert.equal(events.length, 1, 'the same waiting worker is announced only once');
+  } finally {
+    if (prev === undefined) delete globalThis.kitphonic;
+    else globalThis.kitphonic = prev;
+  }
+});
+
+test('updatefound -> installed announces only when a controller exists', () => {
+  const prev = globalThis.kitphonic;
+  try {
+    delete globalThis.kitphonic;
+    const target = new EventTarget();
+    const events = [];
+    target.addEventListener(SW_UPDATE_READY, ev => events.push(ev.type));
+    const worker = emitter({ state: 'installing', postMessage() {} });
+    const reg = emitter({ waiting: null, installing: worker });
+    const sw = emitter({ controller: { state: 'activated' } });
+    const api = watchForUpdate(reg, { serviceWorker: sw, target });
+    assert.equal(api.ready, false);
+    assert.deepEqual(events, []);
+
+    reg.installing = worker;
+    reg.dispatch('updatefound');
+    worker.state = 'installed';
+    reg.waiting = worker;
+    worker.dispatch('statechange');
+    assert.equal(api.ready, true);
+    assert.deepEqual(events, [SW_UPDATE_READY]);
+
+    // First install: installed with no controller must not look like an update.
+    const firstTarget = new EventTarget();
+    const firstEvents = [];
+    firstTarget.addEventListener(SW_UPDATE_READY, ev => firstEvents.push(ev.type));
+    const firstWorker = emitter({ state: 'installing', postMessage() {} });
+    const firstReg = emitter({ waiting: null, installing: firstWorker });
+    const firstSw = emitter({ controller: null });
+    const firstApi = watchForUpdate(firstReg, { serviceWorker: firstSw, target: firstTarget });
+    firstReg.dispatch('updatefound');
+    firstWorker.state = 'installed';
+    firstReg.waiting = firstWorker;
+    firstWorker.dispatch('statechange');
+    assert.equal(firstApi.ready, true, 'a waiting worker is still visible on the API');
+    assert.deepEqual(firstEvents, [], 'first install does not dispatch sw-update-ready');
+  } finally {
+    if (prev === undefined) delete globalThis.kitphonic;
+    else globalThis.kitphonic = prev;
+  }
+});
+
+test('apply() posts SKIP_WAITING and reloads once on controllerchange', async () => {
+  const prev = globalThis.kitphonic;
+  try {
+    delete globalThis.kitphonic;
+    const posted = [];
+    const waiting = { state: 'installed', postMessage(msg) { posted.push(msg); } };
+    const reg = emitter({ waiting, installing: null });
+    const sw = emitter({ controller: { state: 'activated' } });
+    let reloads = 0;
+    const loc = { reload() { reloads++; } };
+    const target = new EventTarget();
+    const api = watchForUpdate(reg, { serviceWorker: sw, location: loc, target });
+    assert.equal(api.ready, true);
+
+    const first = api.apply();
+    const second = api.apply();
+    assert.equal(second, first, 'a second apply() while one is in flight is a no-op');
+    assert.deepEqual(posted, [{ type: 'SKIP_WAITING' }]);
+    assert.equal(reloads, 0, 'reload waits for controllerchange');
+
+    sw.dispatch('controllerchange');
+    assert.equal(await first, true);
+    assert.equal(reloads, 1);
+    sw.dispatch('controllerchange');
+    assert.equal(reloads, 1, 'a later controllerchange must not reload again');
+
+    assert.equal(await applySwUpdate({ waiting: null }, { serviceWorker: sw, location: loc }), false);
+  } finally {
+    if (prev === undefined) delete globalThis.kitphonic;
+    else globalThis.kitphonic = prev;
+  }
+});
+
+test('registerServiceWorker wires watchForUpdate when a waiting worker is already present', async () => {
+  const prev = globalThis.kitphonic;
+  try {
+    delete globalThis.kitphonic;
+    const target = new EventTarget();
+    const events = [];
+    target.addEventListener(SW_UPDATE_READY, ev => events.push(ev.type));
+    const waiting = { state: 'installed', postMessage() {} };
+    const reg = emitter({ waiting, installing: null });
+    const nav = { serviceWorker: emitter({
+      controller: { state: 'activated' },
+      register() { return Promise.resolve(reg); },
+    }) };
+    const loc = { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '', reload() {} };
+    assert.equal(registerServiceWorker({ navigator: nav, location: loc, capacitor: false, target }), true);
+    await new Promise(r => setTimeout(r, 0));
+    assert.equal(globalThis.kitphonic.swUpdate.ready, true);
+    assert.deepEqual(events, [SW_UPDATE_READY]);
+  } finally {
+    if (prev === undefined) delete globalThis.kitphonic;
+    else globalThis.kitphonic = prev;
+  }
 });

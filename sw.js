@@ -1,6 +1,6 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-6b77e933f7b9338e';
+export const CACHE = 'kitphonic-9f54e9940c639b49';
 export const CACHE_PREFIX = 'kitphonic-';
 
 // KP-QA-011: /kitphonic/ and /kitphonic-dev/ share one origin, so they share Cache Storage. Every
@@ -266,6 +266,15 @@ export function attachWorker(scope) {
   // Read-only probe for tests and diagnostics: which cache does the controlling worker use?
   scope.addEventListener('message', event => {
     const port = event.ports && event.ports[0];
+    // Front-End (via js/sw-register.js apply()) can ask a waiting update to take over.
+    // No MessageChannel: holding a reply port open can stall Chromium (#31).
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+      scope.skipWaiting();
+      if (port) {
+        try { port.close && port.close(); } catch { /* already closed */ }
+      }
+      return;
+    }
     if (event.data && event.data.type === 'kitphonic-killswitch' && port) {
       port.postMessage({ type: 'kitphonic-killswitch', killswitch: false });
       try { port.close && port.close(); } catch { /* already closed */ }
