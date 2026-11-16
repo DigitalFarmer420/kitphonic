@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker } from '../sw.js';
-import { shouldRegisterServiceWorker, registerServiceWorker } from '../js/sw-register.js';
+import { CACHE, CACHE_PREFIX, asRequest, cacheKeyFor, classify, handleFetch, deleteOldCaches, readAssetList, precacheUrls, matchAny, missingFrom, isUpdate, installWorker, activateWorker, cachePrefixFor, cacheNameFor, prefixOfName, legacyOwned } from '../sw.js';
+import { shouldRegisterServiceWorker, registerServiceWorker, cachePrefixFor as pagePrefixFor, wantsKillSwitch, killServiceWorker } from '../js/sw-register.js';
 
 const origin = 'https://pages.example';
 const req = (path, extra = {}) => ({ url: origin + path, method: extra.method || 'GET', mode: extra.mode || 'cors' });
@@ -149,15 +149,17 @@ test('a partial response is not cached', async () => {
   assert.equal(caches.buckets.get(CACHE).size, 0);
 });
 
-test('activate cleanup deletes older kitphonic caches only', async () => {
+test('activate cleanup deletes older caches of this scope only', async () => {
   const dropped = [];
-  const old = await deleteOldCaches(['kitphonic-old', CACHE, 'other-app', `${CACHE_PREFIX}again`], {
-    current: CACHE, drop: name => dropped.push(name),
+  const cur = cacheNameFor(`${origin}/kitphonic/`);
+  const prev = 'kitphonic:/kitphonic/:0123456789abcdef';
+  const other = 'kitphonic:/kitphonic-dev/:0123456789abcdef';
+  const old = await deleteOldCaches([prev, cur, 'other-app', other, `${CACHE_PREFIX}0123456789abcdef`, 'kitphonic:/kitphonic/dev/:aa'], {
+    current: cur, drop: name => dropped.push(name),
   });
-  assert.deepEqual(old.sort(), ['kitphonic-old', `${CACHE_PREFIX}again`].sort());
-  assert.deepEqual(dropped.sort(), old.sort());
-  assert.equal(dropped.includes(CACHE), false);
-  assert.equal(dropped.includes('other-app'), false);
+  assert.deepEqual(old, [prev]);
+  assert.deepEqual(dropped, [prev]);
+  assert.deepEqual(await deleteOldCaches([prev, other], { current: CACHE, drop: () => assert.fail('unscoped current has no prefix') }), []);
 });
 
 test('the asset list is rejected when it belongs to another build or is not ok', async () => {
@@ -216,6 +218,7 @@ test('registration uses the app directory and does not run on a local harness', 
 // --- update path (Uiux review on #24): first install claims at once, updates wait for a cold launch ---
 
 const scopeUrl = `${origin}/kitphonic/`;
+const NAME = cacheNameFor(scopeUrl);
 const SHELL = ['index.html', 'js/app.js', 'sw-assets.json'];
 const TAKES = ['audio/takes/m-hello.mp3', 'audio/takes/snd-s.mp3', 'audio/takes/sfx-chime.mp3'];
 
@@ -241,7 +244,7 @@ function fakeScope({ active = null, caches = fakeCaches(), offline = () => false
   return scope;
 }
 
-async function seedOld(caches, name = 'kitphonic-0123456789abcdef') {
+async function seedOld(caches, name = 'kitphonic:/kitphonic/:0123456789abcdef') {
   const old = await caches.open(name);
   for (const path of [...SHELL, ...TAKES]) await old.put(scopeUrl + path, response(200, `old:${path}`));
   return name;
@@ -252,13 +255,13 @@ test('first install (no active worker) stores the shell and takes over at once',
   assert.equal(isUpdate(scope), false);
   assert.deepEqual(await installWorker(scope), { update: false });
   assert.equal(scope.calls.skipWaiting, 1);
-  const bucket = scope.caches.buckets.get(CACHE);
+  const bucket = scope.caches.buckets.get(NAME);
   for (const path of SHELL) assert.ok(bucket.has(scopeUrl + path), path);
   assert.equal(scope.calls.fetched.some(u => u.includes('/audio/takes/')), false, 'takes wait for activate on a first visit');
   await activateWorker(scope);
   assert.equal(scope.calls.claim, 1);
   for (const path of TAKES) assert.ok(bucket.has(scopeUrl + path), path);
-  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: CACHE, complete: true, missing: 0 });
+  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: NAME, complete: true, missing: 0 });
 });
 
 test('an update (active worker present) precaches shell and every take during install and does not skipWaiting', async () => {
@@ -269,7 +272,7 @@ test('an update (active worker present) precaches shell and every take during in
   assert.deepEqual(await installWorker(scope), { update: true });
   assert.equal(scope.calls.skipWaiting, 0);
   assert.equal(scope.calls.claim, 0);
-  const bucket = caches.buckets.get(CACHE);
+  const bucket = caches.buckets.get(NAME);
   for (const path of [...SHELL, ...TAKES].filter(p => p !== 'sw-assets.json')) assert.equal(bucket.get(scopeUrl + path).body, `new:/kitphonic/${path}`);
   assert.equal(JSON.parse(bucket.get(scopeUrl + 'sw-assets.json').body).cache, CACHE);
   assert.equal(caches.buckets.get(oldName).size, SHELL.length + TAKES.length, 'install never touches the old cache');
@@ -299,7 +302,7 @@ test('activate after a complete update deletes older kitphonic caches only after
   const result = await activateWorker(scope);
   assert.equal(scope.calls.fetched.filter(u => u.includes('/audio/takes/')).length, before, 'no take is fetched again');
   assert.deepEqual(result, { complete: true, missing: 0, dropped: [oldName] });
-  assert.deepEqual((await caches.keys()).sort(), [CACHE, 'other-app'].sort());
+  assert.deepEqual((await caches.keys()).sort(), [NAME, 'other-app'].sort());
 });
 
 test('activate keeps the older cache when the new one is still missing takes', async () => {
@@ -310,29 +313,33 @@ test('activate keeps the older cache when the new one is still missing takes', a
   const result = await activateWorker(scope);
   assert.deepEqual(result, { complete: false, missing: 1, dropped: [] });
   assert.equal(caches.buckets.has(oldName), true);
-  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: CACHE, complete: false, missing: 1 });
+  assert.deepEqual(scope.calls.posted.at(-1), { type: 'kitphonic-audio-ready', cache: NAME, complete: false, missing: 1 });
   // The take missing from the new cache is still served, from the old one, with the network down.
   const res = await handleFetch(req('/kitphonic/audio/takes/sfx-chime.mp3'), {
-    origin, caches, cacheName: CACHE, fetch: async () => { throw new TypeError('Failed to fetch'); },
+    origin, caches, cacheName: NAME, fetch: async () => { throw new TypeError('Failed to fetch'); },
   });
   assert.equal(res.body, 'old:audio/takes/sfx-chime.mp3');
 });
 
-test('lookups fall back across kitphonic-* caches but never into another app cache', async () => {
+test('lookups fall back across this scope\'s caches but never into another scope, a legacy cache, or another app', async () => {
   const caches = fakeCaches();
   const other = await caches.open('other-app');
   await other.put(`${origin}/kitphonic/audio/takes/x.mp3`, response(200, 'foreign'));
-  const prev = await caches.open('kitphonic-aaaaaaaaaaaaaaaa');
+  const dev = await caches.open('kitphonic:/kitphonic-dev/:aaaaaaaaaaaaaaaa');
+  await dev.put(`${origin}/kitphonic/audio/takes/x.mp3`, response(200, 'dev'));
+  const legacy = await caches.open('kitphonic-aaaaaaaaaaaaaaaa');
+  await legacy.put(`${origin}/kitphonic/audio/takes/x.mp3`, response(200, 'legacy'));
+  const prev = await caches.open('kitphonic:/kitphonic/:aaaaaaaaaaaaaaaa');
   await prev.put(`${origin}/kitphonic/js/app.js`, response(200, 'prev-js'));
   await prev.put(`${origin}/kitphonic/audio/takes/snd-s.mp3`, response(200, 'prev-mp3'));
-  const current = await caches.open(CACHE);
+  const current = await caches.open(NAME);
   await current.put(`${origin}/kitphonic/audio/takes/m-hello.mp3`, response(200, 'cur-mp3'));
-  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/m-hello.mp3`)).body, 'cur-mp3');
-  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/snd-s.mp3`)).body, 'prev-mp3');
-  assert.equal(await matchAny(caches, `${origin}/kitphonic/audio/takes/x.mp3`), null);
+  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/m-hello.mp3`, { current: NAME })).body, 'cur-mp3');
+  assert.equal((await matchAny(caches, `${origin}/kitphonic/audio/takes/snd-s.mp3`, { current: NAME })).body, 'prev-mp3');
+  assert.equal(await matchAny(caches, `${origin}/kitphonic/audio/takes/x.mp3`, { current: NAME }), null);
   let fetches = 0;
   const down = async () => { fetches++; throw new TypeError('Failed to fetch'); };
-  const deps = { origin, caches, cacheName: CACHE, fetch: down };
+  const deps = { origin, caches, cacheName: NAME, fetch: down };
   assert.equal((await handleFetch(req('/kitphonic/audio/takes/snd-s.mp3'), deps)).body, 'prev-mp3');
   assert.equal(fetches, 0, 'a cache-first hit in an older cache needs no network');
   assert.equal((await handleFetch(req('/kitphonic/js/app.js'), deps)).body, 'prev-js');
@@ -355,4 +362,130 @@ test('the worker source never calls skipWaiting outside a first install and neve
   assert.equal(/localStorage/.test(src), false);
   const reg = await readFile(new URL('../js/sw-register.js', import.meta.url), 'utf8');
   assert.equal(/SKIP_WAITING|skipWaiting/.test(reg), false);
+});
+
+// --- KP-QA-011: prod and dev share one origin; caches are named and cleaned per scope ---
+
+test('cache names carry the scope path and prefixes never overlap between deployments', () => {
+  const hash = CACHE.slice(CACHE_PREFIX.length);
+  assert.equal(cacheNameFor('https://digitalfarmer420.github.io/kitphonic/'), `kitphonic:/kitphonic/:${hash}`);
+  assert.equal(cacheNameFor('https://digitalfarmer420.github.io/kitphonic-dev/'), `kitphonic:/kitphonic-dev/:${hash}`);
+  assert.equal(cacheNameFor('https://x/kitphonic/', 'kitphonic-deadbeef'), 'kitphonic:/kitphonic/:deadbeef');
+  const prod = cachePrefixFor('https://digitalfarmer420.github.io/kitphonic/');
+  for (const name of [cacheNameFor('https://digitalfarmer420.github.io/kitphonic-dev/'), cacheNameFor('https://digitalfarmer420.github.io/kitphonic/dev/'), CACHE]) {
+    assert.equal(name.startsWith(prod), false, name);
+  }
+  assert.equal(prefixOfName(`kitphonic:/kitphonic/:${hash}`), 'kitphonic:/kitphonic/:');
+  assert.equal(prefixOfName(CACHE), null);
+  assert.equal(prefixOfName('other:/x/:1'), null);
+  for (const scope of ['https://x/', 'https://x/kitphonic/', 'https://x/kitphonic-dev/', 'https://x/a/b/']) {
+    assert.equal(pagePrefixFor(scope), cachePrefixFor(scope), 'sw-register.js and sw.js agree');
+  }
+});
+
+async function twoSites() {
+  const caches = fakeCaches();
+  const prodScope = `${origin}/kitphonic/`, devScope = `${origin}/kitphonic-dev/`;
+  const prodName = cacheNameFor(prodScope);
+  const prod = await caches.open(prodName);
+  for (const path of [...SHELL, ...TAKES]) await prod.put(prodScope + path, response(200, `prod:${path}`));
+  const devOld = await caches.open('kitphonic:/kitphonic-dev/:0123456789abcdef');
+  for (const path of [...SHELL, ...TAKES]) await devOld.put(devScope + path, response(200, `dev:${path}`));
+  return { caches, prodScope, devScope, prodName };
+}
+
+test('a dev update activating never deletes the prod cache', async () => {
+  const { caches, devScope, prodName } = await twoSites();
+  const scope = fakeScope({ active: { state: 'activated' }, caches });
+  scope.registration.scope = devScope;
+  await installWorker(scope);
+  const result = await activateWorker(scope);
+  assert.deepEqual(result.dropped, ['kitphonic:/kitphonic-dev/:0123456789abcdef']);
+  assert.deepEqual((await caches.keys()).sort(), [prodName, cacheNameFor(devScope)].sort());
+  assert.equal(caches.buckets.get(prodName).size, SHELL.length + TAKES.length);
+});
+
+test('dev lookups never read the prod cache', async () => {
+  const { caches, devScope } = await twoSites();
+  const devName = cacheNameFor(devScope);
+  await caches.open(devName);
+  assert.equal(await matchAny(caches, `${origin}/kitphonic/audio/takes/snd-s.mp3`, { current: devName }), null);
+  const res = await handleFetch(req('/kitphonic-dev/audio/takes/snd-s.mp3'), {
+    origin, caches, cacheName: devName, fetch: async () => { throw new TypeError('Failed to fetch'); },
+  });
+  assert.equal(res.body, 'dev:audio/takes/snd-s.mp3', 'falls back to the older dev cache only');
+});
+
+test('a legacy unscoped cache is deleted only when its contents are all under this scope', async () => {
+  const caches = fakeCaches();
+  const prodScope = `${origin}/kitphonic/`, devScope = `${origin}/kitphonic-dev/`;
+  const mine = await caches.open('kitphonic-1111111111111111');
+  await mine.put(`${prodScope}index.html`, response(200, 'x'));
+  await mine.put(`${prodScope}audio/takes/snd-s.mp3`, response(200, 'x'));
+  const theirs = await caches.open('kitphonic-2222222222222222');
+  await theirs.put(`${devScope}index.html`, response(200, 'x'));
+  const mixed = await caches.open('kitphonic-3333333333333333');
+  await mixed.put(`${prodScope}index.html`, response(200, 'x'));
+  await mixed.put(`${devScope}js/app.js`, response(200, 'x'));
+  await caches.open('kitphonic-4444444444444444');
+  const noIndex = await caches.open('kitphonic-5555555555555555');
+  await noIndex.put(`${prodScope}audio/takes/snd-s.mp3`, response(200, 'x'));
+  assert.equal(await legacyOwned(caches, 'kitphonic-1111111111111111', prodScope), true);
+  assert.equal(await legacyOwned(caches, 'kitphonic-2222222222222222', prodScope), false);
+  assert.equal(await legacyOwned(caches, 'kitphonic-3333333333333333', prodScope), false);
+  assert.equal(await legacyOwned(caches, 'kitphonic-4444444444444444', prodScope), false);
+  assert.equal(await legacyOwned(caches, 'kitphonic-5555555555555555', prodScope), false);
+  assert.equal(await legacyOwned(caches, 'kitphonic-2222222222222222', `${origin}/`), false, 'a root scope does not claim a sub-path deployment');
+  assert.equal(await legacyOwned(caches, cacheNameFor(prodScope), prodScope), false, 'scoped names are not legacy');
+  const scope = fakeScope({ caches });
+  await installWorker(scope);
+  const result = await activateWorker(scope);
+  assert.deepEqual(result.dropped, ['kitphonic-1111111111111111']);
+  assert.deepEqual((await caches.keys()).sort(), [NAME, 'kitphonic-2222222222222222', 'kitphonic-3333333333333333', 'kitphonic-4444444444444444', 'kitphonic-5555555555555555'].sort());
+});
+
+// --- KP-QA-010: ?nosw=1 is a kill switch for this scope only ---
+
+test('?nosw=1 asks for the kill switch except in the wrapper', () => {
+  const base = { hasServiceWorker: true, protocol: 'https:', search: '?nosw=1' };
+  assert.equal(wantsKillSwitch(base), true);
+  assert.equal(wantsKillSwitch({ ...base, search: '?sw=1&nosw=1' }), true);
+  assert.equal(wantsKillSwitch({ ...base, search: '' }), false);
+  assert.equal(wantsKillSwitch({ ...base, search: '?nosw=0' }), false);
+  assert.equal(wantsKillSwitch({ ...base, capacitor: true }), false);
+  assert.equal(wantsKillSwitch({ ...base, protocol: 'capacitor:' }), false);
+  assert.equal(wantsKillSwitch({ ...base, hasServiceWorker: false }), false);
+});
+
+test('the kill switch unregisters and clears only this scope', async () => {
+  const { caches, prodScope, devScope, prodName } = await twoSites();
+  const legacy = await caches.open('kitphonic-1111111111111111');
+  await legacy.put(`${devScope}index.html`, response(200, 'x'));
+  const gone = [];
+  const reg = scope => ({ scope, async unregister() { gone.push(scope); return true; } });
+  const nav = { serviceWorker: { async getRegistrations() { return [reg(prodScope), reg(devScope), reg(`${origin}/kitphonic-dev/sub/`)]; } } };
+  const out = await killServiceWorker({ navigator: nav, caches, scope: devScope });
+  assert.deepEqual(gone, [devScope]);
+  assert.deepEqual(out.unregistered, [devScope]);
+  assert.deepEqual(out.deleted.sort(), ['kitphonic-1111111111111111', 'kitphonic:/kitphonic-dev/:0123456789abcdef'].sort());
+  assert.deepEqual(await caches.keys(), [prodName]);
+  assert.equal(caches.buckets.get(prodName).size, SHELL.length + TAKES.length);
+});
+
+test('registerServiceWorker with ?nosw=1 runs the kill switch and registers nothing', async () => {
+  const seen = [];
+  let asked = 0;
+  const nav = { serviceWorker: {
+    register() { seen.push('register'); return Promise.resolve(); },
+    async getRegistrations() { asked++; return []; },
+  } };
+  const caches = fakeCaches();
+  await caches.open('other-app');
+  assert.equal(registerServiceWorker({ navigator: nav, location: { protocol: 'https:', hostname: 'digitalfarmer.github.io', search: '?nosw=1' }, capacitor: false, caches }), false);
+  await new Promise(r => setTimeout(r, 0));
+  assert.equal(asked, 1);
+  assert.deepEqual(seen, []);
+  assert.deepEqual(await caches.keys(), ['other-app']);
+  const src = (await import('node:fs/promises')).readFile;
+  assert.equal(/localStorage/.test(await src(new URL('../js/sw-register.js', import.meta.url), 'utf8')), false);
 });
