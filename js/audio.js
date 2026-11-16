@@ -15,7 +15,7 @@ export const HOT = /^(snd-|name-|m-|sfx-)/; // small clips warmed right after un
 export const EARLY_CLIPS = ['m-hello', 'sfx-chime', 'sfx-tap', 'm-letter-says', 'm-tap-it'];
 export const earlyFile = id => `takes/${id}.mp3`; // rc4: the sfx are small MP3 takes too (chime wav 70 KB -> 7 KB)
 // play() must never hang: onended can be skipped if the context is suspended/interrupted (iPad app switch).
-const PLAY_MARGIN_MS = 400, PLAY_TIMEOUT_CAP_MS = 10_000, RESUME_MS = 200;
+const PLAY_MARGIN_MS = 400, PLAY_TIMEOUT_CAP_MS = 10_000, RESUME_MS = 200, UNLOCK_RESUME_MS = 500;
 const resumers = new Set();
 let visHooked = false;
 function hookVisibility(fn) { // once per module; each audio instance adds its own resume
@@ -160,7 +160,8 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     // Call from a user gesture (hello screen). Unlocks Web Audio + speech on iOS/Chrome autoplay policies.
     async unlock({ first = ['m-hello'] } = {}) {
       ctx ??= new (window.AudioContext || window.webkitAudioContext)();
-      const resumed = ctx.state !== 'running' ? ctx.resume().catch(() => {}) : null; // in parallel with decoding (rc4)
+      // resume() can hang on a suspended/interrupted context; bound the wait so hello Play cannot stall
+      const resumed = ctx.state !== 'running' ? Promise.race([resumeContext() || Promise.resolve(), wait(UNLOCK_RESUME_MS)]) : null; // in parallel with decoding (rc4)
       if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; speechSynthesis.speak(u); }
       // rc3: ~830 recorded takes. Only the sfx + the greeting gate the first play (bytes already fetched at load, rc4); the short, hot clips (letter
       // sounds/names, Kit's lines) warm in the background; words/sentences load per session (warm) or on first play.

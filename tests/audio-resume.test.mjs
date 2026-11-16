@@ -15,14 +15,14 @@ function installDom() {
   globalThis.dispatchEvent = ev => listeners.dispatchEvent(ev);
   return { document, window: globalThis };
 }
-function installAudio({ neverEnd = false } = {}) {
+function installAudio({ neverEnd = false, initialState = 'running', hangResume = false } = {}) {
   const ctxs = [];
   class Ctx {
-    state = 'running';
+    state = initialState;
     destination = {};
     resumeCalls = 0;
     failResume = false;
-    hangResume = false;
+    hangResume = hangResume;
     constructor() { ctxs.push(this); }
     get currentTime() { return 0; }
     resume() {
@@ -132,4 +132,24 @@ test('visibilitychange and pageshow resume a suspended or interrupted context', 
   assert.equal(ctxs[1].resumeCalls, 1, 'second context resumed once');
   assert.equal(ctxs[0].state, 'running');
   assert.equal(ctxs[1].state, 'running');
+});
+
+test('unlock() resolves when resume() never settles', { timeout: 2000 }, async () => {
+  installDom();
+  const { ctxs } = installAudio({ hangResume: true, initialState: 'suspended' });
+  const rejections = [];
+  const onRej = reason => rejections.push(reason);
+  process.on('unhandledRejection', onRej);
+  const { createAudio } = await import('../js/audio.js?hang-unlock');
+  const a = await createAudio({ early: [] });
+  const t0 = Date.now();
+  const state = await a.unlock({ first: ['m-hello'] });
+  const elapsed = Date.now() - t0;
+  process.off('unhandledRejection', onRej);
+  assert.ok(elapsed < 1500, `unlock() hung (${elapsed} ms)`);
+  assert.equal(state, 'suspended');
+  assert.equal(a.unlocked, false, 'unlocked follows ctx.state === running');
+  assert.ok(ctxs[0].resumeCalls >= 1, 'tried ctx.resume()');
+  assert.ok(a.loadedCount >= 1, 'first clips still primed while resume is outstanding');
+  assert.equal(rejections.length, 0);
 });
