@@ -1,5 +1,5 @@
 {
-  "cache": "kitphonic-819d0c491e6d8fcd",
+  "cache": "kitphonic-c37804e5674aefd0",
   "shell": [
     "index.html",
     "css/app.css",
@@ -20,6 +20,7 @@
     "js/gesture.js",
     "js/ghost-hand.js",
     "js/hello-gate.js",
+    "js/hello-visit.js",
     "js/layout.js",
     "js/lesson-screen.js",
     "js/letter-logic.js",
@@ -36,6 +37,7 @@
     "js/seen.js",
     "js/sentences.js",
     "js/sequence.js",
+    "js/session-log.js",
     "js/session.js",
     "js/settings.js",
     "js/stage.js",

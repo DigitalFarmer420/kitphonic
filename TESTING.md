@@ -57,6 +57,7 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | param | effect |
 |---|---|
 | `skipHello=1` | skip the hello / audio-unlock screen (opens the map) |
+| `sessionlog=1` | in-memory ring buffer (last 200, no network or storage) for a real device: hello-gate phases, AudioContext state, visibility / page hide and show, taps, screen changes, storage errors. Collapsed to a 44px Log chip in a free corner inside the safe area. Copy and Clear appear only when it is open, and taps on the overlay itself are not logged. Absent unless this flag is set. |
 | `progress=N` | dev: start with N map stops passed (seeded **in-memory** log; real progress untouched) |
 | `due=1` | with `progress`: the passed stops' spaced review is due today |
 | `levelup=1` | with `progress`: show the level-up moment for the last passed stop |
