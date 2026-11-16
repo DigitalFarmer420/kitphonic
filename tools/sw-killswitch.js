@@ -103,8 +103,11 @@ export async function activateKillSwitch(scope, { settleMs = 200, intervalMs = 5
     const clients = await scope.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of clients) {
       if (underScope(client.url, base) && typeof client.navigate === 'function') {
-        await client.navigate(client.url);
         reloaded.push(client.url);
+        // Do not await: Chromium will not finish activating while this waitUntil is
+        // still waiting on client.navigate(), and that navigation itself waits for
+        // the worker to become active, so the tab hangs until the ~5 min event timeout.
+        Promise.resolve(client.navigate(client.url)).catch(() => {});
       }
     }
   }
@@ -112,12 +115,20 @@ export async function activateKillSwitch(scope, { settleMs = 200, intervalMs = 5
 }
 
 export function attachKillSwitch(scope) {
-  scope.addEventListener('install', event => { event.waitUntil(scope.skipWaiting()); });
+  // Call skipWaiting during install, but do not waitUntil its promise: if that
+  // promise only settles after activation, install and activate would deadlock.
+  scope.addEventListener('install', event => {
+    try { scope.skipWaiting(); } catch { /* ignore */ }
+    event.waitUntil(Promise.resolve());
+  });
   scope.addEventListener('activate', event => { event.waitUntil(activateKillSwitch(scope)); });
   scope.addEventListener('message', event => {
+    // A later skipWaiting() retries Try Activate once the old worker is idle.
+    try { scope.skipWaiting(); } catch { /* ignore */ }
     const port = event.ports && event.ports[0];
     if (event.data && event.data.type === 'kitphonic-killswitch' && port) {
       port.postMessage({ type: 'kitphonic-killswitch', killswitch: true });
+      try { port.close && port.close(); } catch { /* already closed */ }
     }
   });
 }

@@ -268,9 +268,13 @@ export function attachWorker(scope) {
     const port = event.ports && event.ports[0];
     if (event.data && event.data.type === 'kitphonic-killswitch' && port) {
       port.postMessage({ type: 'kitphonic-killswitch', killswitch: false });
+      try { port.close && port.close(); } catch { /* already closed */ }
       return;
     }
-    if (event.data && event.data.type === 'kitphonic-cache' && port) port.postMessage({ cache: cacheNameFor(scope.registration.scope) });
+    if (event.data && event.data.type === 'kitphonic-cache' && port) {
+      port.postMessage({ cache: cacheNameFor(scope.registration.scope) });
+      try { port.close && port.close(); } catch { /* already closed */ }
+    }
   });
   scope.addEventListener('fetch', event => {
     if (classify(event.request, { origin: scope.location.origin }) === 'bypass') return;

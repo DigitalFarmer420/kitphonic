@@ -161,6 +161,28 @@ test('the at-most-once flag stops a later activation from navigating again', asy
   assert.equal((await caches.keys()).some(n => n.startsWith('kitphonic:/kitphonic-dev/:')), false);
 });
 
+test('activateKillSwitch does not await client.navigate (Chromium activate/navigate deadlock)', async () => {
+  const caches = fakeCaches();
+  await seedCatalog(caches);
+  const order = [];
+  const clients = [
+    { url: `${devScope}?skipHello=1`, async navigate(url) {
+      order.push('navigate');
+      // A hung navigate must not keep activate's waitUntil open.
+      await new Promise(() => {});
+    } },
+  ];
+  const scope = fakeScope(caches, { clients });
+  const out = await Promise.race([
+    activateKillSwitch(scope, { settleMs: 0 }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('activateKillSwitch waited for navigate')), 200)),
+  ]);
+  assert.equal(out.navigated, true);
+  assert.deepEqual(out.reloaded, [`${devScope}?skipHello=1`]);
+  assert.deepEqual(order, ['navigate']);
+  assert.equal(await hasNavigatedFlag(caches, devScope), true, 'marker is set before navigate is called');
+});
+
 test('attachKillSwitch skipWaiting on install, runs the activate path, and answers the kill-switch probe', async () => {
   const caches = fakeCaches();
   await seedCatalog(caches);
