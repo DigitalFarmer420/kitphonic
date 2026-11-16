@@ -2,7 +2,7 @@
 import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard, RULES } from './mastery.js';
 import { supportPattern } from './support.js';
-import { wordLayout, layoutFor } from './layout.js';
+import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, needsCheck, caseFor } from './word-logic.js';
 import { MASCOT } from './content.js';
@@ -33,7 +33,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
   const say = (bubbleText, clip) => { $('bubble').textContent = bubbleText; return clip ? audio.play(clip.id, clip) : Promise.resolve(); };
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
-  const trackBox = () => { const l = Math.max(8, layout.track.left - 20), r = Math.min(layout.stageW - 34, layout.track.left + layout.track.width + 20); return { left: l, width: r - l }; };
+  const trackBox = () => sliderTrack(layout);
   const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px';
     applySliderAria(handle, { fraction: f, stops: sweep?.positions, total: ms?.length ?? 0 }); };
 
@@ -112,7 +112,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     const p = toStage(e);
     if (!attached(p.y - sliderY())) { sweep.lift(); return; } // drifted >60pt: pause; come back to continue
     sweepStart ??= performance.now();
-    handleEvents(sweep.move(layout.fracFromX(p.x), e.timeStamp));
+    handleEvents(sweep.move(fractionAt(layout, p.x), e.timeStamp));
     setHandle(sweep.position);
   }
   function onUp(e) {
