@@ -48,9 +48,22 @@ test('launch theme points the system splash at the safe-fit icon', () => {
   assert.equal(foundV31, false);
 });
 
-test('generator is bound to the master and keeps both rays inside the splash circle', () => {
+// tools/build-app-icon.py needs Pillow. On machines without it, skip only the
+// generator run (the committed report checks below still run). Set
+// KITPHONIC_REQUIRE_PILLOW=1 to make a missing Pillow a hard failure instead.
+const pillowProbe = spawnSync('python3', ['-c', 'import PIL'], { encoding: 'utf8' });
+const hasPillow = pillowProbe.status === 0;
+const requirePillow = process.env.KITPHONIC_REQUIRE_PILLOW === '1';
+const generatorSkip = !hasPillow && !requirePillow
+  ? 'Pillow (python3 PIL) not installed; set KITPHONIC_REQUIRE_PILLOW=1 to require it'
+  : false;
+
+test('generator --check passes against the master', { skip: generatorSkip }, () => {
   const run = spawnSync('python3', ['tools/build-app-icon.py', '--check'], { cwd: new URL('..', import.meta.url), encoding: 'utf8' });
   assert.equal(run.status, 0, run.stderr || run.stdout);
+});
+
+test('committed build report is bound to the master and keeps both rays inside the splash circle', () => {
   const report = JSON.parse(read('android-icons/build-report.json'));
   assert.equal(report.master_sha256, MASTER);
   assert.equal(report.adaptive_yellow_inside_72dp_circle, true);
