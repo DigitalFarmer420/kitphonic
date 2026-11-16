@@ -33,9 +33,14 @@ export const LEGACY = /^kitphonic-[0-9a-f]+$/;
 // Empty marker cache. It is not an app cache (name is kitphonic-killswitch:<path>, not
 // kitphonic:<path>:<hash>) so app cleanup and ?nosw=1 never treat it as one.
 export const MARKER_PREFIX = 'kitphonic-killswitch:';
+export const LEGACY_CLIENTS_PREFIX = 'kitphonic-legacy-clients:';
 
 export function markerNameFor(scopeUrl) {
   return MARKER_PREFIX + new URL(scopeUrl).pathname;
+}
+
+export function legacyClientsNameFor(scopeUrl) {
+  return LEGACY_CLIENTS_PREFIX + new URL(scopeUrl).pathname;
 }
 
 export async function legacyOwned(caches, name, scopeUrl) {
@@ -61,7 +66,7 @@ export async function clearOwnScopeCaches(caches, scopeUrl, { settleMs = 0, inte
   const started = Date.now();
   for (;;) {
     for (const name of await caches.keys()) {
-      const mine = isAppCacheName(name, base) || await legacyOwned(caches, name, base);
+      const mine = isAppCacheName(name, base) || name === legacyClientsNameFor(base) || await legacyOwned(caches, name, base);
       if (!mine) continue;
       try {
         if (await caches.delete(name) && !seen.has(name)) {

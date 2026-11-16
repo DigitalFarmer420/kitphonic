@@ -1,6 +1,6 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-9f54e9940c639b49';
+export const CACHE = 'kitphonic-1fc46a30c5a8d2d0';
 export const CACHE_PREFIX = 'kitphonic-';
 
 // KP-QA-011: /kitphonic/ and /kitphonic-dev/ share one origin, so they share Cache Storage. Every
@@ -17,6 +17,95 @@ export function cachePrefixFor(scopeUrl) {
 // later emergency can navigate clients once again.
 export function killSwitchMarkerFor(scopeUrl) {
   return `kitphonic-killswitch:${new URL(scopeUrl).pathname}`;
+}
+
+// Client IDs that were already open when a waiting update took over via SKIP_WAITING.
+// Not an app cache (kitphonic-legacy-clients:<path>, not kitphonic:<path>:<hash>).
+// Kept so a deferred old tab can keep being served from the previous version cache
+// after clients.claim(); a reload gets a new clientId and receives the new files.
+export const LEGACY_CLIENTS_PREFIX = 'kitphonic-legacy-clients:';
+export function legacyClientsNameFor(scopeUrl) {
+  return LEGACY_CLIENTS_PREFIX + new URL(scopeUrl).pathname;
+}
+
+function legacyStateHref(scopeUrl) {
+  return new URL('legacy-clients.json', scopeUrl).href;
+}
+
+function jsonResponse(data) {
+  const body = JSON.stringify(data);
+  if (typeof Response === 'function') {
+    try { return new Response(body, { headers: { 'content-type': 'application/json' } }); }
+    catch { /* fall through to a plain stand-in for tests */ }
+  }
+  return { status: 200, ok: true, body, async json() { return JSON.parse(body); }, clone() { return jsonResponse(data); } };
+}
+
+export async function writeLegacyClients(store, scopeUrl, state) {
+  const cache = await store.open(legacyClientsNameFor(scopeUrl));
+  await cache.put(legacyStateHref(scopeUrl), jsonResponse(state));
+  return state;
+}
+
+export async function readLegacyClients(store, scopeUrl) {
+  try {
+    const name = legacyClientsNameFor(scopeUrl);
+    const names = await store.keys();
+    if (!names.includes(name)) return null;
+    const cache = await store.open(name);
+    const hit = await cache.match(legacyStateHref(scopeUrl));
+    if (!hit) return null;
+    const src = (typeof hit.clone === 'function') ? hit.clone() : hit;
+    if (typeof src.json !== 'function') return null;
+    const data = await src.json();
+    if (!data || !Array.isArray(data.clients) || !Array.isArray(data.caches)) return null;
+    return data;
+  } catch { return null; }
+}
+
+export async function clearLegacyClients(store, scopeUrl) {
+  try { return await store.delete(legacyClientsNameFor(scopeUrl)); }
+  catch { return false; }
+}
+
+// Snapshot open window clients and this scope's previous app caches before skipWaiting.
+export async function snapshotLegacyClients(scope) {
+  const base = scope.registration.scope;
+  const current = cacheNameFor(base);
+  const prefix = cachePrefixFor(base);
+  let names = [];
+  try { names = await scope.caches.keys(); } catch { names = []; }
+  const previous = names.filter(n => n.startsWith(prefix) && n !== current);
+  let list = [];
+  try { list = await scope.clients.matchAll({ includeUncontrolled: true, type: 'window' }); }
+  catch { list = []; }
+  const ids = list.map(c => c && c.id).filter(Boolean);
+  if (!previous.length || !ids.length) return null;
+  return writeLegacyClients(scope.caches, base, { clients: ids, caches: previous });
+}
+
+// Drop gone client IDs. When none remain, delete the previous version cache and the record.
+export async function sweepLegacyClients(scope) {
+  const base = scope.registration.scope;
+  const state = await readLegacyClients(scope.caches, base);
+  if (!state) return { held: false, dropped: [] };
+  const get = scope.clients && typeof scope.clients.get === 'function' ? id => scope.clients.get(id) : async () => null;
+  const alive = [];
+  for (const id of state.clients) {
+    try { if (await get(id)) alive.push(id); } catch { /* gone */ }
+  }
+  if (alive.length) {
+    if (alive.length !== state.clients.length) {
+      await writeLegacyClients(scope.caches, base, { ...state, clients: alive });
+    }
+    return { held: true, clients: alive, dropped: [] };
+  }
+  const current = cacheNameFor(base);
+  const names = await scope.caches.keys();
+  const drop = n => scope.caches.delete(n);
+  const dropped = await deleteOldCaches(names, { current, drop });
+  await clearLegacyClients(scope.caches, base);
+  return { held: false, dropped };
 }
 
 export function cacheNameFor(scopeUrl, build = CACHE) {
@@ -102,13 +191,34 @@ export async function matchAny(caches, key, { current, prefix = prefixOfName(cur
   return null;
 }
 
-export async function handleFetch(request, { origin, caches, fetch: doFetch, cacheName, online = true } = {}) {
+export async function handleFetch(request, { origin, caches, fetch: doFetch, cacheName, preferCaches = null, online = true } = {}) {
   const req = asRequest(request);
   const kind = classify(req, { origin });
   if (kind === 'bypass') return doFetch(req);
   const cache = await caches.open(cacheName);
   const key = cacheKeyFor(req);
-  const lookup = () => matchAny(caches, key, { current: cacheName });
+  const preferred = Array.isArray(preferCaches) ? preferCaches.filter(Boolean) : [];
+  const lookup = async () => {
+    for (const name of preferred) {
+      const hit = await (await caches.open(name)).match(key);
+      if (hit) return hit;
+    }
+    return matchAny(caches, key, { current: cacheName });
+  };
+  // A tab that was already open when the update took over must keep seeing the previous
+  // version's files (old cache, then the new cache, then the network). Do not prefer the
+  // network while online: the server may already be serving the new build.
+  if (preferred.length) {
+    const hit = await lookup();
+    if (hit) return hit;
+    try {
+      const res = await (doFetch(req.url, { cache: 'reload', credentials: 'same-origin' }));
+      await store(cache, key, res);
+      return res;
+    } catch (err) {
+      throw err;
+    }
+  }
   // Reload skips the HTTP cache. GitHub Pages keeps files for minutes, and a conditional
   // request would still count as "online" while handing back stale HTML, JS, CSS, or JSON.
   const network = () => doFetch(req.url, { cache: 'reload', credentials: 'same-origin' });
@@ -247,7 +357,10 @@ export async function activateWorker(scope) {
   const shell = data.shell.map(path => new URL(path, base).href);
   const missing = await missingFrom(cache, [...shell, ...audio]);
   let dropped = [];
-  if (!missing.length) {
+  // After SKIP_WAITING, keep the previous version cache until every old client is gone
+  // (a deferred tab is still running the old document). A cold launch has no such record.
+  const held = (await sweepLegacyClients(scope)).held;
+  if (!missing.length && !held) {
     const names = await scope.caches.keys();
     const drop = n => scope.caches.delete(n);
     dropped = await deleteOldCaches(names, { current: name, drop });
@@ -269,7 +382,11 @@ export function attachWorker(scope) {
     // Front-End (via js/sw-register.js apply()) can ask a waiting update to take over.
     // No MessageChannel: holding a reply port open can stall Chromium (#31).
     if (event.data && event.data.type === 'SKIP_WAITING') {
-      scope.skipWaiting();
+      const work = (async () => {
+        await snapshotLegacyClients(scope);
+        await scope.skipWaiting();
+      })();
+      if (typeof event.waitUntil === 'function') event.waitUntil(work);
       if (port) {
         try { port.close && port.close(); } catch { /* already closed */ }
       }
@@ -287,10 +404,17 @@ export function attachWorker(scope) {
   });
   scope.addEventListener('fetch', event => {
     if (classify(event.request, { origin: scope.location.origin }) === 'bypass') return;
-    event.respondWith(handleFetch(event.request, {
-      origin: scope.location.origin, caches: scope.caches, fetch: scope.fetch.bind(scope), cacheName: cacheNameFor(scope.registration.scope),
-      online: scope.navigator.onLine !== false,
-    }));
+    const run = (async () => {
+      const current = cacheNameFor(scope.registration.scope);
+      const state = event.clientId ? await readLegacyClients(scope.caches, scope.registration.scope) : null;
+      const preferCaches = state && state.clients.includes(event.clientId) ? state.caches : null;
+      return handleFetch(event.request, {
+        origin: scope.location.origin, caches: scope.caches, fetch: scope.fetch.bind(scope),
+        cacheName: current, preferCaches, online: scope.navigator && scope.navigator.onLine !== false,
+      });
+    })();
+    event.respondWith(run);
+    if (typeof event.waitUntil === 'function') event.waitUntil(sweepLegacyClients(scope));
   });
 }
 
