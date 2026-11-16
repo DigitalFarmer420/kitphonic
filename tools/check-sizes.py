@@ -271,7 +271,7 @@ def main():
     only = set(filter(None, a.scenes.split(',')))
     os.makedirs(a.out, exist_ok=True)
     viewports = [v for v in a.viewports.split(',') if v]
-    workers = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or len(viewports) or 1))
+    workers = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or min(4, len(viewports) or 1)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         grouped = list(pool.map(lambda vp: run_viewport(vp, a.base, a.out, only), viewports))
     rows = [row for group in grouped for row in group]
