@@ -29,7 +29,7 @@ import { createHelloGate } from './hello-gate.js';
 import { createHelloVisit } from './hello-visit.js';
 import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
 import { registerServiceWorker } from './sw-register.js';
-import { createTurnGate } from './turn.js';
+import { createTurnGate, screenHmin } from './turn.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -37,11 +37,20 @@ const $ = id => document.getElementById(id);
 const sessionLog = sessionLogEnabled(location.search) ? createSessionLog(document) : null;
 if (sessionLog) observeAudioContexts(globalThis, sessionLog);
 let audioApi = null;
+let shown = 'hello';
+let wordScreen = null, familyScreen = null, lessonScreen = null;
 const turnGate = createTurnGate({ onPause: () => audioApi?.hold(), onResume: () => audioApi?.release() });
-const stage = createStage($('stage'), (s) => {
-  turnGate.update(s?.safeH ?? 0);
-  const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); k?.letters?.relayout?.();
+const turnLimit = info => screenHmin(shown, {
+  portrait: info?.mode === 'portrait',
+  letters: wordScreen?.entry?.w?.length || 0,
+  family: familyScreen?.run?.fam?.words?.length || 0,
+  trace: lessonScreen?.run?.activity === 'trace',
 });
+const stage = createStage($('stage'), (s) => {
+  turnGate.update(s?.safeH ?? 0, s?.hmin ?? 0);
+  if (!s?.layoutChanged) return;
+  const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); k?.letters?.relayout?.();
+}, turnLimit);
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
@@ -78,15 +87,15 @@ let session = null; // { plan, i, started, stickers }
 // v2 V2: support level per word — forced (?support / ?speakBeforeCheck), else the ladder in a session (dev direct
 // screens without a session use S3, the scored default)
 const supportLevel = entry => cfg.support ?? (cfg.speakBeforeCheck ? 4 : session && cfg.supportLadder ? supportFor(store.all(), entry, { sessionId }).level : 3);
-const screen = createWordScreen({
+const screen = wordScreen = createWordScreen({
   known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel,
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });
 const letters = createLettersScreen({ audio, cfg, rand, stage, settings, seen, record: log, onHome: () => goHome() });
-const lesson = createLessonScreen({ audio, stage, settings, seen, rand, record: log, onHome: () => goHome() });
+const lesson = lessonScreen = createLessonScreen({ audio, stage, settings, seen, rand, record: log, onHome: () => goHome() });
 const starScreen = createStarScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
-const familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
+familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
 const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), support: supportLevel });
 
 // Map Home is the Kit intro (the front door). Activity Home buttons call goHome() and land on the map.
@@ -177,7 +186,7 @@ const armHello = () => {
   $('play').classList.remove('pressed');
   $('hello-bubble').textContent = helloLine;
 };
-afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); };
+afterShow = id => { shown = id; if (id === 'hello') armHello(); sessionLog?.screen(id); stage.fit(); };
 $('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
 $('play').onclick = () => {

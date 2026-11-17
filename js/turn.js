@@ -1,12 +1,32 @@
-// Picture-only "turn your phone" gate. The child floors (64px targets, 80px knobs) need a
-// minimum stack of screen pixels. Below that the board pauses in place and shows the card.
+// Picture-only "turn your phone" gate. Each screen has its own minimum safe height (Hmin).
+// The card shows only when that screen's stack cannot fit, and the activity stays put underneath.
 export const MIN_TOUCH = 64, MIN_KNOB = 80, MIN_ADULT = 48;
-// Short-landscape column once the floors bind: header 64, tile row 88 (6.875rem at that scale),
-// marker 64, knob 80, and the gaps those rows already keep. A shorter safe rect shows the card.
-export const MIN_STACK = 64 + 8 + 88 + 10 + 64 + 10 + 80 + 8;
 
-export function needsTurn(safeH) {
-  return safeH < MIN_STACK;
+// Safe height (px) below which the screen cannot keep its floors. Landscape values sit just
+// above the cell that fails and at or under the next cell that must stay open.
+const HMIN = {
+  star: { portrait: 344, landscape: 150 },
+  trace: { portrait: 176, landscape: 176 },
+  sentence: { portrait: 352, landscape: 236 },
+  map: { portrait: 224, landscape: 224 },
+  letters: { portrait: 224, landscape: 224 },
+  intro: { portrait: 224, landscape: 224 },
+  word: { portrait: 376, landscape: 224 },
+  word5: { portrait: 376, landscape: 244 },
+  family7: { portrait: 382, landscape: 244 },
+};
+
+export function screenHmin(screen, { portrait = false, letters = 0, family = 0, trace = false } = {}) {
+  const side = portrait ? 'portrait' : 'landscape';
+  let key = screen;
+  if (key === 'lesson') key = trace ? 'trace' : 'intro';
+  if (key === 'word' && letters >= 5) key = 'word5';
+  if (key === 'family') key = family >= 7 ? 'family7' : '';
+  return HMIN[key]?.[side] ?? 0;
+}
+
+export function needsTurn(safeH, hmin = 0) {
+  return hmin > 0 && safeH < hmin;
 }
 
 // The visible viewport. iOS Safari's layout viewport (100vh / innerHeight) includes the
@@ -22,8 +42,8 @@ export function createTurnGate({ onPause, onResume } = {}) {
   let active = false;
   return {
     get active() { return active; },
-    update(safeH) {
-      const want = needsTurn(safeH);
+    update(safeH, hmin = 0) {
+      const want = needsTurn(safeH, hmin);
       if (want === active) return active;
       active = want;
       if (want) onPause?.();

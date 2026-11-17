@@ -60,7 +60,7 @@ function visualBox(win) {
   return { vw: box.w, vh: box.h, offL: box.x, offT: box.y };
 }
 
-export function createStage(el, onChange = () => {}) {
+export function createStage(el, onChange = () => {}, hminOf = () => 0) {
   let cur = null, fitting = false;
   const doc = el.ownerDocument;
   const win = doc.defaultView;
@@ -79,8 +79,10 @@ export function createStage(el, onChange = () => {}) {
     const s = stageBox(vw, vh, insets, stageFor);
     s.safeH = vh - s.insets.top - s.insets.bottom;
     s.safeW = vw - s.insets.left - s.insets.right;
-    s.turn = needsTurn(s.safeH);
-    const changed = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u || cur.turn !== s.turn;
+    s.hmin = hminOf(s) || 0;
+    s.turn = needsTurn(s.safeH, s.hmin);
+    s.layoutChanged = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u;
+    const changed = s.layoutChanged || (!!cur && (cur.turn !== s.turn || cur.hmin !== s.hmin));
     cur = s;
     const fs = (16 * s.u) + 'px';
     // Root rem is the fluid unit. Skip the write when it is unchanged so the style observer does not loop.
@@ -97,6 +99,7 @@ export function createStage(el, onChange = () => {}) {
     const card = el.querySelector('#turn');
     if (card) card.hidden = !s.turn;
     el.dataset.insetSource = insets.source;
+    el.dataset.hmin = String(s.hmin);
     el.style.setProperty('--dy', '0px');
     el.style.setProperty('--scale', '1');
     el.style.setProperty('--u', String(s.u));

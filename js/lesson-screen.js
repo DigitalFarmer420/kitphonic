@@ -262,6 +262,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     start(opts) {
       stop(); run = { ...opts, taps: 0 }; $('lesson').hidden = false;
       if (opts.activity === 'trace' && STROKES[GPC[opts.gpc]?.grapheme ?? opts.gpc]) trace(opts.gpc); else intro(opts.gpc);
+      stage.fit();
     },
     stop, get run() { return run; }, relayout() { if (run?.activity === 'trace') placeBar(); },
   };

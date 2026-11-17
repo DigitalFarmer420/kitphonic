@@ -306,7 +306,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function next() {
     audio.stop(); idx++;
     if (idx >= words.length) { state = 'done'; hand.stop(); seen.mark('slide'); (runDone ?? onDone)(stickers); return; }
-    entry = words[idx]; render();
+    entry = words[idx]; render(); stage.fit();
   }
 
   const hand = createGhostHand({ host: $('word'), reduced });
@@ -337,7 +337,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       if (state === 'slide') render();
       else if (state === 'revealed') { layoutWord(); paintTiles(); fitRevealPic(); }
     },
-    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); stage.fit(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

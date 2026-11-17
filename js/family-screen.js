@@ -128,7 +128,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
         t.addEventListener('click', e => { if (e.detail > 0) return; activateTile(t); }); // Enter/Space and .click(); a finger's click is suppressed
         t.addEventListener('lostpointercapture', onLost);
         return t; }));
-      pebbles(); layoutTray();
+      pebbles(); layoutTray(); stage.fit();
       prompt().then(() => { if (!run) return; run.busy = false; hand.start(handPath, { now: seen.demo('family') }); });
     },
     stop() { releaseDrag(); run = null; hand.stop(); },

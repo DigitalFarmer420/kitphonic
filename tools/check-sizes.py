@@ -135,11 +135,11 @@ MEASURE = r"""() => {
   const revealPic = picEl && vis(picEl) ? { card: edge(card), pic: edge(picEl), art: edge(picEl.querySelector('svg, .emoji') || picEl) } : null;
   const stageEl = document.getElementById('stage');
   return { ptiles, empty, cueHits, covered, huntTray, revealPic, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height, x: st.left, y: st.top }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight,
-    turn: !!stageEl?.classList.contains('turn'), turnText: (document.getElementById('turn')?.innerText || '').replace(/\s+/g, ' ').trim() };
+    turn: !!stageEl?.classList.contains('turn'), hmin: Number(stageEl?.dataset.hmin || 0),
+    turnText: (document.getElementById('turn')?.innerText || '').replace(/\s+/g, ' ').trim() };
 }"""
 
 ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
-MIN_STACK = 332  # matches js/turn.js short-landscape floor stack
 CLASSIC = {'360x780', '780x360', '820x1180', '390x844', '844x390', '1180x820'}
 
 def overlaps(a, b, pad=2):
@@ -156,10 +156,12 @@ def check(m, vp, scene, insets=(0, 0, 0, 0)):
     top, right, bottom, left = insets
     safe_w = m['vw'] - left - right
     safe_h = m['vh'] - top - bottom
-    if m.get('turn'):
-        if m.get('turnText'): errs.append('turn card has text')
-        if safe_h >= MIN_STACK - 0.5: errs.append(f"turn card but height {safe_h:.0f} fits the floors")
-        return errs
+    hmin = float(m.get('hmin') or 0)
+    turned = bool(m.get('turn'))
+    if turned and m.get('turnText'): errs.append('turn card has text')
+    if turned and safe_h + 0.5 >= hmin: errs.append(f"turn card but this screen fits ({safe_h:.0f} >= {hmin:.0f})")
+    if not turned and hmin and safe_h + 0.5 < hmin: errs.append(f"turn card missing ({safe_h:.0f} < {hmin:.0f})")
+    if turned: return errs
     for t in m['targets']:
         short = min(t['w'], t['h']); need = KNOB if t['knob'] else (ADULT if t.get('adult') else MIN)
         if short < need - 0.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < {need}")
