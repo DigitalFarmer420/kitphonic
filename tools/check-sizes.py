@@ -339,7 +339,115 @@ SHOTS = {
     ('chromium', '568x320', 'W', 'hello'), ('chromium', '568x320', 'W', 'word-map'),
     ('chromium', '568x320', 'Wi', 'hello'), ('chromium', '568x320', 'Wi', 'word-map'),
     ('chromium', '1024x768', 'P', 'hello'), ('chromium', '1024x768', 'P', 'map'),
+    ('chromium', '568x320', 'S', 'parent'), ('webkit', '568x320', 'S', 'parent'),
+    ('chromium', '568x320', 'Wi', 'parent'), ('webkit', '568x320', 'Wi', 'parent'),
+    ('chromium', '768x1024', 'S', 'parent'), ('webkit', '768x1024', 'S', 'parent'),
+    ('chromium', '320x568', 'W', 'parent'), ('webkit', '320x568', 'W', 'parent'),
 }
+
+# Grown-ups fold. At scroll 0, a control that meets the scrollport must not cross that
+# edge or the safe bottom. AC-G1's speed row is read from the same pass.
+GROWNUP_AUDIT = r"""() => {
+  const EPS = 0.5;
+  const parent = document.getElementById('parent');
+  if (!parent || parent.hidden) return { g2: ['parent hidden'], g3: ['parent hidden'], g1: null };
+  const cs = getComputedStyle(parent);
+  const pad = side => parseFloat(cs['padding' + side]) || 0;
+  const safeBottom = innerHeight - pad('Bottom'), safeRight = innerWidth - pad('Right');
+  const straddles = (r, edge) => r.top < edge - EPS && r.bottom > edge + EPS;
+  const overflows = el => /(auto|scroll)/.test(getComputedStyle(el).overflowY);
+  const body = document.getElementById('pa-body');
+  const cols = [...body.querySelectorAll(':scope > .pcol')].filter(overflows);
+  const ports = cols.length ? cols : [body];
+  const portOf = el => { for (let n = el.parentElement; n; n = n.parentElement) if (overflows(n)) return n; return null; };
+  const name = el => el.id || el.getAttribute('aria-label') || el.textContent.trim().slice(0, 22);
+  ports.forEach(p => { p.scrollTop = 0; });
+  const g2 = [];
+  for (const el of parent.querySelectorAll('button')) {
+    if (el.id === 'pa-close') continue;
+    const r = el.getBoundingClientRect();
+    const port = portOf(el);
+    if (!port) { g2.push(name(el) + ' has no scrollport'); continue; }
+    const pr = port.getBoundingClientRect();
+    if (r.bottom <= pr.top + EPS || r.top >= pr.bottom - EPS) continue;
+    if (straddles(r, pr.bottom) || straddles(r, safeBottom)) g2.push(name(el) + ' straddles ' + r.top.toFixed(0) + '-' + r.bottom.toFixed(0));
+  }
+  for (const port of ports) {
+    const fade = port.querySelector(':scope > .pa-fade');
+    const fh = fade ? fade.getBoundingClientRect().height : 0;
+    const scrolls = port.scrollHeight > port.clientHeight + 1;
+    if (scrolls && Math.abs(fh - 16) > 0.6) g2.push('fade ' + fh.toFixed(1) + 'px');
+    if (!scrolls && fade) g2.push('fade while the column does not scroll');
+  }
+  const speedBtn = parent.querySelector('button[data-k="audioSpeed"]');
+  let g1 = null;
+  if (speedBtn) {
+    const row = speedBtn.closest('.prow');
+    const port = portOf(speedBtn);
+    const pr = port.getBoundingClientRect();
+    const label = row.querySelector('.plabel').getBoundingClientRect();
+    const h2 = parent.querySelector('.pa-settings > h2');
+    const header = parent.querySelector('.pa-top').getBoundingClientRect();
+    g1 = {
+      scroll: port.scrollTop, portTop: pr.top, portBottom: pr.bottom, safeBottom,
+      label: { top: label.top, bottom: label.bottom },
+      buttons: [...row.querySelectorAll('button')].map(el => {
+        const r = el.getBoundingClientRect();
+        const x = r.left + r.width / 2, y = r.top + r.height / 2;
+        const hit = document.elementFromPoint(x, y);
+        return { name: name(el), top: r.top, bottom: r.bottom, hit: !!(hit && (hit === el || el.contains(hit))) };
+      }),
+      fit: parent.classList.contains('pa-fit'),
+      aria: parent.querySelector('.pa-settings')?.getAttribute('aria-label') || '',
+      h2: h2 ? getComputedStyle(h2).position : '',
+      header: header.height,
+    };
+  }
+  const g3 = [];
+  const place = el => {
+    el.scrollIntoView({ block: 'nearest' });
+    const r = el.getBoundingClientRect();
+    const fully = r.top >= pad('Top') - 1 && r.bottom <= safeBottom + 1 && r.left >= pad('Left') - 1 && r.right <= safeRight + 1;
+    const x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const hit = document.elementFromPoint(x, y);
+    const own = hit && (hit === el || el.contains(hit));
+    if (!fully || !own || r.width < 44 || r.height < 44) g3.push(name(el) + ' ' + r.width.toFixed(0) + 'x' + r.height.toFixed(0) + ' y ' + r.top.toFixed(0) + '-' + r.bottom.toFixed(0) + (own ? '' : ' missed'));
+  };
+  for (const el of parent.querySelectorAll('button')) place(el);
+  for (const port of ports) if (port.clientHeight < 80) g3.push('scrollport ' + Math.round(port.clientHeight) + 'px < 80');
+  const skip = document.getElementById('pa-skip');
+  if (skip) { skip.click(); for (const id of ['pa-skip-no', 'pa-skip-yes']) { const el = document.getElementById(id); if (!el) g3.push('missing ' + id); else place(el); } }
+  const reset = document.getElementById('pa-reset');
+  if (!reset) g3.push('missing reset');
+  else { reset.click(); for (const id of ['pa-no', 'pa-yes']) { const el = document.getElementById(id); if (!el) g3.push('missing ' + id); else place(el); } }
+  const close = document.getElementById('pa-close');
+  const cr = close.getBoundingClientRect();
+  const closeOk = cr.width >= 44 && cr.height >= 44 && cr.top >= pad('Top') - 1 && cr.bottom <= safeBottom + 1 && cr.left >= pad('Left') - 1 && cr.right <= safeRight + 1;
+  if (!closeOk) g3.push('close ' + cr.width.toFixed(0) + 'x' + cr.height.toFixed(0) + ' at ' + cr.top.toFixed(0) + ',' + cr.left.toFixed(0));
+  window.kitphonic.parent.open();
+  return { g2, g3, g1 };
+}"""
+
+def g1_errors(g, expect_safe=None):
+    """AC-G1: speed label and Slower/Normal/Faster sit fully in the settings scrollport."""
+    if not g or not g.get('buttons'): return ['speed controls missing']
+    errs = []
+    limit = min(g['portBottom'], g['safeBottom'])
+    lab = g['label']
+    if lab['top'] < g['portTop'] - 0.5 or lab['bottom'] > g['portBottom'] + 0.5:
+        errs.append(f"speed label outside scrollport ({lab['top']:.0f}-{lab['bottom']:.0f})")
+    for b in g['buttons']:
+        if b['top'] < g['portTop'] - 0.5 or b['bottom'] > limit + 0.5:
+            errs.append(f"{b['name']} {b['top']:.0f}-{b['bottom']:.0f} past {limit:.0f}")
+        if not b['hit']: errs.append(f"{b['name']} centre missed")
+    if g.get('scroll'): errs.append('speed column not at default scroll')
+    if expect_safe is not None and abs(g['safeBottom'] - expect_safe) > 1.5:
+        errs.append(f"safe bottom {g['safeBottom']:.0f}")
+    if not g.get('fit'): errs.append('header did not compact')
+    if g.get('aria') != 'Settings': errs.append('settings card missing aria-label')
+    if g.get('h2') != 'absolute': errs.append('Settings heading still takes space')
+    if g.get('header', 99) > 58: errs.append(f"header {g['header']:.0f}px")
+    return errs
 
 def matrix_jobs():
     jobs = []
@@ -370,7 +478,7 @@ def run_matrix_job(job, base, out, only):
         key = (vw, vh)
         if key not in grouped: order.append(key); grouped[key] = []
         grouped[key].append((label, insets))
-    rows, shot_fail = [], set()
+    rows, notes, shot_fail = [], [], set()
     name = f'{w}x{h}'
     # Boot taller than the turn-card threshold so a scene script can finish, then measure each state.
     boot_h = max(h, 720)
@@ -395,6 +503,12 @@ def run_matrix_job(job, base, out, only):
                             apply_insets(pg, insets); pg.wait_for_timeout(60)
                             m = pg.evaluate(MEASURE)
                             errs = check(m, name, scene, insets)
+                            if scene.startswith('parent') and not m.get('turn'):
+                                audit = pg.evaluate(GROWNUP_AUDIT)
+                                errs.extend(audit['g2']); errs.extend(audit['g3'])
+                                if scene == 'parent' and name == '568x320' and label == 'S':
+                                    errs.extend(g1_errors(audit.get('g1'), 272))
+                                notes.append({'cell': f'{name} {label} {engine}', 'scene': scene, 'g2': audit['g2'], 'g3': audit['g3'], 'g1': audit.get('g1')})
                             d1 = bool(m.get('turn')) and not errs
                             if (engine, name, label, scene) in SHOTS or (errs and scene not in shot_fail):
                                 pg.screenshot(path=f'{out}/matrix-{scene}-{name}-{label}-{engine}.png')
@@ -408,6 +522,71 @@ def run_matrix_job(job, base, out, only):
             b.close()
     bad = sum(bool(errs) for *_, errs, _d1 in rows)
     print(f'{name} {engine} finished {len(rows) - bad}/{len(rows)}', flush=True)
+    return rows, notes
+
+def grownup_env_passes(base, out):
+    """AC-G1 with env() insets applied before load, plus the single-scroller switch."""
+    rows = []
+    with sync_playwright() as p:
+        b = launch_browser(p)
+        try:
+            for label, ua in (
+                ('chromium', None),
+                ('webkit-ua', WEBKIT_UA),
+            ):
+                opts = dict(viewport={'width': 568, 'height': 320}, has_touch=True, service_workers='block')
+                if ua: opts['user_agent'] = ua
+                ctx = b.new_context(**opts)
+                pg = ctx.new_page()
+                client = ctx.new_cdp_session(pg)
+                client.send('Emulation.setSafeAreaInsetsOverride', {'insets': {'top': 24, 'right': 0, 'bottom': 48, 'left': 0}})
+                pg.goto(base + '?skipHello=1&progress=5&parent=1', wait_until='load', timeout=GOTO_TIMEOUT_MS)
+                pg.wait_for_timeout(400)
+                env = pg.evaluate("""() => {
+                  const probe = document.createElement('div');
+                  probe.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+                  document.documentElement.appendChild(probe);
+                  const cs = getComputedStyle(probe);
+                  const vars = document.documentElement.style.getPropertyValue('--safe-area-inset-top');
+                  return { top: cs.paddingTop, bottom: cs.paddingBottom, vars };
+                }""")
+                audit = pg.evaluate(GROWNUP_AUDIT)
+                errs = []
+                if env['top'] != '24px' or env['bottom'] != '48px' or env['vars']:
+                    errs.append(f"env insets {env['top']}/{env['bottom']} vars {env['vars']!r}")
+                errs.extend(g1_errors(audit.get('g1'), 272))
+                errs.extend(audit['g2']); errs.extend(audit['g3'])
+                g = audit.get('g1') or {}
+                btns = g.get('buttons') or []
+                if btns:
+                    ys = [b['top'] for b in btns] + [b['bottom'] for b in btns]
+                    print(f"AC-G1 568x320 S env {label} speed y {min(ys):.0f}-{max(ys):.0f}", flush=True)
+                pg.screenshot(path=f'{out}/grownups-568x320-S-env-{label}.png')
+                ctx.close()
+                rows.append((f'568x320 S env {label}', 'parent', len(btns), 48, None, errs, False))
+            ctx = b.new_context(viewport={'width': 568, 'height': 130}, has_touch=True, service_workers='block')
+            pg = ctx.new_page()
+            pg.goto(base + '?skipHello=1&progress=5&parent=1', wait_until='load', timeout=GOTO_TIMEOUT_MS)
+            pg.wait_for_timeout(300)
+            stack = pg.evaluate("""() => {
+              const parent = document.getElementById('parent');
+              const body = document.getElementById('pa-body');
+              const cols = [...body.querySelectorAll(':scope > .pcol')];
+              const scrolls = el => /(auto|scroll)/.test(getComputedStyle(el).overflowY);
+              return {
+                stack: parent.classList.contains('pa-stack'),
+                body: scrolls(body),
+                cols: cols.filter(scrolls).length,
+                order: cols.map(c => c.querySelector('.pa-settings') ? 'settings' : 'progress').join(','),
+              };
+            }""")
+            errs = []
+            if not stack['stack'] or not stack['body'] or stack['cols'] or stack['order'] != 'progress,settings':
+                errs.append(f"single scroller {stack}")
+            ctx.close()
+            rows.append(('568x130 stack', 'parent', 0, 0, None, errs, False))
+        finally:
+            b.close()
     return rows
 
 def main():
@@ -423,12 +602,16 @@ def main():
     rows = [(*row, False) for group in grouped for row in group]
     if not only:
         rows.extend(row if len(row) == 7 else (*row, False) for row in extra_passes(a.base, a.out))
+    grown = []
     if not a.skip_matrix:
         jobs = matrix_jobs()
         mw = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or min(4, len(jobs))))
         with ThreadPoolExecutor(max_workers=mw) as pool:
             grouped = list(pool.map(lambda job: run_matrix_job(job, a.base, a.out, only), jobs))
-        rows.extend(row for group in grouped for row in group)
+        for group_rows, notes in grouped:
+            rows.extend(group_rows); grown.extend(notes)
+    if not only:
+        rows.extend(grownup_env_passes(a.base, a.out))
     fails = sum(bool(r[5]) for r in rows)
     d1s = [(r[0], r[1]) for r in rows if r[6]]
     print(f"{'viewport':28} {'scene':16} {'n':>3} {'min':>5} {'knob':>5}  result")
@@ -436,6 +619,16 @@ def main():
         flag = 'D1' if d1 else ('OK' if not errs else 'FAIL: ' + '; '.join(errs))
         print(f"{vp:28} {sc:16} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {flag}")
     print(f"\n{len(rows) - fails}/{len(rows)} pass, {fails} fail, {len(d1s)} show the turn card (min {MIN}px, knob {KNOB}px, adult {ADULT}px)")
+    for scene in ('parent', 'parent-end'):
+        cells = [n for n in grown if n['scene'] == scene]
+        g2f = sum(bool(n['g2']) for n in cells); g3f = sum(bool(n['g3']) for n in cells)
+        print(f"AC-G2 {scene} {len(cells) - g2f}/{len(cells)}  AC-G3 {scene} {len(cells) - g3f}/{len(cells)}")
+    for n in grown:
+        if n['scene'] == 'parent' and n['cell'].startswith('568x320 S '):
+            g = n.get('g1')
+            if g and g.get('buttons'):
+                ys = [b['top'] for b in g['buttons']] + [b['bottom'] for b in g['buttons']]
+                print(f"AC-G1 {n['cell']} speed y {min(ys):.0f}-{max(ys):.0f} port {g['portBottom']:.0f} safe {g['safeBottom']:.0f}")
     if d1s:
         print('D1: ' + ', '.join(f'{sc}@{vp}' for vp, sc in d1s))
     sys.exit(1 if fails else 0)

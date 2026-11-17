@@ -42,7 +42,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
         </div>
       </div>
       <div class="pcol">
-        <div class="pcard"><h2>Settings</h2>${SETTING_UI.map(seg).join('')}
+        <div class="pcard pa-settings" aria-label="Settings"><h2>Settings</h2>${SETTING_UI.map(seg).join('')}
           <div class="pnote ptip">${esc(tip)} <button class="plink" id="pa-test">Play a test sound</button></div>
           ${c ? `<div id="pa-skip-wrap"><button class="preset" id="pa-skip">Skip this step…</button><div class="phint">If your child already knows “${esc(c.label)}”. Asks first; nothing is erased.</div></div>` : ''}
           <div id="pa-reset-wrap"><button class="preset" id="pa-reset">Reset progress…</button><div class="phint">Asks again before erasing anything.</div></div>
@@ -62,7 +62,105 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
         <div class="pconfirm-row"><button class="pcancel" id="pa-no">Keep progress</button><button class="perase" id="pa-yes">Erase progress</button></div></div>`;
       $('pa-no').onclick = render; $('pa-yes').onclick = () => { onReset(); render(); };
     };
+    fit();
   }
+  // Last whole settings row, card, or confirm wrap. max-height ends on that edge so a control
+  // is not left half-visible at the fold or in the bottom inset.
+  const EPS = 0.5;
+  const padOf = side => parseFloat(getComputedStyle($('parent'))['padding' + side]) || 0;
+  const overflows = el => /(auto|scroll)/.test(getComputedStyle(el).overflowY);
+  function scrollports() {
+    const body = $('pa-body');
+    const cols = [...body.querySelectorAll(':scope > .pcol')].filter(overflows);
+    return cols.length ? cols : [body];
+  }
+  function portOf(el) {
+    for (let n = el.parentElement; n; n = n.parentElement) if (overflows(n)) return n;
+    return $('pa-body');
+  }
+  function speedFits() {
+    const btn = document.querySelector('#parent button[data-k="audioSpeed"]');
+    if (!btn) return true;
+    const row = btn.closest('.prow');
+    const port = portOf(btn).getBoundingClientRect();
+    const limit = Math.min(port.bottom, innerHeight - padOf('Bottom'));
+    const bits = [row.querySelector('.plabel'), ...row.querySelectorAll('button')];
+    return bits.every(el => {
+      const r = el.getBoundingClientRect();
+      return r.height > 1 && r.top >= port.top - EPS && r.bottom <= limit + EPS;
+    });
+  }
+  function syncFade(port) {
+    const on = port.scrollHeight > port.clientHeight + 1;
+    let fade = port.querySelector(':scope > .pa-fade');
+    if (!on) { fade?.remove(); return; }
+    if (!fade) {
+      fade = document.createElement('div');
+      fade.className = 'pa-fade';
+      fade.setAttribute('aria-hidden', 'true');
+      port.append(fade);
+    }
+  }
+  function foldPort(port) {
+    port.style.maxHeight = '';
+    const pr = port.getBoundingClientRect();
+    const safeBottom = innerHeight - padOf('Bottom');
+    const limit = Math.min(pr.bottom, safeBottom);
+    const straddles = (r, edge) => r.top < edge - EPS && r.bottom > edge + EPS;
+    const cut = [...port.querySelectorAll('button')].some(el => {
+      const r = el.getBoundingClientRect();
+      if (r.height < 1 || r.bottom <= pr.top + EPS || r.top >= pr.bottom - EPS) return false;
+      return straddles(r, pr.bottom) || straddles(r, safeBottom);
+    });
+    if (!cut) { syncFade(port); return; }
+    let best = null;
+    for (const el of port.querySelectorAll('.prow, .pcard, [id^="pa-"][id$="-wrap"]')) {
+      const r = el.getBoundingClientRect();
+      if (r.height < 1 || r.top < pr.top - EPS || r.bottom > limit + EPS) continue;
+      if (best == null || r.bottom > best) best = r.bottom;
+    }
+    if (best != null) {
+      const h = best - pr.top;
+      if (h >= 80 && h < pr.height - EPS) port.style.maxHeight = (Math.round(h * 100) / 100) + 'px';
+    }
+    syncFade(port);
+  }
+  function fit(opts = {}) {
+    const parent = $('parent');
+    const body = $('pa-body');
+    if (!parent || parent.hidden || !body?.firstElementChild) return;
+    const saved = scrollports().map(p => p.scrollTop);
+    const zero = () => scrollports().forEach(p => { p.scrollTop = 0; });
+    zero();
+    for (const p of body.querySelectorAll('.pcol')) p.style.maxHeight = '';
+    body.style.maxHeight = '';
+    const safeH = parent.clientHeight - padOf('Top') - padOf('Bottom');
+    parent.classList.toggle('pa-fit', safeH < 420);
+    const stage = $('stage');
+    const wide = stage.classList.contains('short') || stage.classList.contains('tall');
+    parent.classList.remove('pa-stack');
+    if (wide) {
+      const bcs = getComputedStyle(body);
+      const inner = body.clientHeight - (parseFloat(bcs.paddingTop) || 0) - (parseFloat(bcs.paddingBottom) || 0);
+      if (inner < 80) parent.classList.add('pa-stack');
+    }
+    parent.classList.remove('pa-tighter');
+    if (parent.classList.contains('pa-fit') && !speedFits()) parent.classList.add('pa-tighter');
+    zero();
+    const ports = scrollports();
+    for (const p of ports) foldPort(p);
+    for (const fade of [...parent.querySelectorAll('.pa-fade')]) {
+      if (!ports.includes(fade.parentElement)) fade.remove();
+    }
+    if (!opts.resetScroll) ports.forEach((p, i) => { if (saved[i] != null) p.scrollTop = saved[i]; });
+  }
+  addEventListener('resize', () => fit({ resetScroll: true }));
+  visualViewport?.addEventListener('resize', () => fit({ resetScroll: true }));
+  new MutationObserver(() => fit({ resetScroll: true })).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  document.fonts?.ready?.then(() => fit());
   $('pa-close').onclick = () => { audio.stop(); onClose(); };
-  return { open() { render(); $('pa-body').scrollTop = 0; } };
+  return {
+    open() { render(); fit({ resetScroll: true }); },
+    fit,
+  };
 }
