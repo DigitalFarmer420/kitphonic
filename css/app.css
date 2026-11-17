@@ -2,7 +2,7 @@
 :root{--cream:#FFF8EC;--cream2:#FBEFDC;--ink:#3A2E28;--muted:#8A7A6E;--coral:#EF8B6E;--honey:#F2B950;--sage:#9DC49F;--saged:#6FA173;--sky:#86BFE3;--skyd:#4E97C9;--line:#EADCC6}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;height:100dvh;min-height:100svh;background:#E9E1D5;overflow:hidden;font-family:'Nunito',system-ui,sans-serif;color:var(--ink);
-  user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:none;overscroll-behavior:none}
 /* Fluid type. 1rem = 16×u, and u is the old stage scale (vw/design). JS sets the exact safe-viewport
    size (system bars + the visual viewport); these clamps are the same fit before JS and on a bare window.
    Cap is 32px so a 4K window stays at the 1080p composition (u = 2). */
@@ -191,10 +191,14 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .tray{flex:1;height:4.5rem;border-radius:1.5rem;background:#fff;border:0.125rem solid var(--line);display:flex;align-items:center;justify-content:center;gap:0.75rem;font-size:2.125rem}
 .tray .off{filter:grayscale(1);opacity:.35}
 .tcard{position:absolute;left:50%;top:11.25rem;bottom:7.5rem;transform:translateX(-50%);max-width:calc(100% - 2.25rem);border-radius:1.625rem;background:#fff;border:0.1875rem solid var(--line)}
-#tr-svg{width:100%;height:100%;touch-action:none;-webkit-touch-callout:none}
-/* KP-QA-003: tracing surface and its own ancestors never hand the gesture to the browser */
-#trace,#trace .tcard,#tr-svg{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#tr-svg{width:100%;height:100%;touch-action:none;-webkit-touch-callout:none;-webkit-user-select:none;user-select:none;pointer-events:bounding-box}
+/* KP-QA-003: tracing surface and its own ancestors never hand the gesture to the browser.
+   touch-action is not inherited, and iOS reads it from the element that receives the hit (including SVG children). */
+#trace,#lesson.tracing,#trace .tcard,#tr-svg,#tr-svg *{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #tr-svg *{pointer-events:none} /* every touch targets the svg itself: drawMarks() swapping the start dot under a finger must not detach its touch/pointer target */
+#tr-svg .hit{pointer-events:all;fill:none} /* stable target over the whole viewBox; the HTML card listens and captures */
+/* The pointing-hand hint and Kit's prompt sit over the bowl on iPad. They must not take the finger. */
+#lesson.tracing .ghosthand,#lesson.tracing #ls-mascot,#lesson.tracing #ls-mascot .bubble{pointer-events:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
 #tr-svg .lane{fill:none;stroke:#EADBC4;stroke-width:24;stroke-linecap:round;stroke-linejoin:round}
 #tr-svg .lane.off{stroke:#F6D7A0}
 #tr-svg .guide{fill:none;stroke:#CDBBA3;stroke-width:2.2;stroke-dasharray:.5 6;stroke-linecap:round}
@@ -230,7 +234,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .ltr.right .tile{background:var(--sage);color:#fff;border-color:var(--saged)}
 #l-tray{position:absolute;left:50%;bottom:1.125rem;transform:translateX(-50%);height:4.5rem;padding:0 1.375rem;border-radius:1.5rem;background:#fff;border:0.125rem solid var(--line);display:flex;align-items:center;gap:0.75rem;font-size:2rem}
 #l-tray[hidden]{display:none}#l-tray .off{filter:grayscale(1);opacity:.35}
-.ghosthand{position:absolute;font-size:3.5rem;pointer-events:none;z-index:7;transition:left .9s ease-in-out,top .9s ease-in-out;margin:-0.625rem 0 0 -1.125rem}
+.ghosthand{position:absolute;font-size:3.5rem;pointer-events:none;z-index:7;transition:left .9s ease-in-out,top .9s ease-in-out;margin:-0.625rem 0 0 -1.125rem;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:none}
 
 /* ---- star words (design/words-board 4) ---- */
 #st-mascot,#sn-mascot{left:1.125rem;top:6rem}
