@@ -306,6 +306,45 @@ test('m: a stale owner does not block the next press on the card', async ({ page
   expect(data.active).toBe(true);
 });
 
+function boxesOverlap(a, b) {
+  return a.w > 0 && a.h > 0 && b.w > 0 && b.h > 0
+    && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+test('m: the trace log stays off the letter, collapsed and expanded', async ({ page }) => {
+  await page.goto('/?skipHello=1&reducedMotion=1&activity=trace&gpc=m&tracelog=1', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2 && document.getElementById('tracelog'),
+    null,
+    { timeout: 15_000 },
+  );
+  const measure = () => page.evaluate(() => {
+    const box = document.getElementById('tracelog').getBoundingClientRect();
+    const card = document.querySelector('#trace .tcard').getBoundingClientRect();
+    const pre = document.querySelector('#tracelog pre');
+    const btn = document.getElementById('tracelog-log');
+    return {
+      open: pre && !pre.hidden,
+      boxPE: getComputedStyle(document.getElementById('tracelog')).pointerEvents,
+      btnPE: getComputedStyle(btn).pointerEvents,
+      box: { x: box.x, y: box.y, w: box.width, h: box.height },
+      card: { x: card.x, y: card.y, w: card.width, h: card.height },
+    };
+  });
+  const collapsed = await measure();
+  expect(collapsed.open, 'starts as the Log pill').toBe(false);
+  expect(collapsed.boxPE).toBe('none');
+  expect(collapsed.btnPE).toBe('auto');
+  expect(boxesOverlap(collapsed.box, collapsed.card), JSON.stringify(collapsed)).toBe(false);
+  await page.locator('#tracelog-log').click();
+  const expanded = await measure();
+  expect(expanded.open).toBe(true);
+  expect(boxesOverlap(expanded.box, expanded.card), JSON.stringify(expanded)).toBe(false);
+  const data = await traceLetter(page, { pointerType: 'touch' });
+  expect(data.end.state.done, JSON.stringify(data.end)).toBe(true);
+  expect(data.first.ink).toBeGreaterThan(0);
+});
+
 test('a: a finger still traces the bowl from its green dot', async ({ page }) => {
   await openTrace(page, 'a');
   const data = await traceLetter(page, { pointerType: 'touch' });
