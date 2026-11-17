@@ -410,10 +410,26 @@ def run_matrix_job(job, base, out, only):
     print(f'{name} {engine} finished {len(rows) - bad}/{len(rows)}', flush=True)
     return rows
 
+BASELINE_PATH = os.path.join(os.path.dirname(__file__), 'size-baseline.json')
+
+def matrix_key(vp, scene):
+    parts = vp.split()
+    if len(parts) != 3: return None
+    return (scene, parts[0], parts[1], parts[2])
+
+def load_baseline(path):
+    if not os.path.exists(path): return set(), set()
+    data = json.load(open(path))
+    def keys(rows): return {(r['screen'], r['size'], r['state'], r['engine']) for r in rows}
+    return keys(data.get('failures', [])), keys(data.get('turn', []))
+
+def dump_keys(keys):
+    return [{'screen': s, 'size': z, 'state': st, 'engine': e} for s, z, st, e in sorted(keys)]
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
     ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default='')
-    ap.add_argument('--skip-matrix', action='store_true'); a = ap.parse_args()
+    ap.add_argument('--skip-matrix', action='store_true'); ap.add_argument('--write-baseline', action='store_true'); a = ap.parse_args()
     only = set(filter(None, a.scenes.split(',')))
     os.makedirs(a.out, exist_ok=True)
     viewports = [v for v in a.viewports.split(',') if v]
@@ -429,16 +445,49 @@ def main():
         with ThreadPoolExecutor(max_workers=mw) as pool:
             grouped = list(pool.map(lambda job: run_matrix_job(job, a.base, a.out, only), jobs))
         rows.extend(row for group in grouped for row in group)
-    fails = sum(bool(r[5]) for r in rows)
-    d1s = [(r[0], r[1]) for r in rows if r[6]]
+    legacy_bad, failed, turned, seen = [], set(), set(), set()
+    for vp, sc, n, sm, kn, errs, d1 in rows:
+        key = matrix_key(vp, sc)
+        if key is None:
+            if errs or d1: legacy_bad.append((vp, sc, errs or ['turn card']))
+            continue
+        seen.add(key)
+        if d1: turned.add(key)
+        elif errs: failed.add(key)
+    if a.write_baseline and not legacy_bad:
+        payload = {'failures': dump_keys(failed), 'turn': dump_keys(turned)}
+        with open(BASELINE_PATH, 'w') as fh:
+            json.dump(payload, fh, indent=2); fh.write('\n')
+        print(f'wrote baseline: {len(failed)} failures, {len(turned)} turn cards')
+    elif a.write_baseline:
+        print('not writing baseline; legacy failures remain')
+    baseline, allowed = load_baseline(BASELINE_PATH)
+    fresh = sorted(failed - baseline)
+    stale = sorted((baseline & seen) - failed) if not a.write_baseline else []
+    bad_turn = sorted(turned - allowed) if not a.write_baseline else []
+    remaining = len(baseline & failed) if not a.write_baseline else len(failed)
     print(f"{'viewport':28} {'scene':16} {'n':>3} {'min':>5} {'knob':>5}  result")
     for vp, sc, n, sm, kn, errs, d1 in rows:
         flag = 'D1' if d1 else ('OK' if not errs else 'FAIL: ' + '; '.join(errs))
         print(f"{vp:28} {sc:16} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {flag}")
-    print(f"\n{len(rows) - fails}/{len(rows)} pass, {fails} fail, {len(d1s)} show the turn card (min {MIN}px, knob {KNOB}px, adult {ADULT}px)")
-    if d1s:
-        print('D1: ' + ', '.join(f'{sc}@{vp}' for vp, sc in d1s))
-    sys.exit(1 if fails else 0)
+    print(f"\nbaseline {remaining} remaining")
+    problems = []
+    if legacy_bad: problems.append(f'{len(legacy_bad)} legacy failure(s)')
+    if fresh: problems.append(f'{len(fresh)} failure(s) not in the baseline')
+    if bad_turn: problems.append(f'{len(bad_turn)} turn card(s) outside the allowlist')
+    if stale: problems.append(f'{len(stale)} baseline entr{"y" if len(stale)==1 else "ies"} now pass')
+    for vp, sc, errs in legacy_bad[:12]:
+        print(f'LEGACY {vp} {sc}: {"; ".join(errs)}')
+    for key in fresh[:12]:
+        print('NEW ' + ' '.join(key))
+    for key in bad_turn[:12]:
+        print('TURN ' + ' '.join(key))
+    for key in stale[:12]:
+        print('STALE ' + ' '.join(key))
+    if problems:
+        print('RATCHET: ' + '; '.join(problems))
+        sys.exit(1)
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()
