@@ -25,32 +25,94 @@ export function introLabel(word, g) {
 }
 export const soundClip = (g, audio) => (audio?.byId?.has?.(`snd-${g}-held`) ? `snd-${g}-held` : `snd-${g}`);
 
-// ?tracelog=1 only. Last 40 pointer and touch events on the letter, with a Copy button.
-function mountTraceLog(svg, toLetter, owner, tracer) {
+// ?tracelog=1 only. A slow stroke used to push its pointerdown out of a 40-line window.
+export const TRACE_LOG_KEEP = 150;
+
+// One log row. `state` is { active, k } from tracer.state(); a tracer object has neither, so active logged 0 and k was blank.
+export function traceLogLine({ time = 0, kind = '', pointerId = '', pointerType = '', target = '', clientX = 0, clientY = 0, mapped = null, state = {}, ownerId = '', defaultPrevented = false } = {}) {
+  const st = state && typeof state === 'object' ? state : {};
+  const xy = mapped ? mapped.map(n => Math.round(n * 10) / 10).join(',') : '';
+  const k = Number.isFinite(st.k) ? st.k : '';
+  return [Math.round(time || 0), kind, pointerId ?? '', pointerType || '', String(target).slice(0, 24), Math.round(clientX || 0), Math.round(clientY || 0), xy, st.active ? 1 : 0, k, ownerId ?? '', defaultPrevented ? 1 : 0].join(' ');
+}
+
+// Keep the newest rows, and always the latest pointerdown and pointerup of each pointer.
+export function pushTraceLog(lines, line, limit = TRACE_LOG_KEEP) {
+  lines.push(line);
+  const newest = new Map();
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(' ');
+    const kind = parts[1], id = parts[2];
+    if (kind === 'pointerdown' || kind === 'pointerup') newest.set(kind + '\0' + id, i);
+  }
+  const pinned = new Set(newest.values());
+  const chosen = new Set(pinned);
+  for (let i = lines.length - 1; i >= 0 && chosen.size < limit; i--) if (!pinned.has(i)) chosen.add(i);
+  const kept = [];
+  for (let i = 0; i < lines.length; i++) if (chosen.has(i)) kept.push(lines[i]);
+  lines.splice(0, lines.length, ...kept);
+  return lines;
+}
+
+// ?tracelog=1 only. Collapsed Log pill, off the letter card. Capture listeners are passive:
+// the logger must not preventDefault or it changes the stroke.
+function mountTraceLog(svg, toLetter, owner, stateOf) {
   if (!/[?&]tracelog=1(?:&|$)/.test(location.search)) return { remove() {} };
   const lines = [];
   const box = document.createElement('div');
   box.id = 'tracelog';
-  box.style.cssText = 'position:absolute;left:8px;right:8px;bottom:8px;z-index:40;max-height:40%;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:10px;background:rgba(58,46,40,.92);color:#fff;font:12px/1.35 ui-monospace,monospace';
-  const btn = document.createElement('button');
-  btn.type = 'button'; btn.textContent = 'Copy';
-  btn.style.cssText = 'align-self:flex-end;height:36px;padding:0 14px;border:0;border-radius:8px;background:#fff;color:#3A2E28;font-weight:700';
+  box.style.cssText = 'position:absolute;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:4px;overflow:hidden;pointer-events:none;font:12px/1.35 ui-monospace,monospace;color:#fff';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:4px;pointer-events:none';
+  const pill = (label) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = label;
+    b.style.cssText = 'box-sizing:border-box;height:44px;min-width:44px;padding:0 12px;border:0;border-radius:8px;background:#fff;color:#3A2E28;font-weight:700;pointer-events:auto';
+    return b;
+  };
+  const toggle = pill('Log'); toggle.id = 'tracelog-log'; toggle.setAttribute('aria-expanded', 'false');
+  const copy = pill('Copy'); copy.id = 'tracelog-copy'; copy.hidden = true;
   const pre = document.createElement('pre');
-  pre.style.cssText = 'margin:0;overflow:auto;white-space:pre-wrap';
-  btn.onclick = () => {
+  pre.hidden = true;
+  pre.style.cssText = 'margin:0;overflow:auto;white-space:pre-wrap;pointer-events:none;max-width:16rem;padding:6px 8px;border-radius:8px;background:rgba(58,46,40,.92)';
+  const place = () => {
+    const lesson = $('lesson'); if (!lesson) return;
+    const host = lesson.getBoundingClientRect();
+    const head = lesson.querySelector('.top')?.getBoundingClientRect();
+    const card = document.querySelector('#trace .tcard')?.getBoundingClientRect();
+    const gapTop = Math.max(host.top, head ? head.bottom : host.top) + 8;
+    const gapBottom = card ? card.top - 8 : host.bottom;
+    box.style.top = Math.max(0, gapTop - host.top) + 'px';
+    box.style.right = '8px';
+    box.style.left = 'auto';
+    box.style.bottom = 'auto';
+    box.style.maxHeight = Math.max(44, gapBottom - gapTop) + 'px';
+  };
+  let open = false;
+  const setOpen = (on) => {
+    open = on; pre.hidden = !on; copy.hidden = !on;
+    toggle.setAttribute('aria-expanded', on ? 'true' : 'false');
+    place();
+  };
+  toggle.onclick = () => setOpen(!open);
+  copy.onclick = () => {
     const text = lines.join('\n');
-    const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; box.append(ta); ta.select(); try { document.execCommand('copy'); } catch { /* the text stays on screen */ } ta.remove(); btn.textContent = 'Copied'; };
-    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => { btn.textContent = 'Copied'; }, fallback);
+    const fallback = () => { const ta = document.createElement('textarea'); ta.value = text; ta.style.pointerEvents = 'auto'; box.append(ta); ta.select(); try { document.execCommand('copy'); } catch { /* the text stays on screen */ } ta.remove(); copy.textContent = 'Copied'; };
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => { copy.textContent = 'Copied'; }, fallback);
     else fallback();
   };
-  box.append(btn, pre);
-  $('lesson').append(box);
+  row.append(toggle, copy); box.append(row, pre);
+  $('lesson').append(box); place();
+  const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(place) : null;
+  ro?.observe($('lesson'));
+  const cardEl = document.querySelector('#trace .tcard'); if (cardEl) ro?.observe(cardEl);
   const tgt = el => el?.id || (el?.className?.baseVal ?? el?.className) || el?.tagName || '';
   const note = (kind, e, mapped) => {
-    const st = tracer();
-    const xy = mapped ? mapped.map(n => Math.round(n * 10) / 10).join(',') : '';
-    lines.push([Math.round(e.timeStamp || 0), kind, e.pointerId ?? '', e.pointerType || '', String(tgt(e.target)).slice(0, 24), Math.round(e.clientX || 0), Math.round(e.clientY || 0), xy, st.active ? 1 : 0, st.k, owner.id ?? '', e.defaultPrevented ? 1 : 0].join(' '));
-    if (lines.length > 40) lines.shift();
+    const st = stateOf?.() || {};
+    pushTraceLog(lines, traceLogLine({
+      time: e.timeStamp, kind, pointerId: e.pointerId ?? '', pointerType: e.pointerType || '', target: String(tgt(e.target)).slice(0, 24),
+      clientX: e.clientX, clientY: e.clientY, mapped, state: st, ownerId: owner.id ?? '', defaultPrevented: !!e.defaultPrevented,
+    }));
     pre.textContent = lines.join('\n');
   };
   const onPointer = e => { let mapped = null; try { mapped = toLetter(e); } catch { /* mapping must not break the log */ } note(e.type, e, mapped); };
@@ -59,13 +121,15 @@ function mountTraceLog(svg, toLetter, owner, tracer) {
     let mapped = null; try { if (t) mapped = toLetter(t); } catch { /* same */ }
     note(e.type, { timeStamp: e.timeStamp, pointerId: t?.identifier, pointerType: 'touch', target: e.target, clientX: t?.clientX, clientY: t?.clientY, defaultPrevented: e.defaultPrevented }, mapped);
   };
-  const cap = { capture: true };
-  for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'gotpointercapture']) document.addEventListener(type, onPointer, cap);
-  for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) document.addEventListener(type, onTouch, cap);
+  const cap = { capture: true, passive: true };
+  const pointers = ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'gotpointercapture'];
+  const touches = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
+  for (const type of pointers) document.addEventListener(type, onPointer, cap);
+  for (const type of touches) document.addEventListener(type, onTouch, cap);
   return { remove() {
-    for (const type of ['pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'lostpointercapture', 'gotpointercapture']) document.removeEventListener(type, onPointer, cap);
-    for (const type of ['touchstart', 'touchmove', 'touchend', 'touchcancel']) document.removeEventListener(type, onTouch, cap);
-    box.remove();
+    for (const type of pointers) document.removeEventListener(type, onPointer, cap);
+    for (const type of touches) document.removeEventListener(type, onTouch, cap);
+    ro?.disconnect(); box.remove();
   } };
 }
 
@@ -226,7 +290,7 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
     card.addEventListener('touchcancel', onTouchEnd, true);
     card.addEventListener('selectstart', stopCallout);
     card.addEventListener('contextmenu', stopCallout);
-    const log = mountTraceLog(svg, toLetter, owner, () => tracer);
+    const log = mountTraceLog(svg, toLetter, owner, () => tracer.state());
     const onpointerdown = e => {
       if (e.target?.closest?.('button') || !insideLetter(e.clientX, e.clientY)) return;
       e.preventDefault(); arm = null; hand.hide(); hand.poke(); if (!run || run.busy) return;
