@@ -1,5 +1,5 @@
 {
-  "cache": "kitphonic-f02b05f7d8b5b016",
+  "cache": "kitphonic-f64e3949944ed3a6",
   "shell": [
     "index.html",
     "css/app.css",
@@ -45,6 +45,7 @@
     "js/support.js",
     "js/sw-register.js",
     "js/trace.js",
+    "js/turn.js",
     "js/validate.js",
     "js/version.js",
     "js/word-logic.js",

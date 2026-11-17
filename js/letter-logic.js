@@ -47,7 +47,14 @@ export function gridRows(n, maxPerRow) {
   return Array.from({ length: rows }, (_, r) => base + (r < extra ? 1 : 0));
 }
 // Static layout (R14): centred, balanced rows, up to `perRow` per row.
-export function staticLayout(n, { w, top, perRow = w < 700 ? 3 : 6, cellW = 150, cellH = 210 }) {
+export function staticLayout(n, { w, top, perRow = w < 700 ? 3 : 6, cellW = 150, cellH = 210, minPitch = 0 } = {}) {
+  if (minPitch > cellW) { // the floor is wider than the slot: push neighbours, then wrap
+    const avail = Math.max(minPitch, w - 40);
+    let cols = Math.min(perRow, n);
+    while (cols > 1 && minPitch * cols > avail + 0.5) cols--;
+    perRow = cols;
+    cellW = Math.min(avail / Math.min(cols, n), Math.max(cellW, minPitch));
+  }
   const rows = gridRows(n, perRow), out = [];
   rows.forEach((inRow, r) => { for (let c = 0; c < inRow; c++) out.push({ x: w / 2 + (c - (inRow - 1) / 2) * cellW, y: top + r * cellH + cellH / 2 }); });
   return out;

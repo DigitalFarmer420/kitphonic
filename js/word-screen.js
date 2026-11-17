@@ -3,6 +3,7 @@ import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard, RULES } from './mastery.js';
 import { supportPattern } from './support.js';
 import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
+import { resumeClock } from './turn.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, presentCheck, needsCheck, caseFor } from './word-logic.js';
 import { MASCOT } from './content.js';
@@ -217,9 +218,10 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function demoSweep() { // the slider replays itself once, then hands back to the child (later picks = assisted)
     trial.assisted = true; sweepStart = null;
     const demo = createSweep(ms, { gapMs: cfg.sweepGapMs }); handle.classList.add('demo'); setHandle(0);
-    const t0 = performance.now(), dur = 1600;
+    const clock = { t0: performance.now(), pausedAt: null }, dur = 1600;
     const step = now => {
-      const f = Math.min(1, (now - t0) / dur);
+      if (resumeClock(clock, now, !!stage.info?.turn).pausedAt != null) { requestAnimationFrame(step); return; }
+      const f = Math.min(1, (now - clock.t0) / dur);
       for (const ev of demo.move(f, now)) if (ev.kind === 'play') { const cl = clipForMarker(ms[ev.marker], ev.stretch); audio.play(cl.id, { ...cl, gapMs: 0 }); light(demo.lit, ev.marker); }
       setHandle(f);
       if (f < 1) requestAnimationFrame(step);

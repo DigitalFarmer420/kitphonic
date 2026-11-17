@@ -60,7 +60,25 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
 
   const bytes = f => raw.get(f) ?? fetch(base + f).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); });
   const now = () => performance.now();
-  const wait = ms => new Promise(r => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); });
+  let holds = 0; const parked = [];
+  function hold() {
+    holds++;
+    if (holds !== 1) return;
+    try { ctx?.suspend?.(); } catch {}
+    try { if ('speechSynthesis' in window) speechSynthesis.pause(); } catch {}
+  }
+  function releaseHold() {
+    if (!holds) return;
+    holds--;
+    if (holds) return;
+    try { ctx?.resume?.(); } catch {}
+    try { if ('speechSynthesis' in window) speechSynthesis.resume(); } catch {}
+    for (const go of parked.splice(0)) go();
+  }
+  const wait = ms => new Promise(r => {
+    const arm = () => { const t = setTimeout(() => { timers.delete(t); r(); }, ms); timers.set(t, r); };
+    if (holds) parked.push(arm); else arm();
+  });
   // startLoad is unbounded: the in-flight promise stays until it settles. load() races it
   // against DECODE_MS so unlock()/play() can move on; a late success is then cached, and a
   // failure is dropped so a later retry is not stuck on null or a hung promise.
@@ -217,8 +235,11 @@ export async function createAudio({ base = 'audio/', onClip = () => {}, speechRa
     play(id, { rate = 1, delayMs = 0, gapMs } = {}) { return enqueue([id], { rate, delayMs, gapMs }); },
     say(ids, { rate = 1, delayMs = 0, gapMs } = {}) { ids = ids.filter(Boolean); return ids.length ? enqueue(ids, { rate, delayMs, gapMs }) : Promise.resolve(); },
     get busy() { return pending > 0; },
+    get holding() { return holds > 0; },
+    hold, release: releaseHold,
     stop() { // cancel queued + playing audio (new word, interrupting tap)
       gen++; pending = 0; tail = Promise.resolve();
+      for (const go of parked.splice(0)) go();
       for (const [t, r] of timers) { clearTimeout(t); r(); } timers.clear();
       const cutAt = Math.round(now()); lastEnd = -Infinity; // a child's tap: the next sound may start at once
       for (const s of [...sources]) {

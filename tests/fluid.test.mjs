@@ -106,6 +106,14 @@ test('map stops do not overlap each other or the go button across the sweep', ()
   }
 });
 
+test('squat and very wide safe rects fill instead of letterboxing', () => {
+  for (const [vw, vh] of [[1000, 320], [1920, 800], [400, 500]]) {
+    const s = stageFor(vw, vh);
+    assert.ok(Math.abs(s.w - vw) < 2, `${vw}x${vh} width ${s.w}`);
+    assert.ok(Math.abs(s.h - vh) < 2, `${vw}x${vh} height ${s.h}`);
+  }
+});
+
 test('a mid-session rotate swaps portrait for short landscape and back', () => {
   const portrait = stageFor(390, 844);
   const land = stageFor(844, 390);

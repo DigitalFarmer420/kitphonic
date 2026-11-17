@@ -29,18 +29,26 @@ import { createHelloGate } from './hello-gate.js';
 import { createHelloVisit } from './hello-visit.js';
 import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
 import { registerServiceWorker } from './sw-register.js';
+import { createTurnGate } from './turn.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
 // ?sessionlog=1 is the only thing that builds the overlay, listens, or wraps storage / AudioContext.
 const sessionLog = sessionLogEnabled(location.search) ? createSessionLog(document) : null;
 if (sessionLog) observeAudioContexts(globalThis, sessionLog);
-const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); k?.letters?.relayout?.(); });
+let audioApi = null;
+const turnGate = createTurnGate({ onPause: () => audioApi?.hold(), onResume: () => audioApi?.release() });
+const stage = createStage($('stage'), (s) => {
+  turnGate.update(s?.safeH ?? 0);
+  const k = window.kitphonic; k?.screen?.relayout?.(); k?.mapScreen?.relayout?.(); k?.sentenceScreen?.relayout?.(); k?.lesson?.relayout?.(); k?.familyScreen?.relayout?.(); k?.letters?.relayout?.();
+});
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
 const settings = createSettings(sessionLog ? watchStorage(window.localStorage, sessionLog) : window.localStorage, undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
 const audio = await createAudio({ base: 'audio/', speechRate: () => settings.audioRate() });
+audioApi = audio;
+if (turnGate.active) audio.hold();
 // Reduced motion app-wide: a stage class stops CSS animation/transitions; screens also skip drift, path drawing,
 // confetti, the ghost hand and demos via settings.reducedMotion().
 const applyMotion = () => $('stage').classList.toggle('rm', settings.reducedMotion());

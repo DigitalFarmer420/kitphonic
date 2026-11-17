@@ -24,6 +24,11 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const top = (m === 'short' ? 130 : m === 'portrait' ? 220 : 170) * u, bottom = m === 'short' ? s.h - 16 * u : s.h - (m === 'portrait' ? 130 : 120) * u;
     return { left: 20 * u, right: s.w - 20 * u, top, bottom }; };
   const floatBox = () => { const b = box(), u = U(); if (stage.info.mode === 'short') b.top = Math.max(b.top, 175 * u); return b; };
+  const tilePitch = () => {
+    const s = stage.info, u = U();
+    const design = s.mode === 'short' || (s.mode === 'portrait' && s.designW < 600) ? 110 : 120;
+    return Math.max(64, design * u); // border box: shrinks to the floor, then the row wraps
+  };
   const cellW = n => { const s = stage.info, u = U(), per = s.designW < 700 ? 3 : 6; return Math.min(150 * u, (s.w - 40 * u) / Math.min(per, n)); };
   const tileHalf = () => {
     const m = stage.info.mode, u = U(), pt = m === 'portrait' && stage.info.designW < 600;
@@ -60,8 +65,17 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   function placedEar() { const e = earPos(); return stage.info.mode === 'short' ? e : { x: e.x, y: e.y - huntLift() }; }
   function earLayout(letters) {
     const s = stage.info, u = U(), e = placedEar(), n = letters.length, lift = huntLift();
-    if (s.mode === 'short') { const x0 = earPos().x + 130 * u, cw = Math.min(140 * u, (s.w - x0 - 30 * u) / n); return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u - lift })); }
-    const cw = Math.min(150 * u, (s.w - 40 * u) / n), y = e.y + (s.mode === 'portrait' ? 200 : 185) * u;
+    const pitch = Math.max(64, (s.mode === 'short' ? 96 : 100) * u);
+    if (s.mode === 'short') {
+      const x0 = earPos().x + 130 * u, room = s.w - x0 - 30 * u;
+      let cw = Math.min(140 * u, room / n);
+      if (pitch * n <= room) cw = Math.max(cw, Math.min(140 * u, pitch));
+      return letters.map((l, i) => ({ l, x: x0 + cw * (i + .5), y: 230 * u - lift }));
+    }
+    const room = s.w - 40 * u;
+    let cw = Math.min(150 * u, room / n);
+    if (pitch * n <= room) cw = Math.max(cw, Math.min(150 * u, pitch));
+    const y = e.y + (s.mode === 'portrait' ? 200 : 185) * u;
     return letters.map((l, i) => ({ l, x: s.w / 2 + (i - (n - 1) / 2) * cw, y }));
   }
   // Sound-tap rows must keep the dot under the last row on the board. cellH shrinks only when the design pitch would not.
@@ -107,7 +121,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       run.items.forEach((it, i) => { it.x = fresh[i].x; it.y = fresh[i].y; it.vx = fresh[i].vx * u; it.vy = fresh[i].vy * u; it.half = fresh[i].half; });
     } else {
       const g = gridSpec(letters.length);
-      const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH });
+      const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH, minPitch: tilePitch() });
       run.items.forEach((it, i) => { it.x = pos[i].x; it.y = pos[i].y; });
     }
     move();
@@ -141,7 +155,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     $('letters').classList.toggle('hunt', !!run.def.ear);
     if (run.def.ear) run.items = earLayout(letters);
     else if (run.def.drift && !settings.reducedMotion()) run.items = floatInit(letters, { box: floatBox(), rand, half: tileHalf() }).map(it => ({ ...it, vx: it.vx * u, vy: it.vy * u }));
-    else { const g = gridSpec(letters.length); const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
+    else { const g = gridSpec(letters.length); const pos = staticLayout(letters.length, { w: stage.info.w, top: g.top, perRow: g.per, cellW: cellW(letters.length), cellH: g.cellH, minPitch: tilePitch() }); run.items = letters.map((l, i) => ({ l, ...pos[i] })); }
     run.target = target; run.firstTry = true; run.misses = 0; run.promptEnd = 0; place(run.items); renderPebbles(); if (run.def.ear) { addEar(); tray(); }
     const p = prompt();
     if (!run.def.ear) p?.then(() => run && hand.start(() => { // explore: taps two tiles; find: hovers every tile (never just the answer)
@@ -189,7 +203,11 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   }
   function loop(t0) {
     let last = t0;
-    const step = now => { if (!run || !run.def.drift || settings.reducedMotion()) return; floatStep(run.items, Math.min(50, now - last), floatBox(), now); last = now; move(); raf = requestAnimationFrame(step); };
+    const step = now => {
+      if (!run || !run.def.drift || settings.reducedMotion()) return;
+      if (stage.info?.turn) { last = now; raf = requestAnimationFrame(step); return; } // paused in place
+      floatStep(run.items, Math.min(50, now - last), floatBox(), now); last = now; move(); raf = requestAnimationFrame(step);
+    };
     raf = requestAnimationFrame(step);
   }
   function finish() { // a finished scored round is a milestone: varied spoken praise, then the next activity

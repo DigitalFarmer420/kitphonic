@@ -133,10 +133,13 @@ MEASURE = r"""() => {
   const picEl = card && !card.hidden && card.classList.contains('revealed') ? card.querySelector('.pic') : null;
   const edge = e => { const b = e.getBoundingClientRect(); return { top: b.top, right: b.right, bottom: b.bottom, left: b.left }; };
   const revealPic = picEl && vis(picEl) ? { card: edge(card), pic: edge(picEl), art: edge(picEl.querySelector('svg, .emoji') || picEl) } : null;
-  return { ptiles, empty, cueHits, covered, huntTray, revealPic, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight };
+  const stageEl = document.getElementById('stage');
+  return { ptiles, empty, cueHits, covered, huntTray, revealPic, screen: scr.id, ltr, targets, key, stage: { w: st.width, h: st.height, x: st.left, y: st.top }, handle: vis(h) ? box(h) : null, vw: innerWidth, vh: innerHeight,
+    turn: !!stageEl?.classList.contains('turn'), turnText: (document.getElementById('turn')?.innerText || '').replace(/\s+/g, ' ').trim() };
 }"""
 
 ADULT = 48  # grown-ups controls stay 48 CSS px on every window (the child floor is 64)
+MIN_STACK = 332  # matches js/turn.js short-landscape floor stack
 CLASSIC = {'360x780', '780x360', '820x1180', '390x844', '844x390', '1180x820'}
 
 def overlaps(a, b, pad=2):
@@ -148,12 +151,19 @@ def boxInside(inner, outer, pad=1):
     return (inner['top'] >= outer['top'] - pad and inner['bottom'] <= outer['bottom'] + pad
             and inner['left'] >= outer['left'] - pad and inner['right'] <= outer['right'] + pad)
 
-def check(m, vp, scene):
+def check(m, vp, scene, insets=(0, 0, 0, 0)):
     errs = []
+    top, right, bottom, left = insets
+    safe_w = m['vw'] - left - right
+    safe_h = m['vh'] - top - bottom
+    if m.get('turn'):
+        if m.get('turnText'): errs.append('turn card has text')
+        if safe_h >= MIN_STACK - 0.5: errs.append(f"turn card but height {safe_h:.0f} fits the floors")
+        return errs
     for t in m['targets']:
         short = min(t['w'], t['h']); need = KNOB if t['knob'] else (ADULT if t.get('adult') else MIN)
         if short < need - 0.5: errs.append(f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < {need}")
-        if not t.get('scroll') and (t['x'] < -1 or t['y'] < -1 or t['x'] + t['w'] > m['vw'] + 1 or t['y'] + t['h'] > m['vh'] + 1):
+        if not t.get('scroll') and (t['x'] < left - 1 or t['y'] < top - 1 or t['x'] + t['w'] > m['vw'] - right + 1 or t['y'] + t['h'] > m['vh'] - bottom + 1):
             errs.append(f"{t['name']} cut off at ({t['x']:.0f},{t['y']:.0f})")
         if t['play'] and vp in CLASSIC and not (110 <= short <= 175): errs.append(f"#play {short:.0f}px (want ~120)")
     errs += [f'overlap {h}' for h in m.get('cueHits', [])]
@@ -177,11 +187,11 @@ def check(m, vp, scene):
         if len(c) > 1 and (min(c) == 1 or max(c) - min(c) > 1): errs.append(f"unbalanced grid {c}")
     # A capped desktop board (u = 2, the 1080p composition) is centered in a larger window on purpose.
     capped = m['vw'] > 2000 or m['vh'] > 1400
-    if not capped and m['stage']['w'] < m['vw'] * .97 and m['stage']['h'] < m['vh'] * .97: errs.append('stage does not fill the screen')
-    if not capped and m['stage']['h'] < m['vh'] * .97 and m['vh'] > m['vw']: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {m['vh']}px tall")
-    if m['handle'] and m['vh'] > m['vw']:
-        bottom_gap = m['vh'] - (m['handle']['y'] + m['handle']['h'])
-        if bottom_gap > m['vh'] * .25: errs.append(f"slider not in thumb zone ({bottom_gap:.0f}px above the bottom)")
+    if not capped and m['stage']['w'] < safe_w * .97 and m['stage']['h'] < safe_h * .97: errs.append('stage does not fill the safe rect')
+    if not capped and m['stage']['h'] < safe_h * .97 and safe_h > safe_w: errs.append(f"empty band: stage {m['stage']['h']:.0f} of {safe_h:.0f}px tall")
+    if m['handle'] and safe_h > safe_w:
+        bottom_gap = (m['vh'] - bottom) - (m['handle']['y'] + m['handle']['h'])
+        if bottom_gap > safe_h * .25: errs.append(f"slider not in thumb zone ({bottom_gap:.0f}px above the bottom)")
     return errs
 
 GOTO_TIMEOUT_MS = 15000
@@ -279,6 +289,9 @@ def extra_passes(base, out):
                 pg.wait_for_timeout(300)
                 if js: pg.evaluate(js); pg.wait_for_timeout(400)
                 else: pg.wait_for_timeout(900)
+                if pg.evaluate("() => document.getElementById('stage').classList.contains('turn')"):
+                    pg.screenshot(path=f"{out}/inset-{scene}-{vp}.png"); ctx.close()
+                    rows.append((vp, scene, 0, 0, None, [], True)); continue
                 detail = pg.evaluate(r"""() => {
                   const stage = document.getElementById('stage').getBoundingClientRect();
                   const sel = document.getElementById('family') && !document.getElementById('family').hidden ? '.ftile' : '#tiles .tile';
@@ -308,27 +321,121 @@ def extra_passes(base, out):
                 if not detail: errs.append('no tiles')
                 pg.screenshot(path=f"{out}/inset-{scene}-{vp}.png")
                 ctx.close()
-                rows.append((vp, scene, len(detail), min((min(t['w'], t['h']) for t in detail), default=0), None, errs))
+                rows.append((vp, scene, len(detail), min((min(t['w'], t['h']) for t in detail), default=0), None, errs, False))
         finally:
             b.close()
     return rows
 
+PHONE_P = [(320, 568), (360, 640), (375, 667), (390, 844), (412, 915), (430, 932)]
+PHONE_L = [(h, w) for w, h in PHONE_P]
+IPAD = [(768, 1024), (820, 1180), (1024, 768), (1180, 820)]
+ANDROID = [(800, 1280), (1280, 800)]
+CHROMIUM_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.6613.88 Mobile Safari/537.36'
+WEBKIT_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'
+SHOTS = {
+    ('webkit', '320x568', 'W', 'hello'), ('webkit', '320x568', 'W', 'word-map'),
+    ('chromium', '568x320', 'W', 'hello'), ('chromium', '568x320', 'W', 'word-map'),
+    ('chromium', '568x320', 'Wi', 'hello'), ('chromium', '568x320', 'Wi', 'word-map'),
+    ('chromium', '1024x768', 'P', 'hello'), ('chromium', '1024x768', 'P', 'map'),
+}
+
+def matrix_jobs():
+    jobs = []
+    for engine, ua in (('chromium', CHROMIUM_UA), ('webkit', WEBKIT_UA)):
+        for w, h in PHONE_P:
+            ins, bar = (47, 0, 34, 0), (100 if engine == 'webkit' else 56)
+            jobs.append((engine, ua, w, h, [('P', w, h, (0, 0, 0, 0)), ('S', w, h, ins), ('W', w, h - bar, ins)]))
+        for w, h in PHONE_L:
+            ins, ii = (24, 0, 48, 0), (0, 48, 24, 48)
+            jobs.append((engine, ua, w, h, [('P', w, h, (0, 0, 0, 0)), ('S', w, h, ins), ('W', w, h - 56, ins), ('Si', w, h, ii), ('Wi', w, h - 56, ii)]))
+        for w, h in IPAD:
+            ins = (24, 0, 20, 0)
+            jobs.append((engine, ua, w, h, [('P', w, h, (0, 0, 0, 0)), ('S', w, h, ins), ('W', w, h - 74, ins)]))
+        for w, h in ANDROID:
+            ins = (24, 0, 48, 0)
+            jobs.append((engine, ua, w, h, [('P', w, h, (0, 0, 0, 0)), ('S', w, h, ins), ('W', w, h - 56, ins)]))
+    return jobs
+
+def apply_insets(pg, insets):
+    pg.evaluate("""([t, r, b, l]) => { const s = document.documentElement.style;
+      s.setProperty('--safe-area-inset-top', t + 'px'); s.setProperty('--safe-area-inset-right', r + 'px');
+      s.setProperty('--safe-area-inset-bottom', b + 'px'); s.setProperty('--safe-area-inset-left', l + 'px'); }""", list(insets))
+
+def run_matrix_job(job, base, out, only):
+    engine, ua, w, h, states = job
+    order, grouped = [], {}
+    for label, vw, vh, insets in states:
+        key = (vw, vh)
+        if key not in grouped: order.append(key); grouped[key] = []
+        grouped[key].append((label, insets))
+    rows, shot_fail = [], set()
+    name = f'{w}x{h}'
+    # Boot taller than the turn-card threshold so a scene script can finish, then measure each state.
+    boot_h = max(h, 720)
+    with sync_playwright() as p:
+        b = launch_browser(p)
+        try:
+            for scene, q, js in SCENES:
+                if only and scene not in only: continue
+                ctx = b.new_context(viewport={'width': w, 'height': boot_h}, has_touch=True, service_workers='block', user_agent=ua)
+                try:
+                    pg = ctx.new_page()
+                    pg.set_default_timeout(GOTO_TIMEOUT_MS)
+                    pg.goto(base + ('?' + q if q else ''), wait_until='load', timeout=GOTO_TIMEOUT_MS)
+                    pg.wait_for_timeout(300)
+                    if js:
+                        try: pg.evaluate(js)
+                        except Exception as exc: rows.append((f'{name} boot {engine}', scene, 0, 0, None, [f'scene script: {exc}'], False)); continue
+                        pg.wait_for_timeout(400)
+                    for vw, vh in order:
+                        pg.set_viewport_size({'width': vw, 'height': vh}); pg.wait_for_timeout(60)
+                        for label, insets in grouped[(vw, vh)]:
+                            apply_insets(pg, insets); pg.wait_for_timeout(60)
+                            m = pg.evaluate(MEASURE)
+                            errs = check(m, name, scene, insets)
+                            d1 = bool(m.get('turn')) and not errs
+                            if (engine, name, label, scene) in SHOTS or (errs and scene not in shot_fail):
+                                pg.screenshot(path=f'{out}/matrix-{scene}-{name}-{label}-{engine}.png')
+                                if errs: shot_fail.add(scene)
+                            smallest = 0 if d1 else min((min(t['w'], t['h']) for t in m['targets'] if not t['knob']), default=0)
+                            knob = None if d1 else next((min(t['w'], t['h']) for t in m['targets'] if t['knob']), None)
+                            rows.append((f'{name} {label} {engine}', scene, len(m['targets']), smallest, knob, errs, d1))
+                finally:
+                    ctx.close()
+        finally:
+            b.close()
+    bad = sum(bool(errs) for *_, errs, _d1 in rows)
+    print(f'{name} {engine} finished {len(rows) - bad}/{len(rows)}', flush=True)
+    return rows
+
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--base', default='http://localhost:8099/'); ap.add_argument('--out', default='screenshots/sizes')
-    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default=''); a = ap.parse_args()
+    ap.add_argument('--viewports', default=','.join(REQUIRED + EXTRA + LARGE)); ap.add_argument('--scenes', default='')
+    ap.add_argument('--skip-matrix', action='store_true'); a = ap.parse_args()
     only = set(filter(None, a.scenes.split(',')))
     os.makedirs(a.out, exist_ok=True)
     viewports = [v for v in a.viewports.split(',') if v]
     workers = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or min(4, len(viewports) or 1)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
         grouped = list(pool.map(lambda vp: run_viewport(vp, a.base, a.out, only), viewports))
-    rows = [row for group in grouped for row in group]
-    fails = sum(bool(errs) for *_, errs in rows)
-    if not only: rows.extend(extra_passes(a.base, a.out)); fails = sum(bool(errs) for *_, errs in rows)
-    print(f"{'viewport':9} {'scene':13} {'n':>3} {'min':>5} {'knob':>5}  result")
-    for vp, sc, n, sm, kn, errs in rows:
-        print(f"{vp:9} {sc:13} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {'OK' if not errs else 'FAIL: ' + '; '.join(errs)}")
-    print(f"\n{len(rows) - fails}/{len(rows)} scenes pass (min {MIN}px, knob {KNOB}px)")
+    rows = [(*row, False) for group in grouped for row in group]
+    if not only:
+        rows.extend(row if len(row) == 7 else (*row, False) for row in extra_passes(a.base, a.out))
+    if not a.skip_matrix:
+        jobs = matrix_jobs()
+        mw = max(1, int(os.environ.get('KITPHONIC_SIZES_WORKERS') or min(4, len(jobs))))
+        with ThreadPoolExecutor(max_workers=mw) as pool:
+            grouped = list(pool.map(lambda job: run_matrix_job(job, a.base, a.out, only), jobs))
+        rows.extend(row for group in grouped for row in group)
+    fails = sum(bool(r[5]) for r in rows)
+    d1s = [(r[0], r[1]) for r in rows if r[6]]
+    print(f"{'viewport':28} {'scene':16} {'n':>3} {'min':>5} {'knob':>5}  result")
+    for vp, sc, n, sm, kn, errs, d1 in rows:
+        flag = 'D1' if d1 else ('OK' if not errs else 'FAIL: ' + '; '.join(errs))
+        print(f"{vp:28} {sc:16} {n:3} {sm:5.0f} {('-' if kn is None else f'{kn:.0f}'):>5}  {flag}")
+    print(f"\n{len(rows) - fails}/{len(rows)} pass, {fails} fail, {len(d1s)} show the turn card (min {MIN}px, knob {KNOB}px, adult {ADULT}px)")
+    if d1s:
+        print('D1: ' + ', '.join(f'{sc}@{vp}' for vp, sc in d1s))
     sys.exit(1 if fails else 0)
 
 if __name__ == '__main__':

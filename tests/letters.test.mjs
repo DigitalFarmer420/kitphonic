@@ -60,6 +60,15 @@ test('balanced grids: never a lone tile (4 -> 2x2, 5 -> 3+2, 6 -> 3+3 / one row 
   for (let n = 2; n <= 6; n++) for (const per of [3, 4, 6]) { const r = LL.gridRows(n, per); assert.ok(!(r.length > 1 && r.includes(1)), `${n}/${per}`); assert.ok(Math.max(...r) - Math.min(...r) <= 1); }
   const p = LL.staticLayout(4, { w: 400, top: 200, perRow: 3 }); assert.equal(new Set(p.map(q => q.y)).size, 2);
 });
+test('a pitch below the slot does not move tiles; a floor wider than the slot wraps', () => {
+  const plain = LL.staticLayout(4, { w: 960, top: 200 });
+  assert.deepEqual(LL.staticLayout(4, { w: 960, top: 200, minPitch: 40 }), plain);
+  const wrapped = LL.staticLayout(4, { w: 200, top: 0, perRow: 3, cellW: 40, minPitch: 80 });
+  assert.equal(new Set(wrapped.map(q => q.y)).size, 2);
+  for (let i = 0; i < wrapped.length; i++) for (let j = i + 1; j < wrapped.length; j++) {
+    if (wrapped[i].y === wrapped[j].y) assert.ok(Math.abs(wrapped[i].x - wrapped[j].x) >= 79);
+  }
+});
 test('floating letters never overlap (phone landscape box: one row of 6; portrait; tablet) over 30 s of drift', () => {
   const boxes = [[{ left: 20, right: 847, top: 130, bottom: 384 }, [55, 62]], [{ left: 20, right: 380, top: 220, bottom: 737 }, [55, 62]],
     [{ left: 20, right: 940, top: 170, bottom: 480 }, [60, 68]]];

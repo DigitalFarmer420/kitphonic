@@ -1,4 +1,5 @@
 import { cssVarsFromInline, resolveSafeInsets, stageBox, envInsetsAllowed } from './safe-insets.js';
+import { needsTurn, viewportBox } from './turn.js';
 
 // Fluid stage. The board is still the art coordinate system (map path, slider, tracing), but it is
 // sized in real CSS pixels — there is no transform: scale(). A root font-size of 16×u turns every
@@ -10,14 +11,14 @@ export const PORTRAIT_W = { phone: 400, tablet: 630 }, SHORT_H = 400, TALL_W = 9
 export const MIN_TOUCH = 64, MIN_KNOB = 80;
 export const BUTTON = 72, KNOB_D = 90;
 export const MAX_SCALE = 2; // 1920×1080 already lands on 2; larger windows do not grow past it
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// Design-space fit (the historical stage). Kept so the tested viewports keep the same u.
+// Design-space fit. The aspect follows the safe rect: a squat or very wide board fills it
+// instead of letterboxing inside a clamped 700–1400 / 640–1000 / 540–760 frame.
 export function legacyStage(vw, vh) {
   let mode, w, h;
-  if (vh > vw * 1.05) { mode = 'portrait'; w = vw < 600 ? PORTRAIT_W.phone : PORTRAIT_W.tablet; h = Math.round(clamp(w * vh / vw, 700, 1400)); }
-  else if (vh < 500) { mode = 'short'; h = SHORT_H; w = Math.round(clamp(SHORT_H * vw / vh, 640, 1000)); }
-  else { mode = 'tall'; w = TALL_W; h = Math.round(clamp(TALL_W * vh / vw, 540, 760)); }
+  if (vh > vw * 1.05) { mode = 'portrait'; w = vw < 600 ? PORTRAIT_W.phone : PORTRAIT_W.tablet; h = Math.round(w * vh / vw); }
+  else if (vh < 500) { mode = 'short'; h = SHORT_H; w = Math.round(h * vw / vh); }
+  else { mode = 'tall'; w = TALL_W; h = Math.round(w * vh / vw); }
   return { mode, w, h, scale: Math.min(vw / w, vh / h) };
 }
 
@@ -55,9 +56,8 @@ function readEnvInsets(doc) {
 }
 
 function visualBox(win) {
-  const vv = win?.visualViewport;
-  if (!vv) return { vw: win.innerWidth, vh: win.innerHeight, offL: 0, offT: 0 };
-  return { vw: vv.width, vh: vv.height, offL: vv.offsetLeft || 0, offT: vv.offsetTop || 0 };
+  const box = viewportBox(win);
+  return { vw: box.w, vh: box.h, offL: box.x, offT: box.y };
 }
 
 export function createStage(el, onChange = () => {}) {
@@ -77,7 +77,10 @@ export function createStage(el, onChange = () => {}) {
     });
     const { vw, vh, offL, offT } = visualBox(win);
     const s = stageBox(vw, vh, insets, stageFor);
-    const changed = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u;
+    s.safeH = vh - s.insets.top - s.insets.bottom;
+    s.safeW = vw - s.insets.left - s.insets.right;
+    s.turn = needsTurn(s.safeH);
+    const changed = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u || cur.turn !== s.turn;
     cur = s;
     const fs = (16 * s.u) + 'px';
     // Root rem is the fluid unit. Skip the write when it is unchanged so the style observer does not loop.
@@ -90,6 +93,9 @@ export function createStage(el, onChange = () => {}) {
     for (const m of ['portrait', 'short', 'tall']) el.classList.toggle(m, s.mode === m);
     el.classList.toggle('ptab', s.mode === 'portrait' && s.designW >= 600);
     el.classList.toggle('tight', s.mode === 'portrait' && s.h < 520);
+    el.classList.toggle('turn', s.turn);
+    const card = el.querySelector('#turn');
+    if (card) card.hidden = !s.turn;
     el.dataset.insetSource = insets.source;
     el.style.setProperty('--dy', '0px');
     el.style.setProperty('--scale', '1');
