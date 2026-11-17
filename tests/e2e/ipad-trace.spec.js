@@ -323,10 +323,14 @@ test('m: the trace log stays off the letter, collapsed and expanded', async ({ p
     const card = document.querySelector('#trace .tcard').getBoundingClientRect();
     const pre = document.querySelector('#tracelog pre');
     const btn = document.getElementById('tracelog-log');
+    const copy = document.getElementById('tracelog-copy');
+    const size = el => { const r = el.getBoundingClientRect(); return { w: r.width, h: r.height }; };
     return {
       open: pre && !pre.hidden,
       boxPE: getComputedStyle(document.getElementById('tracelog')).pointerEvents,
       btnPE: getComputedStyle(btn).pointerEvents,
+      log: size(btn),
+      copy: copy && !copy.hidden ? size(copy) : null,
       box: { x: box.x, y: box.y, w: box.width, h: box.height },
       card: { x: card.x, y: card.y, w: card.width, h: card.height },
     };
@@ -335,10 +339,15 @@ test('m: the trace log stays off the letter, collapsed and expanded', async ({ p
   expect(collapsed.open, 'starts as the Log pill').toBe(false);
   expect(collapsed.boxPE).toBe('none');
   expect(collapsed.btnPE).toBe('auto');
+  expect(collapsed.log.h, 'Log is a grown-up target').toBeGreaterThanOrEqual(44);
+  expect(collapsed.log.w).toBeGreaterThanOrEqual(44);
   expect(boxesOverlap(collapsed.box, collapsed.card), JSON.stringify(collapsed)).toBe(false);
   await page.locator('#tracelog-log').click();
   const expanded = await measure();
   expect(expanded.open).toBe(true);
+  expect(expanded.log.h).toBeGreaterThanOrEqual(44);
+  expect(expanded.copy.h, 'Copy is a grown-up target').toBeGreaterThanOrEqual(44);
+  expect(expanded.copy.w).toBeGreaterThanOrEqual(44);
   expect(boxesOverlap(expanded.box, expanded.card), JSON.stringify(expanded)).toBe(false);
   const data = await traceLetter(page, { pointerType: 'touch' });
   expect(data.end.state.done, JSON.stringify(data.end)).toBe(true);

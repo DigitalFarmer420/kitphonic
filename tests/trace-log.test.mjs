@@ -49,4 +49,5 @@ test('the logger reads tracer.state(), stays passive, and does not cover the let
   assert.doesNotMatch(body, /preventDefault/);
   assert.match(body, /pointer-events:\s*none/);
   assert.match(body, /pointer-events:\s*auto/);
+  assert.match(body, /height:44px;min-width:44px/);
 });

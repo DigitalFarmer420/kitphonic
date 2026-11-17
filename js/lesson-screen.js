@@ -61,13 +61,13 @@ function mountTraceLog(svg, toLetter, owner, stateOf) {
   const lines = [];
   const box = document.createElement('div');
   box.id = 'tracelog';
-  box.style.cssText = 'position:absolute;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:4px;pointer-events:none;font:12px/1.35 ui-monospace,monospace;color:#fff';
+  box.style.cssText = 'position:absolute;z-index:40;display:flex;flex-direction:column;align-items:flex-end;gap:4px;overflow:hidden;pointer-events:none;font:12px/1.35 ui-monospace,monospace;color:#fff';
   const row = document.createElement('div');
   row.style.cssText = 'display:flex;gap:4px;pointer-events:none';
   const pill = (label) => {
     const b = document.createElement('button');
     b.type = 'button'; b.textContent = label;
-    b.style.cssText = 'height:32px;padding:0 12px;border:0;border-radius:8px;background:#fff;color:#3A2E28;font-weight:700;pointer-events:auto';
+    b.style.cssText = 'box-sizing:border-box;height:44px;min-width:44px;padding:0 12px;border:0;border-radius:8px;background:#fff;color:#3A2E28;font-weight:700;pointer-events:auto';
     return b;
   };
   const toggle = pill('Log'); toggle.id = 'tracelog-log'; toggle.setAttribute('aria-expanded', 'false');
@@ -86,7 +86,7 @@ function mountTraceLog(svg, toLetter, owner, stateOf) {
     box.style.right = '8px';
     box.style.left = 'auto';
     box.style.bottom = 'auto';
-    box.style.maxHeight = Math.max(32, gapBottom - gapTop) + 'px';
+    box.style.maxHeight = Math.max(44, gapBottom - gapTop) + 'px';
   };
   let open = false;
   const setOpen = (on) => {
