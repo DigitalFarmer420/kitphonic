@@ -2649,18 +2649,6 @@
     {
       "screen": "letters-float",
       "size": "568x320",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float",
-      "size": "568x320",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float",
-      "size": "568x320",
       "state": "S",
       "engine": "chromium"
     },
@@ -2692,18 +2680,6 @@
       "screen": "letters-float",
       "size": "568x320",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float",
-      "size": "640x360",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float",
-      "size": "640x360",
-      "state": "P",
       "engine": "webkit"
     },
     {
@@ -2752,30 +2728,6 @@
       "screen": "letters-float",
       "size": "640x360",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float",
-      "size": "667x375",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float",
-      "size": "667x375",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float",
-      "size": "667x375",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float",
-      "size": "667x375",
-      "state": "S",
       "engine": "webkit"
     },
     {
@@ -2877,18 +2829,6 @@
     {
       "screen": "letters-float-4s",
       "size": "568x320",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "568x320",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "568x320",
       "state": "S",
       "engine": "chromium"
     },
@@ -2920,18 +2860,6 @@
       "screen": "letters-float-4s",
       "size": "568x320",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "640x360",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "640x360",
-      "state": "P",
       "engine": "webkit"
     },
     {
@@ -2980,30 +2908,6 @@
       "screen": "letters-float-4s",
       "size": "640x360",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "667x375",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "667x375",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "667x375",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "letters-float-4s",
-      "size": "667x375",
-      "state": "S",
       "engine": "webkit"
     },
     {
@@ -4077,18 +3981,6 @@
     {
       "screen": "reveal",
       "size": "568x320",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "568x320",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "568x320",
       "state": "S",
       "engine": "chromium"
     },
@@ -4120,42 +4012,6 @@
       "screen": "reveal",
       "size": "568x320",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "S",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "Si",
       "engine": "webkit"
     },
     {
@@ -4172,54 +4028,6 @@
     },
     {
       "screen": "reveal",
-      "size": "640x360",
-      "state": "Wi",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "640x360",
-      "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "S",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "Si",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
       "size": "667x375",
       "state": "W",
       "engine": "chromium"
@@ -4228,18 +4036,6 @@
       "screen": "reveal",
       "size": "667x375",
       "state": "W",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "Wi",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal",
-      "size": "667x375",
-      "state": "Wi",
       "engine": "webkit"
     },
     {
@@ -4251,6 +4047,18 @@
     {
       "screen": "reveal",
       "size": "768x1024",
+      "state": "W",
+      "engine": "webkit"
+    },
+    {
+      "screen": "reveal",
+      "size": "844x390",
+      "state": "W",
+      "engine": "chromium"
+    },
+    {
+      "screen": "reveal",
+      "size": "844x390",
       "state": "W",
       "engine": "webkit"
     },
@@ -4329,18 +4137,6 @@
     {
       "screen": "reveal-plural",
       "size": "568x320",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "568x320",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "568x320",
       "state": "S",
       "engine": "chromium"
     },
@@ -4372,42 +4168,6 @@
       "screen": "reveal-plural",
       "size": "568x320",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "S",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "640x360",
-      "state": "Si",
       "engine": "webkit"
     },
     {
@@ -4432,42 +4192,6 @@
       "screen": "reveal-plural",
       "size": "640x360",
       "state": "Wi",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "S",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "S",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "667x375",
-      "state": "Si",
       "engine": "webkit"
     },
     {
@@ -4504,78 +4228,6 @@
       "screen": "reveal-plural",
       "size": "768x1024",
       "state": "W",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "844x390",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "844x390",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "844x390",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "844x390",
-      "state": "Si",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "915x412",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "915x412",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "915x412",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "915x412",
-      "state": "Si",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "932x430",
-      "state": "P",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "932x430",
-      "state": "P",
-      "engine": "webkit"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "932x430",
-      "state": "Si",
-      "engine": "chromium"
-    },
-    {
-      "screen": "reveal-plural",
-      "size": "932x430",
-      "state": "Si",
       "engine": "webkit"
     },
     {

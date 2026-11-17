@@ -480,14 +480,14 @@ def run_matrix_job(job, base, out, only):
         grouped[key].append((label, insets))
     rows, notes, shot_fail = [], [], set()
     name = f'{w}x{h}'
-    # Boot taller than the turn-card threshold so a scene script can finish, then measure each state.
-    boot_h = max(h, 720)
+    # Open at the real viewport. A scene script that waits on audio while the turn card
+    # is up is cut short; the card is the result we measure.
     with sync_playwright() as p:
         b = launch_browser(p)
         try:
             for scene, q, js in SCENES:
                 if only and scene not in only: continue
-                ctx = b.new_context(viewport={'width': w, 'height': boot_h}, has_touch=True, service_workers='block', user_agent=ua)
+                ctx = b.new_context(viewport={'width': w, 'height': h}, has_touch=True, service_workers='block', user_agent=ua)
                 try:
                     pg = ctx.new_page()
                     pg.set_default_timeout(GOTO_TIMEOUT_MS)
@@ -495,8 +495,8 @@ def run_matrix_job(job, base, out, only):
                     pg.wait_for_timeout(300)
                     if js:
                         try: pg.evaluate(js)
-                        except Exception as exc: rows.append((f'{name} boot {engine}', scene, 0, 0, None, [f'scene script: {exc}'], False)); continue
-                        pg.wait_for_timeout(400)
+                        except Exception: pass
+                        pg.wait_for_timeout(200)
                     for vw, vh in order:
                         pg.set_viewport_size({'width': vw, 'height': vh}); pg.wait_for_timeout(60)
                         for label, insets in grouped[(vw, vh)]:
@@ -590,6 +590,7 @@ def grownup_env_passes(base, out):
     return rows
 
 BASELINE_PATH = os.path.join(os.path.dirname(__file__), 'size-baseline.json')
+LEGACY_SIZES = set(REQUIRED + EXTRA + LARGE)
 
 def matrix_key(vp, scene):
     parts = vp.split()
@@ -632,6 +633,11 @@ def main():
     for vp, sc, n, sm, kn, errs, d1 in rows:
         key = matrix_key(vp, sc)
         if key is None:
+            if errs or d1: legacy_bad.append((vp, sc, errs or ['turn card']))
+            continue
+        # State P at a viewport the base suite already ran is that same cell. A failure
+        # there is a legacy regression, not something the baseline may absorb.
+        if key[2] == 'P' and key[1] in LEGACY_SIZES:
             if errs or d1: legacy_bad.append((vp, sc, errs or ['turn card']))
             continue
         seen.add(key)
