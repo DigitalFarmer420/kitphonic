@@ -1,5 +1,6 @@
-# Read-only checks for pull requests. Does not deploy, does not use secrets,
-# and does not touch the develop Pages workflow.
+# Read-only checks for pull requests. Does not deploy, does not use secrets, does not build or sign an APK,
+# and does not touch the develop Pages workflow. Every browser test serves the app on 127.0.0.1 and fails on
+# any request to another origin. Results: one sticky comment per PR (job "summary") and the run's artifacts.
 name: PR checks
 
 on:
@@ -14,9 +15,26 @@ concurrency:
   group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+env:
+  CI: '1'
+
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - name: ESLint (eslint.config.js)
+        run: npm run lint
+
   unit:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -34,26 +52,44 @@ jobs:
         env:
           KITPHONIC_REQUIRE_PILLOW: '1'
 
-  e2e:
+  sw-assets:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
-          cache: npm
-      - run: npm ci
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps webkit chromium
-      - name: Touch e2e
-        run: npm run test:e2e
+      - name: sw-assets.json and the sw.js cache name match the shipped files
+        run: node tools/gen-sw-assets.mjs --check
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+      - name: Touch e2e (shard ${{ matrix.shard }}/2)
+        run: npx playwright test --shard=${{ matrix.shard }}/2 --reporter=list,json,html
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/ci-e2e-${{ matrix.shard }}.json
+      - name: Upload the JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-e2e-${{ matrix.shard }}
+          path: test-results/ci-e2e-${{ matrix.shard }}.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Upload Playwright report, screenshots, and traces
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-e2e-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
@@ -88,3 +124,199 @@ jobs:
           status=$?
           kill "$server" || true
           exit "$status"
+
+  # Playwright groups from tests/ci/playwright.ci.config.js. Each is its own check.
+  #   smoke   desktop (Chromium, WebKit), Android phone, iPhone (WebKit), iPad (WebKit, Mac UA, MacIntel, 5 touch points, DPR 2)
+  #   tracing finger, Apple Pencil and mouse for m and a + trace.spec.js + ipad-trace.spec.js; 1 retry, retries reported
+  #   sweep   KP-BUG-003 miss-then-replay sweep over every word-card word
+  browser:
+    name: ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: smoke
+            projects: --project=smoke-*
+          - group: tracing
+            projects: --project=webkit-ipados-* --project=trace-*
+          - group: sweep
+            projects: --project=sweep-*
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+      - name: ${{ matrix.group }}
+        run: npx playwright test -c tests/ci/playwright.ci.config.js ${{ matrix.projects }}
+        env:
+          KP_CI_GROUP: ${{ matrix.group }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.group }}
+          path: |
+            test-results/ci-${{ matrix.group }}.json
+            playwright-report/ci-${{ matrix.group }}/
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: traces-${{ matrix.group }}
+          path: test-results/ci/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Committed pixel baselines at the Uiux sizes (tests/ci/__screenshots__). Blocking. Label a PR "visual:update"
+  # to rewrite them on the runner; the new set is in the "visual-baselines-<browser>" artifact, to be committed.
+  visual:
+    name: visual (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [webkit, chromium]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: ${{ matrix.browser }}
+      - name: Screenshots against the committed baselines
+        run: |
+          update=""
+          if [ "${{ contains(github.event.pull_request.labels.*.name, 'visual:update') }}" = "true" ]; then update="--update-snapshots=changed"; fi
+          npx playwright test -c tests/ci/playwright.ci.config.js --project='visual-${{ matrix.browser }}-*' $update
+        env:
+          KP_CI_GROUP: visual-${{ matrix.browser }}
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-visual-${{ matrix.browser }}
+          path: |
+            test-results/ci-visual-${{ matrix.browser }}.json
+            playwright-report/ci-visual-${{ matrix.browser }}/
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines-${{ matrix.browser }}
+          path: tests/ci/__screenshots__/visual-${{ matrix.browser }}-*/
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs-${{ matrix.browser }}
+          path: test-results/ci/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # Uiux layout checks + screenshot diff against the base branch. REPORT-ONLY: the test step may fail (findings on
+  # develop) without failing this job; the summary comment shows the findings. It becomes blocking once they are fixed.
+  uiux:
+    name: uiux report-only (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [webkit, chromium]
+    outputs:
+      webkit: ${{ steps.out.outputs.webkit }}
+      chromium: ${{ steps.out.outputs.chromium }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the base branch for the diff
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-tree
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: ${{ matrix.browser }}
+      - name: Uiux checks (report-only)
+        id: checks
+        continue-on-error: true
+        run: npx playwright test -c tests/ci/playwright.ci.config.js --project='uiux-${{ matrix.browser }}-*'
+        env:
+          KP_CI_GROUP: uiux-${{ matrix.browser }}
+      - name: Screenshot diff against the base branch
+        if: github.event_name == 'pull_request'
+        run: |
+          (cd base-tree && PORT=4311 node tools/serve.mjs > /tmp/base-serve.log 2>&1 &)
+          PORT=4312 node tools/serve.mjs > /tmp/head-serve.log 2>&1 &
+          for _ in $(seq 1 20); do curl -sf http://127.0.0.1:4311/ >/dev/null && curl -sf http://127.0.0.1:4312/ >/dev/null && break; sleep 1; done
+          node tests/ci/diff-vs-base.mjs --head http://127.0.0.1:4312 --base http://127.0.0.1:4311 --browser ${{ matrix.browser }} --out diff-vs-base
+      - id: out
+        if: always()
+        run: echo "${{ matrix.browser }}=${{ steps.checks.outcome }}" >> "$GITHUB_OUTPUT"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: uiux-${{ matrix.browser }}
+          path: |
+            test-results/uiux-findings/
+            test-results/ci-uiux-${{ matrix.browser }}.json
+          if-no-files-found: ignore
+          retention-days: 14
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-vs-base-${{ matrix.browser }}
+          path: diff-vs-base/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # One sticky comment per PR, updated in place. Fork PRs get a read-only token: the comment is skipped there and
+  # the same table is in this job's summary page.
+  summary:
+    if: always()
+    needs: [lint, unit, sw-assets, e2e, sizes, browser, visual, uiux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: '{report-*,uiux-*,diff-vs-base-*}'
+      - name: Build the summary
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100" > jobs.json || echo '{"jobs":[]}' > jobs.json
+          node tests/ci/summarize.mjs artifacts jobs.json > summary.md
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Post or update the sticky comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const body = fs.readFileSync('summary.md', 'utf8');
+            const marker = '<!-- kitphonic-pr-checks -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            try {
+              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 });
+              const mine = comments.find((c) => c.user?.type === 'Bot' && c.body?.includes(marker));
+              if (mine) await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body });
+              else await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            } catch (e) {
+              core.warning(`Could not post the summary comment (fork PR or read-only token): ${e.message}. See the job summary.`);
+            }

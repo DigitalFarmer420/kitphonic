@@ -7,9 +7,17 @@
     "test:e2e": "playwright test",
     "manifest": "node tools/build-manifest.mjs",
     "start": "node tools/serve.mjs",
-    "check:sizes": "sh tools/check-sizes.sh"
+    "check:sizes": "sh tools/check-sizes.sh",
+    "lint": "eslint .",
+    "test:ci": "playwright test -c tests/ci/playwright.ci.config.js"
   },
   "devDependencies": {
-    "@playwright/test": "1.65.1"
+    "@eslint/js": "9.39.5",
+    "@playwright/test": "1.65.1",
+    "axe-core": "4.14.1",
+    "eslint": "9.39.5",
+    "globals": "17.14.0",
+    "pixelmatch": "7.0.0",
+    "pngjs": "7.0.0"
   }
 }

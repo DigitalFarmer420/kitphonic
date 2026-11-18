@@ -3,7 +3,7 @@ import { defineConfig } from '@playwright/test';
 // Static server only (tools/serve.mjs binds 127.0.0.1). Each test gets a new
 // browser context — Playwright's default. No storageState, no shared cookies,
 // and no reporter that sends results anywhere but the local report files.
-const port = 4173;
+const port = +process.env.KP_E2E_PORT || 4173; // CI uses 4173; local runs can pick another port
 const baseURL = `http://127.0.0.1:${port}`;
 const touch = { hasTouch: true, isMobile: true, deviceScaleFactor: 1 };
 
