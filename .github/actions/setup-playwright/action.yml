@@ -1,0 +1,31 @@
+# Node + npm ci + cached Playwright browsers (keyed on the lockfile). System libraries come from
+# `playwright install-deps`, which is quick when the browsers themselves are cached.
+name: Set up Node and Playwright
+description: npm ci with the npm cache, then Playwright browsers from cache
+inputs:
+  browsers:
+    description: space-separated Playwright browsers
+    default: webkit chromium
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - id: pw
+      shell: bash
+      run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ inputs.browsers }}
+    - if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: npx playwright install --with-deps ${{ inputs.browsers }}
+    - if: steps.cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: npx playwright install-deps ${{ inputs.browsers }}
