@@ -65,7 +65,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -132,7 +132,7 @@ jobs:
   browser:
     name: ${{ matrix.group }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -172,7 +172,7 @@ jobs:
   visual:
     name: visual (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -218,7 +218,7 @@ jobs:
   uiux:
     name: uiux report-only (${{ matrix.browser }})
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
