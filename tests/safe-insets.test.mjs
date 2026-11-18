@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stageFor, MIN_TOUCH, MIN_KNOB } from '../js/stage.js';
+import { stageFor, MIN_TOUCH, MIN_KNOB, buttonPx, knobPx } from '../js/stage.js';
 import { resolveSafeInsets, stageBox, envInsetsAllowed } from '../js/safe-insets.js';
-import { layoutFor, wordLayout, KNOB } from '../js/layout.js';
+import { layoutFor, wordLayout } from '../js/layout.js';
 
 const styleOf = (vars) => ({ getPropertyValue: name => vars[name] ?? '' });
 const ANDROID124 = 'Mozilla/5.0 (Linux; Android 15; Pixel 6) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/124.0.6367.219 Mobile Safari/537.36';
@@ -73,14 +73,14 @@ test('portrait, short landscape, and side cutout keep the stage inside the safe 
     assert.equal(box.scale, fitted.scale, c.name);
     assert.ok(scr.sw <= safeW + 1.5 && scr.sh <= safeH + 1.5, `${c.name} overflow ${scr.sw}x${scr.sh}`);
     assert.ok(Math.abs(scr.sw - safeW) <= 1.5 || Math.abs(scr.sh - safeH) <= 1.5, `${c.name} does not fill ${scr.sw}x${scr.sh} of ${safeW}x${safeH}`);
-    assert.ok(72 * box.scale >= 48, `${c.name} button ${72 * box.scale}`);
+    assert.ok(buttonPx(box.u) >= MIN_TOUCH, `${c.name} button ${buttonPx(box.u)}`);
   }
 });
 
 test('portrait phone with status and three-button bars still meets the 64px target', () => {
   const box = stageBox(360, 780, { top: 32, right: 0, bottom: 48, left: 0 }, stageFor);
-  assert.ok(72 * box.scale >= MIN_TOUCH, `buttons ${72 * box.scale}`);
-  assert.ok(KNOB * box.scale >= MIN_KNOB, `knob ${KNOB * box.scale}`);
+  assert.ok(buttonPx(box.u) >= MIN_TOUCH, `buttons ${buttonPx(box.u)}`);
+  assert.ok(knobPx(box.u) >= MIN_KNOB, `knob ${knobPx(box.u)}`);
   const lay = wordLayout(3, layoutFor(box));
   assert.ok(lay.rowLeft >= 0 && lay.rowLeft + lay.rowW <= box.w);
 });

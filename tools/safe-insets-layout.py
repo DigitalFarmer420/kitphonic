@@ -68,7 +68,8 @@ def run():
         if not ok: fails.append(name)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
+        exe = os.environ.get('CHROME') or next((c for c in ['/usr/bin/google-chrome', '/usr/bin/chromium', '/usr/bin/chromium-browser'] if os.path.exists(c)), None)
+        browser = p.chromium.launch(executable_path=exe, args=['--no-sandbox']) if exe else p.chromium.launch()
         def page_at(path, w, h):
             ctx = browser.new_context(viewport={'width': w, 'height': h}, has_touch=True)
             ctx.add_init_script("localStorage.clear()")
@@ -119,9 +120,13 @@ def run():
                     b = m['bubble']
                     play = m['controls']['#play']
                     separated = b and play and (b['y'] + b['h'] <= play['y'] + 2 or play['y'] + play['h'] <= b['y'] + 2)
+                    root = pg.evaluate("() => parseFloat(getComputedStyle(document.documentElement).fontSize)")
+                    # 24 stage px portrait, 20 stage px short: both are rem, so the used px is design × u.
+                    design = 24 if vname == 'portrait' else 20
+                    size = float(str(b['size']).replace('px', '')) if b else 0
                     check(f'{vname} welcome still wraps', b and b['text'].startswith('Hi!')
                           and b['whiteSpace'] == 'normal' and b['align'] == 'center'
-                          and b['size'] == ('24px' if vname == 'portrait' else '20px') and separated, b)
+                          and abs(size - design / 16 * root) < 1.5 and separated, b)
                 if shots and sname in ('hello', 'word', 'trace') and vname in ('portrait', 'short'):
                     pg.screenshot(path=f'{shots}/pass-{vname}-{sname}.png')
                 ctx.close()
@@ -143,6 +148,60 @@ def run():
         check('rotate back to portrait', inside(back['stage'], safe) and inside(back['controls']['#slider'], safe), back)
         if shots: pg.screenshot(path=f'{shots}/pass-rotate-back-word.png')
         ctx.close()
+
+        # Grown-ups is counter-zoomed by 1/scale inside the stage, so a CSS px is a screen px.
+        # Adult controls must be at least 48 screen px, the scrollport must stay in the safe
+        # rectangle, and each control must scroll fully into it. Scroll-to-end must not park
+        # Reset above the status bar (the sounds column used to stretch one shared scroller).
+        def parent_fit(pg, top, bottom):
+            return pg.evaluate("""([top, bottom]) => {
+              const safeTop = top, safeBottom = innerHeight - bottom;
+              const body = document.getElementById('pa-body');
+              const buttons = [...document.querySelectorAll('#parent button, #parent .plink')];
+              const info = el => {
+                const r = el.getBoundingClientRect();
+                return { name: el.id || el.textContent.trim().slice(0, 22), h: r.height, y: r.top,
+                  inside: r.top >= safeTop - 1 && r.bottom <= safeBottom + 1 && r.left >= -1 && r.right <= innerWidth + 1 };
+              };
+              const scroller = el => {
+                for (let n = el.parentElement; n && n !== document.body; n = n.parentElement) {
+                  const cs = getComputedStyle(n);
+                  if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 1) return n;
+                }
+                return body;
+              };
+              const saved = new Map();
+              const reached = buttons.map(el => {
+                const sc = scroller(el);
+                if (!saved.has(sc)) saved.set(sc, sc.scrollTop);
+                const br = sc.getBoundingClientRect(), s = el.getBoundingClientRect();
+                sc.scrollTop += (s.top + s.height / 2) - (br.top + br.height / 2);
+                return info(el);
+              });
+              const reset = document.getElementById('pa-reset');
+              const sc = scroller(reset);
+              sc.scrollTop = sc.scrollHeight;
+              const tail = info(reset);
+              const br = body.getBoundingClientRect();
+              tail.inBody = tail.y >= br.top - 1;
+              const close = info(document.getElementById('pa-close'));
+              for (const [n, top0] of saved) n.scrollTop = top0;
+              return { reached, close, tail, scrolls: sc.scrollHeight > sc.clientHeight + 1,
+                bodyInside: br.top >= safeTop - 1 && br.bottom <= safeBottom + 1 };
+            }""", [top, bottom])
+
+        for label, w, h in (('short', 780, 360), ('portrait', 360, 640)):
+            ctx, pg = page_at('?skipHello=1&parent=1&reducedMotion=1', w, h)
+            pg.wait_for_function("() => document.querySelector('#pa-test')", timeout=8000)
+            apply_insets(pg, 24, 0, 48, 0)
+            fit = parent_fit(pg, 24, 48)
+            small = [x['name'] for x in fit['reached'] if x['h'] < 47.5]
+            missed = [x['name'] for x in fit['reached'] if not x['inside']]
+            check(f'{label} grown-ups controls fit the safe area',
+                  fit['bodyInside'] and fit['scrolls'] and fit['close']['inside'] and fit['close']['h'] >= 48
+                  and fit['tail']['inside'] and fit['tail']['inBody'] and not small and not missed,
+                  {'small': small, 'missed': missed, 'tail': fit['tail'], 'close': fit['close']})
+            ctx.close()
 
         # IME: viewport already shortened, bottom variable 0. Stage uses the new height once.
         ctx, pg = page_at('?skipHello=1&reducedMotion=1', 390, 844)

@@ -2,7 +2,7 @@
 import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard, RULES } from './mastery.js';
 import { supportPattern } from './support.js';
-import { wordLayout, layoutFor } from './layout.js';
+import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, presentCheck, needsCheck, caseFor } from './word-logic.js';
 import { MASCOT } from './content.js';
@@ -22,40 +22,59 @@ export const picHtml = pic => pic?.startsWith('2x') ? `<span class="two">${onePi
 
 import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
+import { pointerOwner, tryCapture, sliderKeyTarget, applySliderAria } from './gesture.js';
 // v2 V2 support ladder: support(entry) -> 4 model | 3 you blend | 2 silent dots | 1 read it (js/support.js)
 export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
   let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
+  const slideOwner = pointerOwner(); // survives blend / reslide until this finger lifts, so a palm cannot grab the next drag
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
   const caption = (txt, x, y) => { const c = el('div', 'caption', `“${txt}”`); c.style.left = x + 'px'; c.style.top = y + 'px'; $('word').append(c); setTimeout(() => c.remove(), 1300); };
   const say = (bubbleText, clip) => { $('bubble').textContent = bubbleText; return clip ? audio.play(clip.id, clip) : Promise.resolve(); };
   const pulse = n => { n.classList.remove('pulse'); void n.offsetWidth; n.classList.add('pulse'); };
-  const trackBox = () => { const l = Math.max(8, layout.track.left - 20), r = Math.min(layout.stageW - 34, layout.track.left + layout.track.width + 20); return { left: l, width: r - l }; };
-  const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px'; };
+  const trackBox = () => sliderTrack(layout);
+  const setHandle = f => { const x = layout.knobX(f); handle.style.left = x + 'px'; fill.style.width = Math.max(0, x - trackBox().left) + 'px';
+    applySliderAria(handle, { fraction: f, stops: sweep?.positions, total: ms?.length ?? 0 }); };
 
   function renderPebbles() {
     $('pebbles').replaceChildren(...words.map((_, i) => el('div', 'peb' + (i < idx ? ' on' : i === idx ? ' now' : ''))));
   }
-  function render() {
-    if (baseLevel == null) { level = entry.level; mode = cfg.tapMode[level]; } // mixed-level list ("new words" stops)
-    const w = entry.w, ids = entry.parse?.split(' '); ms = markersFor(w, level, { ...cfg.markerOpts, ids }); layout = wordLayout(w.length, layoutFor(stage.info));
+  function layoutWord() {
+    const w = entry.w, ids = entry.parse?.split(' ');
+    ms = markersFor(w, level, { ...cfg.markerOpts, ids });
+    layout = wordLayout(w.length, layoutFor(stage.info));
     units = graphemeUnits(w, ids); // a digraph is one joined sky tile (words-board 3, note 20)
-    tiles.replaceChildren(...units.map((u, i) => {
+    return ids;
+  }
+  function paintTiles() {
+    const uFit = stage.info?.u || 1;
+    const tileOf = (u, i) => {
       const dg = u.b - u.a > 1, t = el('button', 'tile L' + (dg ? ' dg' : ''), caseFor(u.text, cfg.tileCase));
-      t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
+      t.style.left = layout.tileLeft(u.a) + 'px'; t.style.width = (u.b - u.a) * layout.cell - layout.gap + 'px'; t.style.fontSize = Math.round(Math.min(92 * uFit, layout.tileW * 0.8)) + 'px'; t.dataset.i = i;
       t.setAttribute('aria-label', u.text); t.onpointerdown = e => { e.stopPropagation(); tapLetter(i); }; return t;
-    }));
-    mk.replaceChildren(...ms.map((m, i) => {
-      const b = layout.markerBox(m), d = el('button', 'marker', m.type === 'dot' ? '<div class="dot"><svg width="30" height="30"><use href="#snd-one"/></svg></div>' : '<div class="bar"><svg width="52" height="32"><use href="#snd-chunk"/></svg></div>');
+    };
+    if (tiles.children.length === units.length) { const old = [...tiles.children]; units.forEach((u, i) => old[i].replaceWith(tileOf(u, i))); }
+    else tiles.replaceChildren(...units.map(tileOf));
+    const markerOf = (m, i) => {
+      const b = layout.markerBox(m), dw = Math.round(30 * uFit), bw = Math.round(52 * uFit), bh = Math.round(32 * uFit);
+      const d = el('button', 'marker', m.type === 'dot' ? `<div class="dot"><svg width="${dw}" height="${dw}"><use href="#snd-one"/></svg></div>` : `<div class="bar"><svg width="${bw}" height="${bh}"><use href="#snd-chunk"/></svg></div>`);
       d.style.left = b.left + 'px'; d.style.width = b.width + 'px'; d.dataset.i = i; d.setAttribute('aria-label', m.type === 'dot' ? `play sound ${m.text}` : `play ${m.text}`);
       d.onpointerdown = e => { e.stopPropagation(); tapMarker(i); }; return d;
-    }));
+    };
+    if (mk.children.length === ms.length) { const old = [...mk.children]; ms.forEach((m, i) => old[i].replaceWith(markerOf(m, i))); }
+    else mk.replaceChildren(...ms.map(markerOf));
     const tb = trackBox(); track.style.left = tb.left + 'px'; track.style.width = tb.width + 'px';
+  }
+  function render() {
+    if (baseLevel == null) { level = entry.level; mode = cfg.tapMode[level]; } // mixed-level list ("new words" stops)
+    layoutWord();
+    paintTiles();
     fill.style.left = '0px';
     $('card').className = ''; $('card').innerHTML = '<span class="q">?</span>';
     $('next').hidden = true; $('check').hidden = true;
     sweep = createSweep(ms, { gapMs: cfg.sweepGapMs }); setHandle(0); light([]);
+    const w = entry.w;
     choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: focus ? `focus:${focus}` : cfg.choiceStrategy[level], trial: checkTrial++ })
       : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.(), focus }) : null;
     // support level for this word; without a check there is nothing to read against, so Kit models it (S4)
@@ -98,19 +117,36 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   function onDown(e) {
     hand.hide(); hand.poke();
     if (state !== 'slide') return;
+    if (slideOwner.id !== null && !slideOwner.owns(e.pointerId)) return; // a palm must not take the knob
     const p = toStage(e), hx = layout.knobX(sweep.position);
     if (Math.abs(p.x - hx) > 70 || !attached(p.y - sliderY(), 70)) return; // must grab the handle (64pt + padding)
-    dragging = { id: e.pointerId }; handle.setPointerCapture?.(e.pointerId); e.preventDefault();
+    if (!slideOwner.begin(e.pointerId)) return;
+    dragging = { id: e.pointerId }; tryCapture(handle, e.pointerId); e.preventDefault();
   }
   function onMove(e) {
     if (!dragging || e.pointerId !== dragging.id) return;
     const p = toStage(e);
     if (!attached(p.y - sliderY())) { sweep.lift(); return; } // drifted >60pt: pause; come back to continue
     sweepStart ??= performance.now();
-    handleEvents(sweep.move(layout.fracFromX(p.x), e.timeStamp));
+    handleEvents(sweep.move(fractionAt(layout, p.x), e.timeStamp));
     setHandle(sweep.position);
   }
-  function onUp(e) { if (dragging && e.pointerId === dragging.id) { dragging = null; sweep.lift(); } }
+  function onUp(e) {
+    // Blend / reslide clears `dragging` while the finger may still be down. The owner stays until
+    // this pointer lifts, is cancelled, or loses capture, so a second finger cannot start another drag.
+    if (!slideOwner.end(e.pointerId)) return;
+    dragging = null; sweep?.lift();
+  }
+  function onSliderKey(e) {
+    if (state !== 'slide' || dragging || slideOwner.id !== null || !sweep) return;
+    const target = sliderKeyTarget(sweep.position, sweep.positions, e.key);
+    if (target == null) return;
+    e.preventDefault();
+    hand.hide(); hand.poke();
+    sweepStart ??= performance.now();
+    handleEvents(sweep.move(target, e.timeStamp));
+    setHandle(sweep.position);
+  }
   function handleEvents(evs) {
     for (const ev of evs) {
       if (ev.kind === 'play' || ev.kind === 'replay') {
@@ -192,12 +228,73 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     requestAnimationFrame(step);
   }
 
+  // A picture is inside its card only when every edge of the border box is. Comparing the
+  // style height with the card height misses the baseline gap above an inline svg.
+  function boxInside(inner, outer, pad = 1) {
+    return inner.top >= outer.top - pad && inner.bottom <= outer.bottom + pad
+      && inner.left >= outer.left - pad && inner.right <= outer.right + pad;
+  }
+  function fitRevealPic() {
+    const card = $('card'), pic = card.querySelector('.pic');
+    if (!pic) return;
+    const uFit = stage.info?.u || 1;
+    pic.style.display = 'flex';
+    pic.style.alignItems = 'center';
+    pic.style.justifyContent = 'center';
+    pic.style.lineHeight = '1';
+    pic.style.maxWidth = '92%';
+    pic.style.maxHeight = '90%';
+    const svg = pic.querySelector('svg');
+    if (svg) {
+      svg.style.display = 'block';
+      let pw = 150 * uFit, ph = 125 * uFit;
+      const maxW = card.clientWidth * 0.92, maxH = card.clientHeight * 0.9;
+      if (maxW > 0 && pw > maxW) { ph *= maxW / pw; pw = maxW; }
+      if (maxH > 0 && ph > maxH) { pw *= maxH / ph; ph = maxH; }
+      svg.style.width = Math.max(1, Math.round(pw)) + 'px';
+      svg.style.height = Math.max(1, Math.round(ph)) + 'px';
+    } else pic.style.fontSize = Math.round(96 * uFit) + 'px';
+    // offset ignores the pop transform, which is still scaling up when this runs.
+    const maxW = card.clientWidth * 0.92, maxH = card.clientHeight * 0.9;
+    const art = svg || pic.querySelector('.emoji') || pic;
+    for (let i = 0; i < 6; i++) {
+      const aw = art.offsetWidth, ah = art.offsetHeight;
+      if (aw <= maxW + 1 && ah <= maxH + 1 && pic.offsetWidth <= card.clientWidth && pic.offsetHeight <= card.clientHeight) break;
+      const scale = Math.min(0.96, maxW / Math.max(1, aw), maxH / Math.max(1, ah));
+      if (!(scale > 0) || scale >= 1) break;
+      if (svg) {
+        svg.style.width = Math.max(1, Math.floor(aw * scale)) + 'px';
+        svg.style.height = Math.max(1, Math.floor(ah * scale)) + 'px';
+      } else {
+        const fs = parseFloat(getComputedStyle(pic).fontSize) || 16;
+        pic.style.fontSize = Math.max(12, Math.floor(fs * scale)) + 'px';
+      }
+    }
+    const held = pic.style.animation;
+    pic.style.animation = 'none'; // the pop scale would hide a box that is still too tall
+    for (let i = 0; i < 4; i++) {
+      const outer = card.getBoundingClientRect();
+      const drawn = art.getBoundingClientRect(), box = pic.getBoundingClientRect();
+      if (boxInside(drawn, outer) && boxInside(box, outer)) break;
+      const scale = Math.min(0.96, (outer.width - 2) / Math.max(1, drawn.width), (outer.height - 2) / Math.max(1, drawn.height));
+      if (!(scale > 0) || scale >= 1) break;
+      if (svg) {
+        svg.style.width = Math.max(1, Math.floor(drawn.width * scale)) + 'px';
+        svg.style.height = Math.max(1, Math.floor(drawn.height * scale)) + 'px';
+      } else {
+        const fs = parseFloat(getComputedStyle(pic).fontSize) || 16;
+        pic.style.fontSize = Math.max(12, Math.floor(fs * scale)) + 'px';
+      }
+    }
+    pic.style.animation = held;
+  }
   // --- Reveal ---
   function reveal(picked = false) {
     state = 'revealed'; $('check').hidden = true;
     const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
-    card.querySelector('.pic').style.fontSize = '96px'; const svg = card.querySelector('svg'); if (svg) { svg.setAttribute('width', 150); svg.setAttribute('height', 125); }
-    for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = (20 + k * 55) + 'px'; s.style.top = (20 + (k % 2) * 80) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
+    fitRevealPic();
+    const uFit = stage.info?.u || 1;
+    for (let k = 0; k < 4; k++) { const s = el('div', 'sparkle', '✦'); s.style.left = ((20 + k * 55) * uFit) + 'px'; s.style.top = ((20 + (k % 2) * 80) * uFit) + 'px'; s.style.animationDelay = k * 90 + 'ms'; card.append(s); }
     stickers.push(entry.pic && !entry.pic.startsWith('#') ? entry.pic : '⭐');
     if (!entry.pic && !picked) audio.play('sfx-chime'); // no check, no picture: the chime is the reward (never a 2nd chime)
     const c = clipForReveal(entry.w);
@@ -215,10 +312,13 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     return [[x, y + 20], [layout.knobX(0.5), y + 20], [layout.knobX(1), y + 20]]; };
   handle.addEventListener('pointerdown', onDown);
   $('slider').addEventListener('pointerdown', onDown);
+  handle.addEventListener('keydown', onSliderKey);
+  handle.addEventListener('lostpointercapture', onUp);
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
   $('next').onclick = next;
-  $('home').onclick = $('check-home').onclick = () => { audio.stop(); hand.stop(); $('check').hidden = true; onHome(); };
+  const releaseSlide = () => { if (slideOwner.id != null) slideOwner.end(slideOwner.id); dragging = null; };
+  $('home').onclick = $('check-home').onclick = () => { releaseSlide(); audio.stop(); hand.stop(); $('check').hidden = true; onHome(); };
   // ↻ before the pick never says the target word unless Kit is modelling (S4); at S3 it replays the sounds (a hint)
   $('again').onclick = () => { audio.stop();
     if (state === 'revealed') return audio.play(`reveal-${entry.w}`);
@@ -230,8 +330,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     $('check').hidden = true; showSlider(true); state = 'slide'; say('Say the sounds, then pick.', { id: 'm-say-sounds' }); hand.start(handPath, { now: false }); };
 
   return {
-    relayout() { if (entry && state === 'slide') render(); },
-    start(list, lv, opts = {}) { runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
+    relayout() {
+      if (!entry) return;
+      if (state === 'slide') render();
+      else if (state === 'revealed') { layoutWord(); paintTiles(); fitRevealPic(); }
+    },
+    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }

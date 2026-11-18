@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>kill-switch loop repro</title>
+<!-- Minimal page that re-registers sw.js the way js/sw-register.js does on a ?sw=1 visit.
+     Used by tools/offline-sw.py to watch navigations for 30 s. Not part of the app. -->
+<script type="module">
+  navigator.serviceWorker.register(new URL('./sw.js', location.href), {
+    type: 'module',
+    scope: new URL('./', location.href).href,
+    updateViaCache: 'none',
+  }).catch(() => {});
+</script>

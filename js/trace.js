@@ -54,6 +54,88 @@ export function resample(poly, step = 2) {
 }
 export const pathD = poly => poly.map((p, i) => `${i ? 'L' : 'M'} ${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(' ');
 
+// Viewport point -> letter space. getScreenCTM() is null when the svg is not on screen, and
+// SVGMatrix.inverse() throws when the matrix cannot be inverted. Either one must not throw mid-stroke.
+export function screenToLetter(ctm, x, y) {
+  if (!ctm || typeof ctm.inverse !== 'function') return null;
+  let inv;
+  try { inv = ctm.inverse(); } catch { return null; }
+  if (!inv) return null;
+  const lx = inv.a * x + inv.c * y + inv.e, ly = inv.b * x + inv.d * y + inv.f;
+  return Number.isFinite(lx) && Number.isFinite(ly) ? [lx, ly] : null;
+}
+
+// A finger, Apple Pencil, or a blank pointerType (iPadOS sometimes omits it). A mouse on a
+// touch device is the same contact: iPadOS desktop mode can label a finger as mouse.
+export function traceContact(pointerType, { touchDevice = false } = {}) {
+  if (pointerType === 'mouse' && !touchDevice) return 'mouse';
+  return 'touch';
+}
+
+// iOS can cancel the pointer stream at any moment, including mid-stroke, and then send
+// only touch events. A finger or Pencil pointercancel / lostpointercapture pauses; it does not end.
+// A lostpointercapture that bubbled from a child (not the svg and not the capture surface) is ignored.
+// A real mouse cancel still ends the stroke. Pen used to take that mouse path and the ink froze.
+export function traceHold({ type, target, svg, pointerType = 'touch', touchDevice = false, surface = null } = {}) {
+  const cap = surface || svg;
+  if (type === 'lostpointercapture' && target !== cap && target !== svg) return 'ignore';
+  if (traceContact(pointerType, { touchDevice }) === 'touch' && (type === 'pointercancel' || type === 'lostpointercapture')) return 'hold';
+  return 'end';
+}
+
+// viewBox fitted in the CSS box, xMidYMid meet (uniform scale, centred). A stretch is wrong on a
+// phone, where a wide letter is letterboxed in a tall card. Returns null when the box is missing.
+function fitLetter(box, x, y) {
+  if (!box || !(box.width > 0) || !(box.height > 0) || !(box.vbWidth > 0) || !(box.vbHeight > 0)) return null;
+  const fit = Math.min(box.width / box.vbWidth, box.height / box.vbHeight);
+  if (!(fit > 0)) return null;
+  const padX = (box.width - box.vbWidth * fit) / 2, padY = (box.height - box.vbHeight * fit) / 2;
+  const lx = box.vbX + (x - box.left - padX) / fit, ly = box.vbY + (y - box.top - padY) / fit;
+  return Number.isFinite(lx) && Number.isFinite(ly) ? { xy: [lx, ly], fit } : null;
+}
+const agrees = (a, b, fit) => !!a && !!b && Math.hypot((a[0] - b[0]) * fit, (a[1] - b[1]) * fit) <= 4;
+
+// Letter position from clientX/clientY and the SVG's border box. clientX and getBoundingClientRect
+// are both visual-viewport pixels, including under pinch zoom. getScreenCTM() is only a check:
+// page zoom, Request Desktop Website shrink-to-fit, Split View / Stage Manager, and a scaled stage
+// have returned a matrix that does not match the pixels under the finger. `viewport`
+// ({ offsetLeft, offsetTop, scale }) is accepted so a zoomed visualViewport cannot be required
+// to move the point; the rect already includes where the letter is.
+export function letterPoint(ctm, x, y, box, viewport) {
+  const visual = fitLetter(box, x, y);
+  if (!visual) return screenToLetter(ctm, x, y);
+  const scale = viewport?.scale > 0 ? viewport.scale : 1;
+  const ox = Number(viewport?.offsetLeft) || 0, oy = Number(viewport?.offsetTop) || 0;
+  const byCtm = screenToLetter(ctm, x, y);
+  if (agrees(byCtm, visual.xy, visual.fit)) return byCtm;
+  // A layout-space CTM can be brought back with the visualViewport. Use it only when that,
+  // and not the raw client point, is the one sitting on the fitted letter.
+  if (scale !== 1 || ox || oy) {
+    const laid = fitLetter(box, ox + x / scale, oy + y / scale);
+    const byLaid = screenToLetter(ctm, ox + x / scale, oy + y / scale);
+    if (laid && agrees(byLaid, laid.xy, laid.fit) && !agrees(byCtm, visual.xy, visual.fit)) return laid.xy;
+  }
+  return visual.xy;
+}
+
+// The touch that started the stroke. Prefer its identifier; if that finger is gone, the
+// touch nearest the last point. Any other finger in the list is not chosen.
+export function traceTouch(touches, { id = null, last = null } = {}) {
+  const list = [...(touches ?? [])];
+  if (!list.length) return null;
+  if (id != null) {
+    const hit = list.find(t => t.identifier === id);
+    if (hit) return hit;
+  }
+  if (!last) return null;
+  let best = null, bd = Infinity;
+  for (const t of list) {
+    const d = Math.hypot((t.clientX ?? 0) - last[0], (t.clientY ?? 0) - last[1]);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
+
 // opts: tol (letter units; lane is ~2*tol wide), ahead (how far ahead progress may jump, units), startTol.
 export function createTracer(letter, { tol = 16, ahead = 24, startTol = 20 } = {}) {
   const strokes = (STROKES[letter] ?? []).map(s => resample(s));
@@ -84,35 +166,6 @@ export function createTracer(letter, { tol = 16, ahead = 24, startTol = 20 } = {
   };
 }
 
-// iOS can cancel the pointer stream at any moment, including mid-stroke, and then send
-// only touch events. A touch pointercancel or lostpointercapture pauses; it does not end.
-// A lostpointercapture that bubbled from a child is ignored (unconfirmed in device logs).
-// Mouse and pen cancels still end the stroke.
-export function traceHold({ type, target, svg, pointerType = 'touch' } = {}) {
-  if (type === 'lostpointercapture' && target !== svg) return 'ignore';
-  const touch = pointerType !== 'mouse' && pointerType !== 'pen';
-  if (touch && (type === 'pointercancel' || type === 'lostpointercapture')) return 'hold';
-  return 'end';
-}
-
-// The touch that started the stroke. Prefer its identifier; if that finger is gone, the
-// touch nearest the last point. Any other finger in the list is not chosen.
-export function traceTouch(touches, { id = null, last = null } = {}) {
-  const list = [...(touches ?? [])];
-  if (!list.length) return null;
-  if (id != null) {
-    const hit = list.find(t => t.identifier === id);
-    if (hit) return hit;
-  }
-  if (!last) return null;
-  let best = null, bd = Infinity;
-  for (const t of list) {
-    const d = Math.hypot((t.clientX ?? 0) - last[0], (t.clientY ?? 0) - last[1]);
-    if (d < bd) { bd = d; best = t; }
-  }
-  return best;
-}
-
 // Bounding box of a letter's strokes (+ pad for the lane), for a viewBox that fills the trace card.
 export function letterBox(letter, pad = 16) {
   const pts = (STROKES[letter] ?? []).flat(); if (!pts.length) return { x: 0, y: 0, w: 100, h: 180 };
@@ -125,6 +178,8 @@ export function letterBox(letter, pad = 16) {
 // rc6 (iPad palm / second finger): one stroke = one finger. The finger that starts a stroke owns it; any other pointer
 // (a resting palm, the other hand, a second finger) is ignored until that finger lifts, so it can neither restart
 // the stroke (a down far from the dot used to deactivate it) nor end it (its pointerup used to stop the drag).
+// strokeDone does not release the owner. The screen must not reset() it: the next stroke starts only after
+// this pointer's pointerup, pointercancel, or lostpointercapture.
 export function strokeOwner() {
   let id = null;
   return {
