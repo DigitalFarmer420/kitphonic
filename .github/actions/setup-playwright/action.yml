@@ -23,11 +23,40 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ inputs.browsers }}
-    # A slow Ubuntu mirror once held install-deps for 20 minutes (run 44219620165). Each try gets 8 minutes; a killed
-    # try leaves apt half-done, so dpkg is repaired before the next one.
-    - if: steps.cache.outputs.cache-hit != 'true'
+    # A slow Ubuntu mirror once held install-deps for 20 minutes (run 44219620165). Each try gets 8 minutes.
+    # timeout can leave apt holding the dpkg lock (run 44265946491, sweep and visual webkit), so the next try waits
+    # until that lock is free and then repairs a half-finished install.
+    - name: Install Playwright browsers and system libraries
       shell: bash
-      run: for i in 1 2 3; do timeout 480 npx playwright install --with-deps ${{ inputs.browsers }} && exit 0; sudo dpkg --configure -a || true; sudo apt-get -f install -y || true; echo "::warning::playwright install try $i failed or timed out"; done; exit 1
-    - if: steps.cache.outputs.cache-hit == 'true'
-      shell: bash
-      run: for i in 1 2 3; do timeout 480 npx playwright install-deps ${{ inputs.browsers }} && exit 0; sudo dpkg --configure -a || true; sudo apt-get -f install -y || true; echo "::warning::install-deps try $i failed or timed out"; done; exit 1
+      run: |
+        set -uo pipefail
+        browsers="${{ inputs.browsers }}"
+        if [ "${{ steps.cache.outputs.cache-hit }}" = "true" ]; then
+          install=(npx playwright install-deps $browsers)
+        else
+          install=(npx playwright install --with-deps $browsers)
+        fi
+        wait_for_dpkg() {
+          for _ in $(seq 1 90); do
+            if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+              echo "waiting for dpkg lock"
+              sleep 2
+            else
+              return 0
+            fi
+          done
+          echo "::warning::dpkg lock still held after 3 minutes"
+          return 1
+        }
+        for i in 1 2 3; do
+          wait_for_dpkg || true
+          sudo dpkg --configure -a || true
+          if timeout 480 "${install[@]}"; then
+            exit 0
+          fi
+          echo "::warning::playwright install try $i failed or timed out"
+          wait_for_dpkg || true
+          sudo dpkg --configure -a || true
+          sudo apt-get -f install -y || true
+        done
+        exit 1

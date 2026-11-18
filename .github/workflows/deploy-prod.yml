@@ -1,0 +1,82 @@
+# Publishes the tested commit on `main` to production GitHub Pages:
+#   https://digitalfarmer420.github.io/kitphonic/
+# The dev site is never touched. This workflow does not sign or upload an APK.
+#
+# GitHub Pages has to use Source "GitHub Actions" for this job to be the
+# publisher. While Source is "Deploy from a branch", the built-in publisher
+# uploads `main` on every push, and a failed gate does not stop that upload.
+name: Deploy production
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: Test gate
+    uses: ./.github/workflows/test-gate.yml
+    permissions:
+      contents: read
+
+  pages-source:
+    name: Confirm Pages source is GitHub Actions
+    needs: gate
+    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm Pages publishes from GitHub Actions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          build_type="$(gh api "repos/${GITHUB_REPOSITORY}/pages" --jq .build_type)"
+          echo "Pages build_type=${build_type}"
+          if [ "$build_type" != "workflow" ]; then
+            {
+              echo "## Production was not published by this workflow"
+              echo "Pages \`build_type\` is \`${build_type}\`."
+              echo "Set **Settings → Pages → Build and deployment → Source** to **GitHub Actions**."
+              echo "The test gate is the jobs above. This job did not upload a site."
+              echo "While Source is **Deploy from a branch**, the built-in publisher still uploads \`main\` on every push."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error title=Switch Pages source to GitHub Actions::Pages build_type is '${build_type}'. Set Settings → Pages → Build and deployment → Source to GitHub Actions. This job did not upload a site."
+            exit 1
+          fi
+
+  deploy:
+    name: Deploy production
+    needs: [gate, pages-source]
+    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.pages-source.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout the tested commit
+        uses: actions/checkout@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: .
+          include-hidden-files: 'true'
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
+      - name: Record the published commit
+        run: |
+          {
+            echo "## Production"
+            echo "Published \`$GITHUB_SHA\` to ${{ steps.deployment.outputs.page_url }}"
+          } >> "$GITHUB_STEP_SUMMARY"
