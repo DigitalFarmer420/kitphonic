@@ -1,5 +1,7 @@
 # Test gate for the dev and production web deploys.
-# Keep these steps aligned with the unit and e2e jobs in pr-checks.yml.
+# Unit tests match the pr-checks unit job. End-to-end is `npm run test:e2e`
+# (the same Playwright suite pr-checks shards), installed with the shared
+# setup-playwright action so a slow apt mirror cannot hang the deploy.
 # The caller deploys only when both jobs succeed. A failure here fails the
 # Actions run, and the deploy job is skipped.
 name: Test gate
@@ -34,17 +36,12 @@ jobs:
   e2e:
     name: End-to-end tests (npm run test:e2e)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: npm
-      - run: npm ci
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps webkit chromium
+      - uses: ./.github/actions/setup-playwright
       - name: Touch e2e
         run: npm run test:e2e
       - name: Upload Playwright report, screenshots, and traces
