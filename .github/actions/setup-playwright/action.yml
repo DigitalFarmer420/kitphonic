@@ -23,9 +23,10 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}-${{ inputs.browsers }}
+    # A slow Ubuntu mirror once held install-deps for 20 minutes (run 44219620165). Each try gets 6 minutes, 3 tries.
     - if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: npx playwright install --with-deps ${{ inputs.browsers }}
+      run: for i in 1 2 3; do timeout 360 npx playwright install --with-deps ${{ inputs.browsers }} && exit 0; echo "::warning::playwright install try $i failed or timed out"; done; exit 1
     - if: steps.cache.outputs.cache-hit == 'true'
       shell: bash
-      run: npx playwright install-deps ${{ inputs.browsers }}
+      run: for i in 1 2 3; do timeout 360 npx playwright install-deps ${{ inputs.browsers }} && exit 0; echo "::warning::install-deps try $i failed or timed out"; done; exit 1
