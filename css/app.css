@@ -11,7 +11,11 @@ html{font-size:clamp(12px, 4vw, 32px)}
 @media (orientation: landscape) and (max-height: 499px){html{font-size:clamp(11px, 4dvh, 32px)}}
 @media (orientation: landscape) and (min-height: 500px){html{font-size:clamp(12px, min(1.6667vw, 2.963dvh), 32px)}}
 #stage{position:absolute;left:0;top:0;width:100%;height:100%;transform:none;background:var(--cream);border-radius:1.25rem;overflow:hidden}
-.screen{position:absolute;inset:0}.screen[hidden]{display:none !important}
+/* Flow shell. Each screen is an inline-size container so a later pass can reflow
+   the controls already on that screen. No query uses the name yet, so this does not
+   move, restyle, or add anything. The container is the screen, not #stage: #parent
+   is position:fixed against the viewport, and a container on #stage would trap it. */
+.screen{position:absolute;inset:0;container-type:inline-size;container-name:screen}.screen[hidden]{display:none !important}
 .L{font-family:'Andika',sans-serif;font-weight:700;color:var(--ink);line-height:1}
 .emoji{font-family:'Noto Color Emoji','Apple Color Emoji','Segoe UI Emoji',sans-serif;line-height:1}
 button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:pointer}

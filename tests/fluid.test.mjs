@@ -45,6 +45,17 @@ test('stylesheet is fluid: dvh root, rem controls, clamp floors, no counter-zoom
   assert.match(app, /letters\?\.relayout/);
 });
 
+test('each screen is an inline-size container and the theme is unchanged', () => {
+  assert.match(css, /\.screen\{position:absolute;inset:0;container-type:inline-size;container-name:screen\}/);
+  assert.equal(css.includes('container-type:size'), false); // block-size containment can clip overflow:visible
+  assert.equal(/#stage\{[^}]*container/.test(css), false);
+  assert.equal(css.includes('#turn'), false);
+  assert.match(css, /--cream:#FFF8EC;--cream2:#FBEFDC;--ink:#3A2E28/);
+  assert.match(css, /font-family:'Nunito',system-ui,sans-serif/);
+  assert.match(css, /font-family:'Andika',sans-serif/);
+  assert.match(css, /font-family:'Fredoka'/);
+});
+
 test('buttons >= 64 and knobs >= 80 at every sweep viewport, including insets and 4K', () => {
   for (const c of CASES) {
     const s = placed(c);
