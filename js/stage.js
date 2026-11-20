@@ -54,6 +54,31 @@ function readEnvInsets(doc) {
   return insets;
 }
 
+// The device text size. `medium` follows a desktop or Chrome font-size setting.
+// `-apple-system-body` follows iOS text size and is 17px at the default setting,
+// so that 17 is normalized back to 16. The larger of the two wins. A normal
+// setting stays 16, which is today's root, and a larger setting scales every rem.
+export function readPreferredRootPx(doc) {
+  const getStyle = doc.defaultView?.getComputedStyle?.bind(doc.defaultView);
+  if (!getStyle || !doc.documentElement) return 16;
+  const probe = doc.createElement('div');
+  probe.setAttribute('aria-hidden', 'true');
+  probe.style.cssText = 'position:absolute;visibility:hidden;font-size:medium';
+  doc.documentElement.appendChild(probe);
+  const medium = parseFloat(getStyle(probe).fontSize);
+  probe.style.font = '-apple-system-body';
+  const body = parseFloat(getStyle(probe).fontSize);
+  probe.remove();
+  const fromMedium = Number.isFinite(medium) && medium > 0 ? medium : 16;
+  const fromBody = Number.isFinite(body) && body > 0 ? (body / 17) * 16 : fromMedium;
+  const preferred = Math.max(fromMedium, fromBody);
+  return Math.abs(preferred - 16) < 0.05 ? 16 : preferred;
+}
+export function rootFontPx(u, preferredPx = 16) {
+  const pref = Number.isFinite(preferredPx) && preferredPx > 0 ? preferredPx : 16;
+  return pref * u;
+}
+
 function visualBox(win) {
   const vv = win?.visualViewport;
   if (!vv) return { vw: win.innerWidth, vh: win.innerHeight, offL: 0, offT: 0 };
@@ -79,7 +104,7 @@ export function createStage(el, onChange = () => {}) {
     const s = stageBox(vw, vh, insets, stageFor);
     const changed = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u;
     cur = s;
-    const fs = (16 * s.u) + 'px';
+    const fs = rootFontPx(s.u, readPreferredRootPx(doc)) + 'px';
     // Root rem is the fluid unit. Skip the write when it is unchanged so the style observer does not loop.
     if (doc.documentElement.style.fontSize !== fs) doc.documentElement.style.fontSize = fs;
     Object.assign(el.style, {

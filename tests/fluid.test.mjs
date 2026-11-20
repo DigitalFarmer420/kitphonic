@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { stageFor, buttonPx, knobPx, MIN_TOUCH, MIN_KNOB, MAX_SCALE } from '../js/stage.js';
+import { stageFor, buttonPx, knobPx, MIN_TOUCH, MIN_KNOB, MAX_SCALE, rootFontPx, readPreferredRootPx } from '../js/stage.js';
 import { stageBox } from '../js/safe-insets.js';
 import { layoutFor, wordLayout } from '../js/layout.js';
 import { mapLayout, mapWindow } from '../js/map-layout.js';
@@ -54,6 +54,25 @@ test('each screen is an inline-size container and the theme is unchanged', () =>
   assert.match(css, /font-family:'Nunito',system-ui,sans-serif/);
   assert.match(css, /font-family:'Andika',sans-serif/);
   assert.match(css, /font-family:'Fredoka'/);
+});
+
+test('a normal text setting keeps the 16px root and a larger setting scales every rem', () => {
+  assert.equal(rootFontPx(1, 16), 16);
+  assert.equal(rootFontPx(2, 16), 32);
+  assert.equal(rootFontPx(0.9, 24), 21.6);
+  assert.equal(rootFontPx(1, 0), 16);
+  const doc = (medium, body) => {
+    const probe = { style: { cssText: '', font: '' }, setAttribute() {}, remove() {} };
+    return {
+      documentElement: { appendChild() {}, removeChild() {} },
+      createElement() { return probe; },
+      defaultView: { getComputedStyle: (el) => ({ fontSize: (el.style.font === '-apple-system-body' ? body : medium) + 'px' }) },
+    };
+  };
+  assert.equal(readPreferredRootPx(doc(16, 16)), 16); // Chrome, system font ignored
+  assert.equal(readPreferredRootPx(doc(16, 17)), 16); // iOS default system body is 17
+  assert.equal(readPreferredRootPx(doc(24, 17)), 24); // desktop large text
+  assert.ok(Math.abs(readPreferredRootPx(doc(16, 28)) - (28 / 17) * 16) < 0.01); // iOS larger text
 });
 
 test('buttons >= 64 and knobs >= 80 at every sweep viewport, including insets and 4K', () => {
