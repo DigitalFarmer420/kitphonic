@@ -42,7 +42,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #play svg{width:3.75rem;height:3.75rem}
 #play:active{transform:translateX(-50%) translateY(0.1875rem);box-shadow:0 0.1875rem 0 var(--saged)}
 #play.pressed{transform:translateX(-50%) translateY(0.25rem) scale(.96);box-shadow:0 0.1875rem 0 var(--saged);filter:brightness(.92)} /* rc4: instant on pointerdown */
-#play.going{transform:translateX(-50%) translateY(0.25rem) scale(.96);box-shadow:0 0.1875rem 0 var(--saged);filter:brightness(.92);pointer-events:none} /* accepted: further taps do not queue another hello */
+#play.going,#play[hidden]{display:none !important;pointer-events:none} /* accepted: hidden for the rest of this welcome, not a faded dead button */
 #hello.go .paw{animation:wavego .5s ease-out 1}
 @keyframes wavego{0%{transform:rotate(0)}35%{transform:rotate(-30deg)}70%{transform:rotate(16deg)}100%{transform:rotate(0)}}
 #speaker{position:absolute;right:1.125rem;bottom:1.125rem;width:4.5rem;height:4.5rem;border-radius:1.375rem;background:#fff;border:0.125rem solid var(--line);font-size:1.875rem}
