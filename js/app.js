@@ -75,8 +75,9 @@ let session = null; // { plan, i, started, stickers }
 // screens without a session use S3, the scored default)
 const supportLevel = entry => cfg.support ?? (cfg.speakBeforeCheck ? 4 : session && cfg.supportLadder ? supportFor(store.all(), entry, { sessionId }).level : 3);
 const guidedWord = entry => cfg.support == null && !cfg.speakBeforeCheck && !!session && cfg.supportLadder && supportFor(store.all(), entry, { sessionId }).guided;
+const wordCorrection = entry => (cfg.support == null && !cfg.speakBeforeCheck && session && cfg.supportLadder) ? supportFor(store.all(), entry, { sessionId }) : {};
 const screen = createWordScreen({
-  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel, guided: guidedWord,
+  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel, guided: guidedWord, correction: wordCorrection,
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });

@@ -8,9 +8,10 @@ import { resolve } from 'node:path';
 
 export async function simulate({ wrong = 0, seed = 1, root = '.', maxSessions = 400, perStop = 40, gap = 8 * 3600e3, log: trace = null } = {}) {
   const imp = f => import(pathToFileURL(resolve(root, 'js', f)).href);
-  const { planSession } = await imp('session.js'), { mapState, progressMarkers, STOPS } = await imp('progress.js');
+  const { planSession } = await imp('session.js'), { mapState, progressMarkers, STOPS, knownForServing } = await imp('progress.js');
   const { createStore } = await imp('mastery.js'), { supportFor, supportPattern, S } = await imp('support.js');
   const { memoryStorage } = await imp('dev-seed.js'), { roundTargets } = await imp('letter-logic.js');
+  const { hasWordCheck } = await imp('word-logic.js');
   const ws = await imp('word-screen.js');
   const served = ws.servedSupport ?? (({ hasCheck, assist, ladder }) => (!hasCheck ? 4 : Math.max(assist ? 3 : 1, Math.min(4, ladder ?? 3))));
   let s0 = seed >>> 0 || 1; const rand = () => { s0 = (s0 * 1664525 + 1013904223) % 4294967296; return s0 / 4294967296; };
@@ -29,13 +30,29 @@ export async function simulate({ wrong = 0, seed = 1, root = '.', maxSessions = 
       else if (it.type === 'letters') {
         if (it.activity !== 'hunt' && it.activity !== 'find') continue; // explore games are unscored
         for (const g of roundTargets(it.targets ?? it.pool, it.rounds ?? 4, rand)) { const c = ok(); L({ skill: `sound:${g}`, itemId: g, correct: c, firstAttempt: true, assisted: false, sessionId: sid }); lines.push(`${g}${c ? '+' : '-'}`); }
-      } else if (it.type === 'words') for (const e of it.words) {
-        const lv = it.level ?? e.level, lad = supportFor(store.all(), e, { sessionId: sid, now: t + 3000 });
-        const sup = served({ hasCheck: true, assist: !!it.assist, ladder: lad.level }), mod = sup === S.MODEL, c = ok();
-        L({ ...(it.apply ? { apply: it.apply } : {}), skill: `blend:L${lv}`, itemId: e.w, gpcs: e.parse?.split(' ') ?? [...e.w], correct: c, firstAttempt: true, assisted: false,
-          scored: !mod, ...(mod ? { modelled: true } : {}), fast: false, sweepMs: 1800, latencyMs: 1500, support: sup, pattern: supportPattern(e), hints: 0, dotTaps: 0, helpUsed: false,
-          sessionId: sid, ...(it.assist ? { stepBack: true } : {}), ...(it.stepBackFor ? { stepBackFor: it.stepBackFor } : {}) });
-        lines.push(`L${lv}${it.assist ? 'a' : ''}S${sup}${c ? '+' : '-'}`);
+      } else if (it.type === 'words') {
+        const queue = it.words.slice();
+        for (let i = 0; i < queue.length; i++) {
+          const e = queue[i], lv = it.level ?? e.level, lad = supportFor(store.all(), e, { sessionId: sid, now: t + 3000 });
+          const check = hasWordCheck(e, { known: knownForServing(store.all(), t), level: lv });
+          if (lad.briefModel) {
+            L({ ...(it.apply ? { apply: it.apply } : {}), skill: `blend:L${lv}`, itemId: e.w, gpcs: e.parse?.split(' ') ?? [...e.w], correct: true, firstAttempt: true, assisted: false,
+              scored: false, modelled: true, briefModel: true, fast: false, sweepMs: 1800, latencyMs: 1500, support: S.MODEL, pattern: supportPattern(e), hints: 0, dotTaps: 0, helpUsed: false,
+              sessionId: sid, ...(it.assist ? { stepBack: true } : {}), ...(it.stepBackFor ? { stepBackFor: it.stepBackFor } : {}) });
+            lines.push(`L${lv}brief`);
+          }
+          const sup = lad.briefModel ? S.BLEND : served({ hasCheck: check, assist: !!it.assist, ladder: lad.level });
+          const mod = sup === S.MODEL, c = !check ? true : ok();
+          L({ ...(it.apply ? { apply: it.apply } : {}), skill: `blend:L${lv}`, itemId: e.w, gpcs: e.parse?.split(' ') ?? [...e.w], correct: c, firstAttempt: true, assisted: false,
+            scored: check && !mod, ...(mod || !check ? { modelled: true } : {}), fast: false, sweepMs: 1800, latencyMs: 1500, support: sup, pattern: supportPattern(e), hints: 0, dotTaps: 0, helpUsed: false,
+            ...(lad.guided ? { guided: true } : {}), sessionId: sid, ...(it.assist ? { stepBack: true } : {}), ...(it.stepBackFor ? { stepBackFor: it.stepBackFor } : {}) });
+          lines.push(`L${lv}${it.assist ? 'a' : ''}S${sup}${check ? (c ? '+' : '-') : 'm'}`);
+          if (!c && check && !mod) {
+            const again = supportFor(store.all(), e, { sessionId: sid, now: t + 3000 });
+            if (again.briefModel) queue.splice(i + 1, 0, e);
+            else if (!queue.slice(i + 1).some(x => x.w === e.w)) queue.push(e);
+          }
+        }
       } else if (it.type === 'star') for (let k = 0; k < 3; k++) L({ skill: `star:${it.word}`, itemId: it.word, correct: ok(), firstAttempt: true, assisted: false, sessionId: sid });
       else if (it.type === 'family') L({ skill: `family:${it.family?.rime ?? it.family}`, itemId: 'f', correct: true, firstAttempt: true, scored: false, sessionId: sid });
       else if (it.type === 'story' || it.type === 'sentence') {
