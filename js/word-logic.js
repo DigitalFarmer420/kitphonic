@@ -124,6 +124,14 @@ export function makeChoices(word, { n = 3, rand = Math.random, strategy = 'minim
 // config.checkAtL1 (review R8 / open question 1). Others get Kit's spoken sentence instead.
 export const needsCheck = (entry, cfg = {}, level = entry.level) =>
   !!entry.pic && cfg.checkPictureWords !== false && (level > 1 || !!cfg.checkAtL1) && minimalPairs(entry.w).length > 0;
+// A word can collect a scored (or modelled-with-a-check) read only when a picture check or printed word cards can
+// be shown. Words without a check are completed in the UI but are not logged, so a word stop that serves them
+// mostly cannot pass. The planner prefers words for which this is true.
+export function hasWordCheck(entry, { known = null, cfg = {}, level = entry.level, rand = Math.random } = {}) {
+  if (needsCheck(entry, cfg, level)) return true;
+  if (cfg.wordCardCheck === false) return false;
+  return !!wordCards(entry.w, { n: cfg.choicesPerCheck ?? 3, rand, known });
+}
 // Printed word-card check for words without a picture check (L1 VC words, sat, top…): the child picks the word they
 // just read from minimal-pair printed words (one letter different). opts.known: only words with taught GPCs.
 // Each card is tagged with the position it differs in (first letter = onset, last = final, a vowel letter = vowel),

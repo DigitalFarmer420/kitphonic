@@ -33,7 +33,13 @@ function playSession(c, { correct = () => true, sessionId = `s${c.t}`, rand = ()
   for (const it of plan.items.filter(i => i.type === 'words')) for (const e of it.words) {
     c.t += 4000;
     const lad = supportFor(c.store.all(), e, { sessionId, now: c.t });
-    const sup = servedSupport({ hasCheck: true, assist: !!it.assist, ladder: lad.level }), modelled = sup === S.MODEL;
+    if (lad.briefModel) {
+      c.store.log({ skill: `blend:L${it.level ?? e.level}`, itemId: e.w, gpcs: e.parse?.split(' ') ?? [...e.w], correct: true, firstAttempt: true,
+        assisted: false, scored: false, modelled: true, briefModel: true, support: S.MODEL, pattern: supportPattern(e), hints: 0, dotTaps: 0, helpUsed: false, timestamp: c.t, sessionId,
+        ...(it.assist ? { stepBack: true } : {}), ...(it.stepBackFor ? { stepBackFor: it.stepBackFor } : {}) });
+      c.t += 2000;
+    }
+    const sup = lad.briefModel ? S.BLEND : servedSupport({ hasCheck: true, assist: !!it.assist, ladder: lad.level }), modelled = sup === S.MODEL;
     c.store.log({ skill: `blend:L${it.level ?? e.level}`, itemId: e.w, gpcs: e.parse?.split(' ') ?? [...e.w], correct: !!correct(e, sup), firstAttempt: true,
       assisted: false, scored: !modelled, ...(modelled ? { modelled: true } : {}), fast: false, sweepMs: 1800, latencyMs: 1500, support: sup,
       pattern: supportPattern(e), hints: 0, dotTaps: 0, helpUsed: false, timestamp: c.t, sessionId,
@@ -138,7 +144,9 @@ test('C: modelled misses do not make "2 misses in a row"; real misses still add 
     rec({ itemId: 'tap', correct: false, modelled: true, scored: false, support: 4 }, T0 + 5000), rec({ itemId: 'map', correct: false, modelled: true, scored: false, support: 4 }, T0 + 6000)];
   assert.equal(supportFor(log, sat, { sessionId: 'x', now: T0 + 7000 }).level, S.BLEND);
   log.push(rec({ itemId: 'pat', correct: false, scored: true, support: 3 }, T0 + 8000));
-  assert.equal(supportFor(log, { w: 'pat', level: 2, parse: 'p a t' }, { sessionId: 'x', now: T0 + 9000 }).level, S.MODEL, 'a real S3 miss: next time one level more (unchanged)');
+  const after = supportFor(log, { w: 'pat', level: 2, parse: 'p a t' }, { sessionId: 'x', now: T0 + 9000 });
+  assert.equal(after.level, S.BLEND, 'D: a real S3 miss stays at you-blend, never a full model');
+  assert.ok(after.guided, 'D: the next try is the hand demo');
 });
 
 test('assist rounds are S3 exactly; a word without a check is still modelled', () => {

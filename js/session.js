@@ -10,7 +10,7 @@ import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor, 
 import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, slippedStops, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
-import { shuffle, minimalPairs, wordCards } from './word-logic.js';
+import { shuffle, minimalPairs, wordCards, hasWordCheck } from './word-logic.js';
 import { patternSupport, supportPattern, SUPPORT_RULES, S } from './support.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
@@ -91,12 +91,24 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   const push = it => { if (room(it)) { items.push(it); return true; } return false; };
   const pool = letterPool(active.length ? active : [GPCS[0].id]);
   const wordsAt = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? shuffle(ws, rand).slice(0, n) : []; };
+  // Prefer words that can show a picture check or word cards, so the read is logged and can count. At the
+  // "stop" (L4) stop only 7 of 20 servable words had a check, and the rest finished in the UI with no log —
+  // a perfect child needed 6–8 sessions in the real playthrough, but only 1 in the planner sim (which
+  // treated every word as checked). Review lists stay mixed.
+  const withCheck = (ws, lv) => {
+    const yes = [], no = [];
+    for (const e of shuffle(ws, rand)) (hasWordCheck(e, { known, level: lv ?? e.level, rand }) ? yes : no).push(e);
+    return [...yes, ...no];
+  };
   // The current stop asks for 5 reads (secure needs 5). L1 can only serve at/am, and the first blends are
   // modelled (unscored) until 6 slow sweeps — so one session has to finish that model, or the next stop
   // cannot open on the following session's independent reads. Review lists stay as they are.
   // The same holds for every word stop whose pattern is still at S4: mat (the first CVC) starts modelled too,
   // and 5 words left it one sweep short, so it took a third session to open (a "never ends" report).
-  const wordsForStop = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? (ws.length >= n ? shuffle(ws, rand).slice(0, n) : fillWordList(ws, n, rand)) : []; };
+  const wordsForStop = (lv, n) => {
+    const ws = withCheck(servableWords(lv, known), lv);
+    return ws.length >= MIN_WORDS ? (ws.length >= n ? ws.slice(0, n) : fillWordList(ws, n, rand)) : [];
+  };
   const wordRounds = lv => (patternSupport(responses, supportPattern({ level: lv }), now).level === S.MODEL ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5);
   const stepBack = skill => pacingFor(responses, skill, { minStepBackReads: STEP_BACK_MIN_READS }) === 'stepBack'; // B: a step back needs a valid sample
   // an easy pool for a step-back round: the sound + two secure letters that sound and look different
@@ -142,7 +154,7 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
       if (canTrace && responses.filter(r => r.skill === `trace:${GPC[g].grapheme}`).length < 6) push({ type: 'lesson', activity: 'trace', gpc: g, why: 'new' });
     }
   } else if (cur?.kind === 'words' && cur.apply) { // "new words" stop: words that use this set's sounds, mixed levels
-    const ws = shuffle(applyWords(cur.apply, known, Math.max(...passedLevels, 1)), rand).slice(0, 5);
+    const ws = withCheck(applyWords(cur.apply, known, Math.max(...passedLevels, 1))).slice(0, 5);
     if (ws.length >= MIN_WORDS) push({ type: 'words', level: null, apply: cur.apply, words: ws, why: 'new' });
     else push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
   } else if (cur?.kind === 'story') { // tiny decodable story (final map stops)

@@ -28,9 +28,9 @@ import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { pointerOwner, tryCapture, sliderKeyTarget, applySliderAria } from './gesture.js';
 // v2 V2 support ladder: support(entry) -> 4 model | 3 you blend | 2 silent dots | 1 read it (js/support.js)
-export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3), guided = () => false }) {
+export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3), guided = () => false, correction = () => ({}) }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
-  let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
+  let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0, afterBrief = false;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
   const slideOwner = pointerOwner(); // survives blend / reslide until this finger lifts, so a palm cannot grab the next drag
   const tiles = $('tiles'), mk = $('markers'), handle = $('handle'), fill = $('fill'), track = $('track');
@@ -82,10 +82,13 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: focus ? `focus:${focus}` : cfg.choiceStrategy[level], trial: checkTrial++ })
       : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.(), focus }) : null;
     // support level for this word; without a check there is nothing to read against, so Kit models it (S4)
-    // §3.7.1 step back / re-entry (planner assist): S3 exactly (the child hears each sound, never a full model), hand demo at once
-    const sup = servedSupport({ hasCheck: !!choices, assist, ladder: support(entry) });
-    const guide = !!choices && !assist && sup < 4 && !!guided(entry); // C: after a modelled miss, the hand demo at once
-    trial = { picks: 0, assisted: false, scored: true, support: sup, served: sup, hints: 0, dotTaps: 0, helpUsed: false }; sweepStart = null;
+    // §3.7.1 step back / re-entry (planner assist): S3 exactly (the child hears each sound, never a full model)
+    // D: after two S3 misses on this word in the session, one brief S4 re-model (unscored), then S3 again
+    const doBrief = !afterBrief && !!(correction(entry) || {}).briefModel;
+    if (afterBrief) afterBrief = false;
+    const sup = doBrief ? 4 : servedSupport({ hasCheck: !!choices, assist, ladder: support(entry) });
+    const guide = !!choices && !assist && sup < 4 && !!guided(entry); // C/D: hand demo when standing support is guided
+    trial = { picks: 0, assisted: false, scored: true, support: sup, served: sup, hints: 0, dotTaps: 0, helpUsed: false, briefModel: doBrief, logged: false, missedFirst: false }; sweepStart = null;
     state = 'slide'; renderPebbles(); shownAt = performance.now(); blendEndAt = 0; showSlider(sup > 1);
     if (sup === 1) { blendEndAt = 0; showCheck(); return; } // S1 read it: no slider, the check starts at once
     const intro = sup === 2 ? say('Say the sounds, then pick.', { id: 'm-say-sounds' }) : say('Slide your finger under the word.', { id: 'm-slide-intro' });
@@ -178,8 +181,24 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       }
     }
   }
+  function logTrial(extra) {
+    if (trial.logged) return;
+    trial.logged = true;
+    record({ ...tag, skill: `blend:L${level}`, itemId: entry.w, gpcs: entry.parse?.split(' ') ?? [...entry.w], firstAttempt: trial.picks === 0,
+      assisted: trial.picks > 0 || trial.assisted, scored: trial.scored && !trial.modelled && !trial.briefModel, ...(trial.modelled || trial.briefModel ? { modelled: true } : {}),
+      ...(trial.briefModel ? { briefModel: true } : {}), support: trial.served, pattern: supportPattern(entry), hints: trial.hints, dotTaps: trial.dotTaps, helpUsed: trial.helpUsed,
+      ...(trial.wordHeard ? { wordHeard: true } : {}), ...(trial.scored ? {} : { fling: true }), ...extra });
+  }
   function afterBlend() {
     if (state !== 'blending') return;
+    // D: a brief in-trial re-model reuses the S4 "Kit says the word" animation, is unscored, and is followed at
+    // once by the same word at S3 (the child's try counts). It does not change tomorrow's starting support.
+    if (trial.briefModel) {
+      logTrial({ correct: true, firstAttempt: true, assisted: false, scored: false, modelled: true, briefModel: true, sweepMs: Math.round(trial.sweepMs ?? 0) });
+      afterBrief = true;
+      render();
+      return;
+    }
     if (choices) showCheck(); else reveal();
   }
 
@@ -208,8 +227,10 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     if (blendEndAt && guessGuard({ pickLatencyMs: latencyMs }).fast) return;
     audio.stop();
     const first = trial.picks++ === 0;
+    if (first && c.w !== entry.w) trial.missedFirst = true;
+    trial.logged = true;
     record({ ...tag, skill: `blend:L${level}`, itemId: entry.w, gpcs: entry.parse?.split(' ') ?? [...entry.w], correct: c.w === entry.w,
-      firstAttempt: first, assisted: !first || trial.assisted, scored: trial.scored && !trial.modelled, ...(trial.modelled ? { modelled: true } : {}), fast: guessGuard({ pickLatencyMs: latencyMs }).fast,
+      firstAttempt: first, assisted: !first || trial.assisted, scored: trial.scored && !trial.modelled && !trial.briefModel, ...(trial.modelled || trial.briefModel ? { modelled: true } : {}), ...(trial.briefModel ? { briefModel: true } : {}), fast: guessGuard({ pickLatencyMs: latencyMs }).fast,
       latencyMs, sweepMs: Math.round(trial.sweepMs ?? 0), contrast: (c.w !== entry.w && c.contrast) || choices.contrast || null, // a miss logs the position the picked word differed in
       // v2 V2 telemetry: the level served, hints (replays / taps at S3), dot taps (S2), 🔊 help (S1), both latencies
       support: trial.served, pattern: supportPattern(entry), hints: trial.hints, dotTaps: trial.dotTaps, helpUsed: trial.helpUsed, ...(trial.wordHeard ? { wordHeard: true } : {}),
@@ -295,6 +316,9 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
   }
   // --- Reveal ---
   function reveal(picked = false) {
+    // No picture / word-card check: Kit modelled the word and there was nothing to pick. Log it as a modelled
+    // sweep so the pattern can leave S4; it cannot count toward a scored pass.
+    if (!picked && trial && !trial.logged) logTrial({ correct: true, firstAttempt: true, assisted: false, scored: false, modelled: true, sweepMs: Math.round(trial.sweepMs ?? 0), latencyMs: 0 });
     state = 'revealed'; $('check').hidden = true;
     const card = $('card'); card.className = 'revealed'; card.innerHTML = `<div class="pic">${picHtml(entry.pic)}</div>`;
     fitRevealPic();
@@ -307,7 +331,12 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     setTimeout(() => { if (state === 'revealed') $('next').hidden = false; }, 2500);
   }
   function next() {
-    audio.stop(); idx++;
+    audio.stop();
+    // D: after two S3 misses on this word, the brief re-model starts at once (same word, no Next gap).
+    if (trial && (correction(entry) || {}).briefModel) { render(); return; }
+    // A missed word comes back later in the same session (S3 + demo), so two misses can meet the correction rule.
+    if (trial?.missedFirst && !words.slice(idx + 1).some(e => e.w === entry.w)) words.push(entry);
+    idx++;
     if (idx >= words.length) { state = 'done'; hand.stop(); seen.mark('slide'); (runDone ?? onDone)(stickers); return; }
     entry = words[idx]; render();
   }
