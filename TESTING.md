@@ -73,7 +73,7 @@ artifacts into `tests/ci/__screenshots__/`.
 
 `npm run test:playthrough` plays a fresh device through all 56 map stops, sound m to the story "lunch on the bench",
 with real sessions through the real UI (taps, slider drags, traces); no `?progress=`, dev-seed or activity jumps.
-Each stop must pass and get its map marker, in map order. A stop not passed within `KP_PT_CAP` sessions (default 8)
+Each stop must pass and get its map marker, in map order. A stop not passed within `KP_PT_CAP` sessions (default 12)
 or a session that stalls fails with the stop id, sessions, trials, accuracy, screen state, a screenshot and the
 last console lines (`report.json` in `KP_PT_OUT`). About 40 minutes on chromium.
 

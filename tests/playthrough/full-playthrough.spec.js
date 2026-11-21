@@ -11,8 +11,8 @@ import { startServer } from './server.js';
 // the stop id, sessions, trials, skill accuracy, screen state, a screenshot and the last console lines.
 //   KP_PT_BASE   app URL (default: an in-process server for this checkout, ./server.js), e.g. the production site
 //   KP_PT_WRONG  realistic child: chance of a wrong pick first (default 0 = perfect child)
-//   KP_PT_CAP    sessions allowed per stop (default 8)    KP_PT_OUT  report folder
-const WRONG = +(process.env.KP_PT_WRONG || 0), CAP = +(process.env.KP_PT_CAP || 8), SEED = +(process.env.KP_PT_SEED || 1);
+//   KP_PT_CAP    sessions allowed per stop (default 12)    KP_PT_OUT  report folder
+const WRONG = +(process.env.KP_PT_WRONG || 0), CAP = +(process.env.KP_PT_CAP || 12), SEED = +(process.env.KP_PT_SEED || 1);
 
 test('a fresh child passes all 56 map stops in order', async ({ page, browserName }, testInfo) => {
   const local = process.env.KP_PT_BASE ? null : await startServer();
