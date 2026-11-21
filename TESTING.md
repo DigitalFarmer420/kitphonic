@@ -45,6 +45,30 @@ bottom quarter. Screenshots land in `screenshots/sizes/`. The PR job serves the 
 headless Chromium. Locally, start the server first (`PORT=8099 npm start`) and install Python Playwright
 (`python3 -m pip install --user playwright`, then `python3 -m playwright install chromium` if you have no Chrome).
 
+### CI groups (tests/ci/)
+`.github/workflows/pr-checks.yml` also runs these, each as its own check, and keeps one sticky results comment on the PR
+(job `summary`; fork PRs get the same table on the run's summary page instead).
+
+| Check | What it runs |
+|---|---|
+| `lint` | `npm run lint` (ESLint 9 flat config `eslint.config.js`: undefined names, unreachable code, duplicate keys; no style rules) |
+| `sw-assets` | `node tools/gen-sw-assets.mjs --check` |
+| `smoke` | `tests/ci/smoke.spec.js`: hello → map → intro m → trace m (3 passes) → next; blend a word and answer its check; every screen boots. Desktop Chromium + WebKit, Android Chromium, iPhone WebKit, iPad WebKit (Mac UA, MacIntel, 5 touch points, DPR 2). Fails on a console error, a failed request, or any request off 127.0.0.1 |
+| `tracing` | `tests/ci/finger-trace.spec.js` (finger, Apple Pencil, mouse; m and a), `tests/e2e/trace.spec.js`, `tests/e2e/ipad-trace.spec.js`. 1 retry; retries are listed in the comment |
+| `sweep` | `tests/ci/kp-bug-003-sweep.spec.js`: every word-card word in `js/content.js` stays word cards after one and two misses; picture controls stay pictures |
+| `visual (webkit/chromium)` | `tests/ci/visual.spec.js` against the committed baselines in `tests/ci/__screenshots__/` at the Uiux sizes. Blocking |
+| `uiux report-only (webkit/chromium)` | `tests/ci/uiux.spec.js` + `tests/ci/diff-vs-base.mjs`. Report-only until develop's findings are fixed |
+
+Locally (pick your own port; the CI config never reuses a running server):
+```
+KP_CI_PORT=20611 npx playwright test -c tests/ci/playwright.ci.config.js --project 'smoke-*'
+KP_CI_PORT=20611 npx playwright test -c tests/ci/playwright.ci.config.js --project 'webkit-ipados-*' --project 'trace-*'
+KP_E2E_PORT=20612 npm run test:e2e         # the existing e2e on another port
+```
+Visual baselines are made on the GitHub runner, not locally (emoji and font hinting differ). To refresh them on purpose,
+label the PR `visual:update`, then commit the files from the run's `visual-baselines-webkit` / `visual-baselines-chromium`
+artifacts into `tests/ci/__screenshots__/`.
+
 ## Flow
 Hello ▶ -> **map** (home) -> ▶ (or tap the glowing stop) -> planned 5–10 min session (due review, the current stop,
 practice, mixed review) -> level-up moment if a stop was passed (➜ locked 1.5 s; path draws forward) or all-done -> map.
@@ -73,6 +97,7 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `progress=47` | map at the L6 digraph-words stop (56 stops: 38 sounds, L1–L7, 6 new-words stops, 5 stories) |
 | `level=6&word=ship` | digraph word: one joined sky "sh" tile, one slider stop per sound |
 | `activity=intro&gpc=sh` | digraph fusion intro: s + h slide together into one sky tile |
+| `textScale=1..3` | act as if the device text size is that multiple of the default (16px): 1.5 = 24px. The app honours up to 2× (`TEXT_SCALE_MAX`); larger values behave as 2× |
 | `reducedMotion=1` | act as if the device asks for reduced motion (grown-ups setting On/Off still wins) |
 | `minutes=5..10` | session length target (default 7) |
 | `direct=1` | word screen only (implied by `level=` / `word=`) |
