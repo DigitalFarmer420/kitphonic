@@ -1,5 +1,5 @@
 // Word-screen logic (spec §3.5): clip routing, picture-check choices, session queue. Pure, unit-tested.
-import { WORDS, PICTURE_POOL, LETTER_INFO, STAR_WORDS, MASCOT, SFX, SESSION_WORDS } from './content.js';
+import { WORDS, CARD_WORDS, PICTURE_POOL, LETTER_INFO, STAR_WORDS, MASCOT, SFX, SESSION_WORDS } from './content.js';
 import { LETTERS, STRETCHY, markers, tapResult } from './core.js';
 import { VOWEL_IDS } from './sequence.js';
 // VC rimes buildable from the prototype set (vowel + consonant), from the R1 sequence table.
@@ -133,13 +133,14 @@ export function hasWordCheck(entry, { known = null, cfg = {}, level = entry.leve
   return !!wordCards(entry.w, { n: cfg.choicesPerCheck ?? 3, rand, known });
 }
 // Printed word-card check for words without a picture check (L1 VC words, sat, top…): the child picks the word they
-// just read from minimal-pair printed words (one letter different). opts.known: only words with taught GPCs.
+// just read from minimal-pair printed words (one letter different). Pool is WORDS plus CARD_WORDS (printed
+// distractors that are not lesson words). opts.known: only words with taught GPCs.
 // Each card is tagged with the position it differs in (first letter = onset, last = final, a vowel letter = vowel),
 // so word-card misses feed the error patterns too; focus puts cards differing at that position first.
 export const cardContrast = (word, other) => { const i = [...word].findIndex((c, k) => c !== other[k]);
   return i < 0 ? null : i === 0 ? 'onset' : i === word.length - 1 ? 'final' : /[aeiou]/.test(word[i]) && /[aeiou]/.test(other[i]) ? 'vowel' : null; };
 export function wordCards(word, { n = 3, rand = Math.random, known = null, focus = null } = {}) {
-  const all = [...new Map(Object.values(WORDS).flat().map(e => [e.w, e])).values()];
+  const all = [...new Map([...Object.values(WORDS).flat(), ...CARD_WORDS].map(e => [e.w, e])).values()];
   const ok = e => !known || e.parse.split(' ').every(g => known.has(g));
   const diff1 = w => w.length === word.length && [...w].filter((c, i) => c !== word[i]).length === 1;
   const pool = shuffle(all.filter(e => e.w !== word && diff1(e.w) && ok(e)), rand).map(e => ({ w: e.w, card: true, contrast: cardContrast(word, e.w) }));
