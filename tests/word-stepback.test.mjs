@@ -175,3 +175,16 @@ test('B (sounds): two tiny < 60% samples do not step back; a valid sample still 
   assert.ok(!easier([...base, ...tr('a', T0 + D, [false, true]), ...tr('b', T0 + 2 * D, [false, false])]));
   assert.ok(easier([...base, ...tr('a', T0 + D, [false, true, false]), ...tr('b', T0 + 2 * D, [false, false])]));
 });
+
+// --- the whole map (tools/sim-map.mjs, planner level): every stop is reachable ---
+test('whole map: a perfect child passes every one of the 56 stops in at most 2 sessions', async () => {
+  const { simulate } = await import('../tools/sim-map.mjs');
+  const r = await simulate({ wrong: 0, seed: 1, root: new URL('..', import.meta.url).pathname });
+  assert.ok(r.done); assert.equal(r.per.length, 56);
+  assert.ok(r.per.every(s => s.sessions >= 1 && s.sessions <= 2), r.per.filter(s => s.sessions > 2).map(s => `${s.label}:${s.sessions}`).join(' '));
+});
+test('whole map: a child wrong 20% of the time finishes the map with no stuck stop (seed 4 never left stop before this fix)', async () => {
+  const { simulate } = await import('../tools/sim-map.mjs');
+  const r = await simulate({ wrong: 0.2, seed: 4, root: new URL('..', import.meta.url).pathname, perStop: 20 });
+  assert.ok(r.done, `stopped at ${r.at}`); assert.ok(!r.per.some(s => s.stuck));
+});

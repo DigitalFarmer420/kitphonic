@@ -52,7 +52,7 @@ export async function simulate({ wrong = 0, seed = 1, root = '.', maxSessions = 
   return { per, total, done: m.done || m.index >= STOPS.length, at: m.index };
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const a = process.argv.slice(2), arg = (k, d) => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : d; };
   const r = await simulate({ wrong: +arg('--wrong', 0), seed: +arg('--seed', 1), root: arg('--root', '.'), maxSessions: +arg('--max', 400), perStop: +arg('--per-stop', 40),
     log: a.includes('--trace') ? console.log : null });
