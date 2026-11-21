@@ -362,14 +362,25 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
         { now: seen.demo('trace'), stepMs: 260 }); });
   }
 
-  // landscape: the undo + stars column sits right next to the (full-height) letter card
+  // landscape (short and, with the flow layout, tall): the undo + stars column sits right next to the
+  // (full-height) letter card, so a wide window gives the letter the height instead of cream side bands.
   function placeBar() {
-    const bar = $('trace').querySelector('.ibar'), card = $('trace').querySelector('.tcard'); bar.style.left = ''; if (card) card.style.maxWidth = '';
-    if (stage.info.mode !== 'short') return;
+    const bar = $('trace').querySelector('.ibar'), card = $('trace').querySelector('.tcard'); bar.style.left = '';
+    if (card) { card.style.maxWidth = ''; card.style.height = ''; card.style.bottom = ''; }
+    if (stage.info.mode === 'portrait') return;
     // rc6: a wide letter (ss, qu, ng…) must not run under the undo / stars column, or a stroke's start dot sits under
-    // Undo (iPhone landscape): cap the centred card so its right edge + 20 px clears the column (150 px + 16 px margin)
-    const u = stage.info.u || 1;
-    if (card) card.style.maxWidth = Math.max(200 * u, stage.info.w - 2 * (150 + 16 + 20) * u) + 'px';
+    // Undo (iPhone landscape): cap the centred card so its right edge + 20 px clears the column (150 px + 16 px margin).
+    // The cap is symmetric. On a wide (tall-mode) board it also keeps the card clear of Kit's prompt on the left:
+    // 18 px margin + 72 px Kit + 12 px gap + the 176 px (11rem) bubble + 16 px. Short keeps its rc6 cap so a
+    // phone in landscape keeps today's letter size.
+    const u = stage.info.u || 1, side = (stage.info.mode === 'tall' ? 18 + 72 + 12 + 176 + 16 : 150 + 16 + 20) * u;
+    if (card) {
+      const maxW = Math.max(200 * u, stage.info.w - 2 * side), [aw, ah] = String(card.style.aspectRatio).split('/').map(Number);
+      card.style.maxWidth = maxW + 'px';
+      // A capped wide letter keeps its aspect: the card gets shorter, not a tall box with bands (WebKit would
+      // otherwise keep the inset height). Engines then agree.
+      if (aw > 0 && ah > 0 && card.offsetHeight * aw / ah > maxW + 0.5) { card.style.bottom = 'auto'; card.style.height = (maxW * ah / aw) + 'px'; }
+    }
     requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; const uu = stage.info.u || 1; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16 * uu, c.offsetLeft + c.offsetWidth / 2 + 20 * uu) + 'px'; });
   }
   function finish() { const r = run; stop(); r?.onComplete?.({ activity: r.activity }); }
