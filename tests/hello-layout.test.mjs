@@ -35,9 +35,16 @@ test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
   assert.match(bubble, /text-wrap:balance/);
   assert.match(bubble, /text-align:center/);
   assert.equal(bubble.includes('nowrap'), false);
-  assert.equal(/height:\d/.test(bubble), false);
+  assert.equal(/(?:^|;)height:\d/.test(';' + bubble), false); // min-height:0 lets the greeting scroll; it is not a fixed height
+  assert.match(bubble, /margin-top:max\(1rem, calc\(14\.75rem - var\(--h\) \* \.34\)\)/);
   assert.match(bubble, /max-height:calc\(var\(--h\) \* \.78 - 23\.5rem\)/);
   assert.match(bubble, /overflow-y:auto/);
+  assert.equal(bubble.includes('position:absolute'), false);
+  const [hello] = decls('#hello');
+  assert.match(hello, /display:flex/);
+  assert.match(hello, /flex-direction:column/);
+  assert.match(hello, /padding-top:calc\(var\(--h\) \* \.1\)/);
+  assert.match(hello, /padding-bottom:calc\(var\(--h\) \* \.12\)/);
 });
 
 test('shared bubble chrome is unchanged', () => {
@@ -65,11 +72,12 @@ test('hello bubble can be focused from the keyboard without a live region', () =
 test('portrait and short hello bubbles do not cap lines or shrink type', () => {
   const [portrait] = decls('.portrait #hello .bubble');
   const [short] = decls('.short #hello .bubble');
-  assert.match(portrait, /top:calc\(var\(--h\) \* \.13 \+ 14\.25rem\)/);
+  assert.match(portrait, /margin-top:max\(0\.5rem, calc\(14\.25rem - var\(--h\) \* \.34\)\)/);
   assert.equal(portrait.includes('font-size'), false);
   assert.equal(portrait.includes('text-align'), false);
   assert.equal(portrait.includes('nowrap'), false);
   assert.match(portrait, /max-height:calc\(var\(--h\) \* \.69 - 23\.25rem\)/);
+  assert.match(short, /margin-top:0\.5rem/);
   assert.match(short, /font-size:1\.25rem/);
   assert.match(short, /max-width:calc\(var\(--w\) - 3rem\)/);
   assert.equal(short.includes('text-align'), false);
