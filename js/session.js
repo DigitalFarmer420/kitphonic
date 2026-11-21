@@ -6,12 +6,12 @@
 //   { type: 'words', level, words: [entry], why }
 //   { type: 'star', word, why }   (only when opts.stars: Star Word screen)
 import { GPC, GPCS } from './sequence.js';
-import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor, DAY } from './mastery.js';
+import { skillState, atLeast, knownGpcs, dueItems, blendingUnlocked, pacingFor, counts, DAY } from './mastery.js';
 import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, slippedStops, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
 import { shuffle, minimalPairs, wordCards } from './word-logic.js';
-import { patternSupport, SUPPORT_RULES, S } from './support.js';
+import { patternSupport, supportPattern, SUPPORT_RULES, S } from './support.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
 import { servableFamilies } from './families.js';
@@ -34,6 +34,25 @@ export function fillWordList(list, n, rand = Math.random) {
     const e = bag.splice(i, 1)[0]; if (!e) break; out.push(e);
   }
   return out;
+}
+// Word-level step back (§3.7.1, thresholds unchanged; Education Researcher A + B). Returns what the current word stop
+// should serve: 'none' (as usual) | 'warmup' (one easier session on the last passed level, extra help) |
+// 'reentry' (the stop's own words again with extra help: hand demo, never a full model) | 'shortWarmup' (a few easier
+// words at the start, then the re-entry). Never more than two warm-ups per level: the child is never parked below it.
+export const STEP_BACK_MIN_READS = 5, REENTRY_ACC = 0.6;
+export function wordStepBack(responses, lv) {
+  const skill = `blend:L${lv}`;
+  if (pacingFor(responses, skill, { minStepBackReads: STEP_BACK_MIN_READS }) !== 'stepBack') return 'none';
+  const firstAt = Math.min(...responses.filter(r => r.skill === skill).map(r => r.timestamp));
+  // warm-up reads for this level: tagged stepBackFor; older logs only carry stepBack on the lower-level words
+  const isWarm = r => r.skill?.startsWith('blend:') && r.skill !== skill && (r.stepBackFor === lv || (r.stepBackFor == null && r.stepBack === true && r.timestamp > firstAt));
+  const warm = responses.filter(isWarm), sessions = new Set(warm.map(r => r.sessionId));
+  if (!sessions.size) return 'warmup';
+  if (sessions.size >= 2) return 'reentry';
+  const lastWarm = Math.max(...warm.map(r => r.timestamp));
+  const since = responses.filter(r => r.skill === skill && counts(r) && r.timestamp > lastWarm);
+  if (since.length < STEP_BACK_MIN_READS) return 'reentry'; // collect a valid sample on the supported re-entry first
+  return since.filter(r => r.correct).length / since.length < REENTRY_ACC ? 'shortWarmup' : 'reentry';
 }
 // Session end is not a passed stop. 'unlocked' is the level-up; anything else is more practice, and the child may stop.
 export function sessionOutcome(beforeIndex, afterIndex) {
@@ -75,9 +94,11 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // The current stop asks for 5 reads (secure needs 5). L1 can only serve at/am, and the first blends are
   // modelled (unscored) until 6 slow sweeps — so one session has to finish that model, or the next stop
   // cannot open on the following session's independent reads. Review lists stay as they are.
+  // The same holds for every word stop whose pattern is still at S4: mat (the first CVC) starts modelled too,
+  // and 5 words left it one sweep short, so it took a third session to open (a "never ends" report).
   const wordsForStop = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? (ws.length >= n ? shuffle(ws, rand).slice(0, n) : fillWordList(ws, n, rand)) : []; };
-  const wordRounds = lv => (lv === 1 && patternSupport(responses, 'VC', now).level === S.MODEL) ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5;
-  const stepBack = skill => pacingFor(responses, skill) === 'stepBack';
+  const wordRounds = lv => (patternSupport(responses, supportPattern({ level: lv }), now).level === S.MODEL ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5);
+  const stepBack = skill => pacingFor(responses, skill, { minStepBackReads: STEP_BACK_MIN_READS }) === 'stepBack'; // B: a step back needs a valid sample
   // an easy pool for a step-back round: the sound + two secure letters that sound and look different
   const easyPool = g => { const far = x => x !== g && GPC[x]?.phoneme !== GPC[g]?.phoneme && !CONFUSABLE.has([g, x].sort().join(''));
     return [...new Set([g, ...active.filter(x => far(x) && atLeast(st(`sound:${x}`), 'secure')), ...pool.filter(far)])].slice(0, 3); };
@@ -135,14 +156,18 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
     if (s) push({ type: 'story', story: s, why: 'new' });
     else if (!need.length) push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' });
   } else if (cur?.kind === 'words') {
-    let lv = cur.level, ws = wordsForStop(lv, wordRounds(lv)), easier = false;
+    let lv = cur.level, ws = wordsForStop(lv, wordRounds(lv)), easier = false, assist = false, stepBackFor = null;
     if (!ws.length && passedLevels.length) { lv = passedLevels.at(-1); ws = wordsAt(lv, 5); }
-    if (ws.length && stepBack(`blend:L${lv}`)) { // §3.7.1 step back: the last easier level passed, S3+ support and the hand demo
-      const down = passedLevels.filter(l => l < lv).at(-1), dws = down ? wordsAt(down, 4) : [];
-      if (dws.length) { lv = down; ws = dws; } else ws = ws.slice(0, 4);
-      easier = true;
+    const sb = ws.length ? wordStepBack(responses, lv) : 'none';
+    if (sb !== 'none') { // §3.7.1 step back: the last easier level passed, S3 support and the hand demo; then back to this level
+      const down = passedLevels.filter(l => l < lv).at(-1), dws = down ? wordsAt(down, sb === 'shortWarmup' ? 2 : 4) : [];
+      if (sb === 'warmup') { if (dws.length) { stepBackFor = lv; lv = down; ws = dws; } else ws = ws.slice(0, 4); easier = true; }
+      else { // re-entry: this level's own words, with extra help; a second (short) warm-up opens the same session
+        if (sb === 'shortWarmup' && dws.length && blendingUnlocked(responses, now)) push({ type: 'words', level: down, words: dws, why: 'easier', assist: true, stepBackFor: lv });
+        assist = true;
+      }
     }
-    if (ws.length && blendingUnlocked(responses, now)) push({ type: 'words', level: lv, words: ws, why: easier ? 'easier' : 'new', ...(easier ? { assist: true } : {}) });
+    if (ws.length && blendingUnlocked(responses, now)) push({ type: 'words', level: lv, words: ws, why: easier ? 'easier' : 'new', ...(easier || assist ? { assist: true } : {}), ...(stepBackFor ? { stepBackFor } : {}) });
     else push({ type: 'letters', activity: 'hunt', pool, targets: active.filter(g => pool.includes(g)), rounds: 5, why: 'practice' }); // sounds not yet secure enough
   }
   // v2 V9 rule 5: the session after a story is read offers one re-read (scored separately as reread:<id>); the most

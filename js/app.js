@@ -70,8 +70,9 @@ let session = null; // { plan, i, started, stickers }
 // v2 V2: support level per word — forced (?support / ?speakBeforeCheck), else the ladder in a session (dev direct
 // screens without a session use S3, the scored default)
 const supportLevel = entry => cfg.support ?? (cfg.speakBeforeCheck ? 4 : session && cfg.supportLadder ? supportFor(store.all(), entry, { sessionId }).level : 3);
+const guidedWord = entry => cfg.support == null && !cfg.speakBeforeCheck && !!session && cfg.supportLadder && supportFor(store.all(), entry, { sessionId }).guided;
 const screen = createWordScreen({
-  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel,
+  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel, guided: guidedWord,
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });
@@ -125,7 +126,7 @@ function runNext() {
     letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound, assist: it.assist, n: it.n,
       onComplete: r => { if (r?.score) session && session.stickers.push('⭐'); runNext(); } });
   } else if (it.type === 'words') {
-    show('word'); screen.start(it.words, it.level, { apply: it.apply, assist: it.assist, focus: it.focus, onDone: st => { session?.stickers.push(...st); runNext(); } });
+    show('word'); screen.start(it.words, it.level, { apply: it.apply, assist: it.assist, stepBackFor: it.stepBackFor, focus: it.focus, onDone: st => { session?.stickers.push(...st); runNext(); } });
   } else if (it.type === 'story') {
     show('sentence'); sentenceScreen.start({ story: it.story, reread: it.reread, onComplete: () => { session?.stickers.push('📚'); runNext(); } });
   } else if (it.type === 'lesson') {
