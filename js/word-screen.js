@@ -1,7 +1,8 @@
 // Word screen controller (spec §3.5): tiles + markers + Blend Slider -> picture check -> reveal.
 import { createSweep, attached, graphemeUnits } from './core.js';
 import { guessGuard, RULES } from './mastery.js';
-import { supportPattern } from './support.js';
+import { supportPattern, S } from './support.js';
+const S_BLEND = S.BLEND;
 import { wordLayout, layoutFor, sliderTrack, fractionAt } from './layout.js';
 import { markersFor, clipForMarker, clipForTap, clipForBlend, clipForReveal, slideAgainClip, SLIDE_AGAIN_TEXT,
   makeChoices, wordCards, reshuffle, presentCheck, needsCheck, caseFor } from './word-logic.js';
@@ -12,6 +13,9 @@ export const sweepOutcome = (sweepMs, phonemes) => (guessGuard({ sweepMs, phonem
 // The check used to open ~450 ms after the blend, while a pick under 600 ms is unscored. A correct tap in that
 // gap finished the word and never counted. Open only once the guess window has elapsed (never earlier than the
 // existing pause that lets the sounds finish).
+// The support level a word is served at. Without a check there is nothing to read against, so Kit models it (S4).
+// A step-back / re-entry round (assist) is S3 exactly: the child hears each sound, never a full model.
+export const servedSupport = ({ hasCheck, assist, ladder }) => (!hasCheck ? 4 : assist ? S_BLEND : Math.max(1, Math.min(4, ladder ?? 3)));
 export const checkDelayMs = (pauseMs, guardMs = RULES.fastPickMs) => Math.max(0, pauseMs || 0, guardMs);
 
 const $ = id => document.getElementById(id);
@@ -24,7 +28,7 @@ import { createGhostHand, centerIn } from './ghost-hand.js';
 import { noSeen } from './seen.js';
 import { pointerOwner, tryCapture, sliderKeyTarget, applySliderAria } from './gesture.js';
 // v2 V2 support ladder: support(entry) -> 4 model | 3 you blend | 2 silent dots | 1 read it (js/support.js)
-export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3) }) {
+export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHome, record = () => {}, seen = noSeen, reduced = () => false, support = () => (cfg.speakBeforeCheck ? 4 : 3), guided = () => false }) {
   // R7 scoring for this word: first pick only, unassisted; guess guards on sweep speed and pick latency.
   let runDone = null, assist = false, focus = null, baseLevel = null, tag = {}, trial = null, sweepStart = null, blendEndAt = 0, shownAt = 0, checkAt = 0;
   let checkTrial = 0, entry, level, ms, units = [], layout, sweep, choices, state = 'idle', mode, dragging = null, words = [], idx = 0, stickers = [];
@@ -78,15 +82,16 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
     choices = needsCheck(entry, cfg, level) ? makeChoices(w, { rand, n: cfg.choicesPerCheck, strategy: focus ? `focus:${focus}` : cfg.choiceStrategy[level], trial: checkTrial++ })
       : cfg.wordCardCheck ? wordCards(w, { rand, n: cfg.choicesPerCheck, known: known?.(), focus }) : null;
     // support level for this word; without a check there is nothing to read against, so Kit models it (S4)
-    // §3.7.1 step back (planner): an easier round with extra hints = never below S3 (the child hears each sound), hand demo at once
-    const sup = choices ? Math.max(assist ? 3 : 1, Math.min(4, support(entry) ?? 3)) : 4;
+    // §3.7.1 step back / re-entry (planner assist): S3 exactly (the child hears each sound, never a full model), hand demo at once
+    const sup = servedSupport({ hasCheck: !!choices, assist, ladder: support(entry) });
+    const guide = !!choices && !assist && sup < 4 && !!guided(entry); // C: after a modelled miss, the hand demo at once
     trial = { picks: 0, assisted: false, scored: true, support: sup, served: sup, hints: 0, dotTaps: 0, helpUsed: false }; sweepStart = null;
     state = 'slide'; renderPebbles(); shownAt = performance.now(); blendEndAt = 0; showSlider(sup > 1);
     if (sup === 1) { blendEndAt = 0; showCheck(); return; } // S1 read it: no slider, the check starts at once
     const intro = sup === 2 ? say('Say the sounds, then pick.', { id: 'm-say-sounds' }) : say('Slide your finger under the word.', { id: 'm-slide-intro' });
     intro.then(() => {
       if (state !== 'slide') return; // ghost hand drags the knob along the track: first words ever + after 5 s idle
-      hand.start(handPath, { now: (idx === 0 && seen.demo('slide')) || (assist && idx === 0) });
+      hand.start(handPath, { now: (idx === 0 && seen.demo('slide')) || (assist && idx === 0) || guide });
     });
   }
   function showSlider(on) { $('slider').hidden = !on; mk.hidden = !on; $('word').dataset.support = trial.support; }
@@ -335,7 +340,7 @@ export function createWordScreen({ known, audio, cfg, rand, stage, onDone, onHom
       if (state === 'slide') render();
       else if (state === 'revealed') { layoutWord(); paintTiles(); fitRevealPic(); }
     },
-    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
+    start(list, lv, opts = {}) { releaseSlide(); runDone = opts.onDone ?? null; assist = !!opts.assist; focus = opts.focus ?? null; words = list; level = lv; baseLevel = lv ?? null; tag = { ...(opts.apply ? { apply: opts.apply } : {}), ...(assist ? { stepBack: true } : {}), ...(opts.stepBackFor ? { stepBackFor: opts.stepBackFor } : {}), ...(focus ? { focus } : {}) }; idx = 0; stickers = []; mode = cfg.tapMode[lv]; entry = words[0]; audio.warm?.(list.flatMap(e => [clipForBlend(e.w).id, clipForReveal(e.w).id, `pic-${e.w}`])); $('word').hidden = false; render(); },
     get state() { return state; }, get entry() { return entry; }, get choices() { return choices; },
     debugShow(what) { // automated layout checks only (tools/check-sizes.py)
       if (what === 'check') { choices ??= makeChoices(entry.w, { rand, n: cfg.choicesPerCheck, trial: 0 }); state = 'check'; showCheck(); }
