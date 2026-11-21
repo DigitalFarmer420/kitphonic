@@ -1,5 +1,6 @@
-// Learning-map geometry (pure, unit-tested). A window of up to 6 stops around the current one, winding bottom->top
-// in portrait and left->right in landscape, clear of the top bar and the big ▶ button (thumb zone, bottom centre).
+// Learning-map geometry (pure, unit-tested). The path holds every stop, winding bottom->top
+// in portrait and left->right in landscape, with the same spacing as the old 6-stop window.
+// The visible board is a clipped scroller (clear of the top bar and the big ▶ button).
 // Coordinates are CSS pixels of the fluid board. STOP_R / GO are the design sizes; mapMetrics scales them by u
 // and floors stop diameters at 64px (the current stop at 72px) so the touch floor matches the CSS clamps.
 import { MIN_TOUCH } from './stage.js';
@@ -20,23 +21,87 @@ export function mapMetrics(stage) {
 }
 export const groupOf = s => s.group ?? (s.kind === 'words' ? (s.level === 6 ? 'sh · ch · th' : s.level === 5 ? 'end blends' : s.level >= 4 ? 'blends' : 'blend words') : s.kind === 'sound' ? 'sounds' : '');
 
-// stops: mapState().stops; index: current index. Returns the visible window (with teasers appended near the end).
+// Chrome of the map screen: top bar (⌂, stars, ⚙) and the ▶ button. The scroller sits between them.
+// 5.375rem = .top offset 0.875rem + 4.5rem button. Root rem is 16×u.
+export const BOARD_GAP = 8; // keep a clipped path stroke off the rounded ▶ and the top bar
+export function boardInsets(stage, measured) {
+  const m = mapMetrics(stage), u = m.u;
+  if (measured && Number.isFinite(measured.boardTop) && Number.isFinite(measured.boardBottom)) {
+    return { boardTop: measured.boardTop, boardBottom: measured.boardBottom, boardH: m.h - measured.boardTop - measured.boardBottom, boardW: m.w };
+  }
+  const boardTop = 5.375 * 16 * u, boardBottom = m.h - m.goTop + BOARD_GAP;
+  return { boardTop, boardBottom, boardH: m.h - boardTop - boardBottom, boardW: m.w };
+}
+
+export function mapStep(stage, size = WINDOW) {
+  const { top, bottom, w, mode, u } = mapMetrics(stage);
+  const denom = Math.max(1, size - 1);
+  return mode === 'portrait'
+    ? { axis: 'y', step: (bottom - top) / denom }
+    : { axis: 'x', step: (w - 180 * u) / denom };
+}
+
+// All stops, with idx / now flags. Teasers (none today) still append at the end.
+export function mapStops(stops, index) {
+  const all = [...stops, ...TEASERS];
+  return all.map((s, k) => ({ ...s, idx: k, now: k === index && index < stops.length }));
+}
+
+// Visible 6-stop neighborhood around the current one (used to place the scroller's opening slot).
 export function mapWindow(stops, index, size = WINDOW) {
   const all = [...stops, ...TEASERS], cur = Math.min(index, stops.length - 1);
   let start = Math.max(0, cur - 2); start = Math.min(start, Math.max(0, all.length - size));
   return all.slice(start, start + size).map((s, k) => ({ ...s, idx: start + k, now: start + k === index && index < stops.length }));
 }
-export function mapLayout(win, stage) {
-  const { w, h, mode, u, top, bottom, nowR, stopR } = mapMetrics(stage);
-  const n = win.length;
-  const P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [1, 0, 1, 0, 1, 0]; // landscape zigzag uses the full height (room for Kit beside a stop)
+
+function windowStart(index, count, size = WINDOW) {
+  const cur = Math.min(Math.max(0, index), Math.max(0, count - 1));
+  let start = Math.max(0, cur - 2);
+  return Math.min(start, Math.max(0, count - size));
+}
+
+// Lay out every stop on a long trail with the 6-window spacing. Portrait grows downward in content
+// (later stops toward the top); landscape grows to the right. pts also carry contentW / contentH.
+export function mapLayout(win, stage, insets) {
+  const m = mapMetrics(stage), { w, h, mode, u, top, bottom, nowR, stopR } = m;
+  const band = boardInsets(stage, insets), { step } = mapStep(stage);
+  const n = win.length, P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [1, 0, 1, 0, 1, 0];
+  const padTop = top - band.boardTop;
+  // Only the path axis grows; the other axis matches the scroller so the trail cannot drift under the chrome.
+  let contentW = band.boardW, contentH = band.boardH;
+  if (mode === 'portrait') contentH = padTop + Math.max(0, n - 1) * step + (h - band.boardBottom - bottom);
+  else contentW = 90 * u + Math.max(0, n - 1) * step + 90 * u;
   return win.map((s, i) => {
-    const r = s.now ? nowR : stopR, t = n > 1 ? i / (n - 1) : 0;
+    const r = s.now ? nowR : stopR;
     let x, y, side;
-    if (mode === 'portrait') { y = bottom - t * (bottom - top); x = w * P[i % P.length]; side = x < w / 2 ? 'right' : 'left'; }
-    else { x = 90 * u + t * (w - 180 * u); y = top + L[i % L.length] * (bottom - top); side = 'below'; } // landscape: every label on the same side (below its stop)
-    return { ...s, x, y, r, side, low: mode !== 'portrait' && y > (top + bottom) / 2 };
+    if (mode === 'portrait') {
+      y = padTop + Math.max(0, n - 1 - i) * step;
+      x = w * P[i % P.length];
+      side = x < w / 2 ? 'right' : 'left';
+    } else {
+      x = 90 * u + i * step;
+      y = top - band.boardTop + L[i % L.length] * (bottom - top);
+      side = 'below';
+    }
+    return { ...s, x, y, r, side, low: mode !== 'portrait' && y > (top - band.boardTop + bottom - band.boardTop) / 2, contentW, contentH };
   });
+}
+
+// Scroll offsets that put the current stop in the same viewport slot the 6-stop window used.
+export function mapScroll(win, stage, index, insets) {
+  const pts = win[0] && Number.isFinite(win[0].x) ? win : mapLayout(win, stage, insets);
+  const m = mapMetrics(stage), band = boardInsets(stage, insets), { step, axis } = mapStep(stage);
+  const n = pts.length, contentW = pts[0]?.contentW ?? m.w, contentH = pts[0]?.contentH ?? m.h;
+  if (!n) return { left: 0, top: 0, contentW, contentH };
+  const cur = Math.min(Math.max(0, index), n - 1), k = cur - windowStart(cur, n);
+  const p = pts[cur];
+  const maxLeft = Math.max(0, contentW - band.boardW), maxTop = Math.max(0, contentH - band.boardH);
+  if (axis === 'y') {
+    const target = (m.bottom - k * step) - band.boardTop;
+    return { left: 0, top: Math.max(0, Math.min(maxTop, p.y - target)), contentW, contentH };
+  }
+  const target = 90 * m.u + k * step;
+  return { left: Math.max(0, Math.min(maxLeft, p.x - target)), top: 0, contentW, contentH };
 }
 // Smooth path through the stop centres (quadratic through midpoints).
 export function pathD(pts) {
