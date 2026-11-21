@@ -10,6 +10,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      emergency_override:
+        description: 'Owner only: deploy even though the release PR did not pass the playthrough check'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,6 +24,47 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # The merged develop->main PR must have passed the required `playthrough` check (playthrough.yml), so an
+  # admin-bypassed merge does not ship by itself. The only way past this is a manual run of this workflow with
+  # emergency_override=true by a repository admin (RELEASE.md, "Emergency deploy").
+  playthrough:
+    name: Playthrough passed for this commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: read
+      statuses: read
+      pull-requests: read
+    steps:
+      - name: Check the release PR's playthrough result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.emergency_override == true }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          if [ "$OVERRIDE" = "true" ]; then
+            perm="$(gh api "repos/$repo/collaborators/$GITHUB_ACTOR/permission" --jq .permission)"
+            if [ "$perm" != "admin" ]; then
+              echo "::error title=playthrough::emergency_override needs a repository admin; $GITHUB_ACTOR has '$perm'."; exit 1
+            fi
+            echo "::warning title=playthrough::Emergency override by $GITHUB_ACTOR: deploying $GITHUB_SHA without a passed playthrough."
+            echo "## Emergency override by \`$GITHUB_ACTOR\` (playthrough not verified)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # pass = a successful `playthrough` check run or commit status on this commit, or on the head of the PR it merged
+          passed() {
+            local sha="$1"
+            [ "$(gh api "repos/$repo/commits/$sha/check-runs?check_name=playthrough&per_page=100" --jq '[.check_runs[] | select(.conclusion == "success")] | length')" != "0" ] && return 0
+            [ "$(gh api "repos/$repo/commits/$sha/status" --jq '[.statuses[] | select(.context == "playthrough")][0].state // ""')" = "success" ]
+          }
+          shas="$GITHUB_SHA $(gh api "repos/$repo/commits/$GITHUB_SHA/pulls" --jq '[.[] | select(.merged_at != null and .base.ref == "main") | .head.sha] | join(" ")')"
+          for s in $shas; do
+            if passed "$s"; then echo "playthrough passed for $s"; exit 0; fi
+          done
+          echo "::error title=playthrough::No passing 'playthrough' check for $GITHUB_SHA or its release PR (checked: $shas). Production was not deployed. See RELEASE.md, Emergency deploy."
+          exit 1
+
   gate:
     name: Test gate
     uses: ./.github/workflows/test-gate.yml
@@ -27,8 +73,8 @@ jobs:
 
   pages-source:
     name: Confirm Pages source is GitHub Actions
-    needs: gate
-    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success'
+    needs: [gate, playthrough]
+    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.playthrough.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: Confirm Pages publishes from GitHub Actions
@@ -51,8 +97,8 @@ jobs:
 
   deploy:
     name: Deploy production
-    needs: [gate, pages-source]
-    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.pages-source.result == 'success'
+    needs: [gate, playthrough, pages-source]
+    if: github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.playthrough.result == 'success' && needs.pages-source.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

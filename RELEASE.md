@@ -22,6 +22,23 @@ The stage reads `--safe-area-inset-*` when Capacitor 8.6.0 SystemBars sets them,
 
 On the packaged build, record API level and the active WebView package version together. Measure portrait and landscape, rotate back, gesture and three-button navigation, and a cutout if the image has one, at cold start and after resume. Compare WindowInsets (status, navigation, cutout, IME) with the WebView's on-screen bounds and with `innerWidth` / `innerHeight`, `visualViewport`, and both `--safe-area-inset-*` and `env(safe-area-inset-*)`. Pass when the bars stay visible and the hello Play button, top home/replay controls, blend slider, map Go button, and tracing card sit inside the safe bounds, with no second gap equal to the bar size. Below WebView 140 the CSS variables should be `0px` and the WebView bounds should already sit inside the bars. At 140 and above the variables should match the bars and cutout, and the WebView may be full-bleed. There is no child text field; if an IME is shown, `--safe-area-inset-bottom` should be `0px` while the WebView height shrinks, and the stage should not shrink again. Do not uninstall an owner install or bypass its signature.
 
+## Release gate: full playthrough (required on main)
+
+Every pull request into `main` must pass the `playthrough` check (`.github/workflows/playthrough.yml`). It is a
+required status check in main's branch protection. Release PRs come from `develop`; a PR into `main` from any
+other branch fails the check. Back-merges (main into develop) are not affected. Until the full 56-stop test lands,
+the check is a placeholder that always fails, so merges to main are blocked by the owner's decision.
+
+`deploy-prod.yml` also checks it: a push to `main` deploys only if the merged release PR's head (or the commit
+itself) has a passing `playthrough` check, so a merge that bypassed the check does not ship by itself.
+
+**Emergency merge.** Repository admins can still merge with the check failing (main's protection does not enforce
+the rules on admins). Production then does not deploy on its own.
+
+**Emergency deploy.** A repository admin runs *Actions → Deploy production → Run workflow* on `main` with
+`emergency_override` checked. The run notes the override and who ran it in its summary; the test gate still runs.
+Anyone without admin permission who sets the input is refused.
+
 ## Previous rc9 readiness
 
 Version: `1.0.0-rc9` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES
