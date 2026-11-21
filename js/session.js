@@ -11,7 +11,7 @@ import { errorPatterns } from './patterns.js';
 import { mapState, activeSounds, servableWords, applyWords, availableStars, slippedStops, STOPS, MIN_WORDS } from './progress.js';
 import { servableStory, allStories } from './sentences.js';
 import { shuffle, minimalPairs, wordCards } from './word-logic.js';
-import { patternSupport, SUPPORT_RULES, S } from './support.js';
+import { patternSupport, supportPattern, SUPPORT_RULES, S } from './support.js';
 import { hasStrokes } from './trace.js';
 import { servableSentences } from './sentences.js';
 import { servableFamilies } from './families.js';
@@ -75,8 +75,10 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   // The current stop asks for 5 reads (secure needs 5). L1 can only serve at/am, and the first blends are
   // modelled (unscored) until 6 slow sweeps — so one session has to finish that model, or the next stop
   // cannot open on the following session's independent reads. Review lists stay as they are.
+  // The same holds for every word stop whose pattern is still at S4: mat (the first CVC) starts modelled too,
+  // and 5 words left it one sweep short, so it took a third session to open (a "never ends" report).
   const wordsForStop = (lv, n) => { const ws = servableWords(lv, known); return ws.length >= MIN_WORDS ? (ws.length >= n ? shuffle(ws, rand).slice(0, n) : fillWordList(ws, n, rand)) : []; };
-  const wordRounds = lv => (lv === 1 && patternSupport(responses, 'VC', now).level === S.MODEL) ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5;
+  const wordRounds = lv => (patternSupport(responses, supportPattern({ level: lv }), now).level === S.MODEL ? Math.max(5, SUPPORT_RULES.modelSweeps) : 5);
   const stepBack = skill => pacingFor(responses, skill) === 'stepBack';
   // an easy pool for a step-back round: the sound + two secure letters that sound and look different
   const easyPool = g => { const far = x => x !== g && GPC[x]?.phoneme !== GPC[g]?.phoneme && !CONFUSABLE.has([g, x].sort().join(''));
