@@ -1,5 +1,5 @@
 // In-page no-overlap audit (runs inside page.evaluate). Vinh, Nov 20: "things cannot overlap".
-// Returns findings { check, element, value } for the visible screen (or the Grown-ups overlay when it is open):
+// Returns findings { check, element, value } for the visible screen (or the Grown-ups / picture-check overlay when open):
 //   overlap        two content elements (controls, words, bubbles, Kit, cards) whose boxes intersect, neither inside the other
 //   clipped        a content element cut off by the safe rect or by an ancestor that clips without scrolling
 //   text-clipped   an element's own text runs outside a box that clips it
@@ -29,9 +29,10 @@ export function overlapAudit({ safe = { top: 0, right: 0, bottom: 0, left: 0 }, 
     const r = el.getBoundingClientRect();
     return r.width >= 1 && r.height >= 1;
   };
-  const parent = document.getElementById('parent');
-  const root = parent && shown(parent) ? parent
-    : [...document.querySelectorAll('#stage > .screen')].find((s) => !s.hidden && getComputedStyle(s).display !== 'none' && s.id !== 'parent');
+  // Opaque full-screen overlays (Grown-ups, the picture check over the word screen) are the screen when open.
+  const overlay = ['parent', 'check'].map((id) => document.getElementById(id)).find((e) => e && shown(e));
+  const root = overlay
+    || [...document.querySelectorAll('#stage > .screen')].find((s) => !s.hidden && getComputedStyle(s).display !== 'none' && s.id !== 'parent');
   if (!root) return [{ check: 'screen', element: 'none', value: 'no visible screen' }];
   const SKIP = '.ghosthand, #l-hand, .caption, #tracelog, svg *, #review-tag, .confetti, .confetti *, [aria-hidden="true"].deco';
   const CTRL = 'button, [role="button"], [role="slider"], [data-dropslot], #tiles > *, #l-arena > *, #m-stops > .stop, #st-cards > *, #sn-tiles > *, #fm-tiles > *, .ftile';
@@ -96,7 +97,7 @@ export function overlapAudit({ safe = { top: 0, right: 0, bottom: 0, left: 0 }, 
     if (t.left < b.left - 2 || t.right > b.right + 2 || t.top < b.top - 2 || t.bottom > b.bottom + 2) out.push({ check: 'text-clipped', element: name(el), value: `text ${r1(t.width)}x${r1(t.height)} in ${r1(b.width)}x${r1(b.height)}` });
   }
   // 4. child-facing bubbles show all their words (no collapsed / scrolling bubble)
-  if (root.id !== 'parent') for (const el of root.querySelectorAll('.bubble')) {
+  if (root.id !== 'parent') for (const el of root.querySelectorAll('.bubble')) { // child-facing
     if (!shown(el)) continue;
     if (el.scrollHeight > el.clientHeight + 2) out.push({ check: 'bubble-scroll', element: name(el), value: `${el.scrollHeight}>${el.clientHeight}` });
   }

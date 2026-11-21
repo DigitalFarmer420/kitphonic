@@ -1,6 +1,7 @@
 // Screen x window x text-scale matrix for the no-overlap check (tests/e2e/no-overlap.spec.js).
 // Text scale is the ?textScale= dev param (js/stage.js readPreferredRootPx), the same path a device text size takes.
-const R = 'skipHello=1&reducedMotion=1&nosw=1';
+// No ?nosw=1: its kill switch reloads the tab once (~2 s in), which raced the checks. The projects block service workers.
+const R = 'skipHello=1&reducedMotion=1';
 export const OVERLAP_SCREENS = [
   { name: 'hello', q: 'reducedMotion=1&nosw=1', ready: () => !!window.kitphonic && !document.getElementById('hello').hidden },
   { name: 'word', q: `${R}&level=2&word=map&seed=1&support=3`, ready: () => window.kitphonic?.screen?.state === 'slide' },
@@ -27,7 +28,7 @@ export const OVERLAP_SCALES = [1, 1.5, 2];
 // iPhone-style safe-area insets (top, right, bottom, left) for the notched phone size
 export const OVERLAP_INSETS = { '390x844': [47, 0, 34, 0] };
 
-// A stray navigation while the page settles (seen once on WebKit in CI) is retried once from the start.
+// A stray navigation while the page settles is retried once from the start.
 export async function openOverlapScreen(page, s, k, vp) {
   try { return await openOnce(page, s, k, vp); } catch (e) {
     if (!/Execution context was destroyed|navigat/i.test(String(e?.message))) throw e;

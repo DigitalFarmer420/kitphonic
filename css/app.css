@@ -640,3 +640,4 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #done-stop{line-height:1.4} /* the word's whole glyph box (Andika ascent+descent), so the bubble and stickers never touch it */
 /* Lesson intro, phone portrait: the picture always ends above Next (bar height + its shadow + a gap), at any text size. */
 .portrait #intro .ipic,.portrait .ipic{top:min(28.75rem, calc(100% - 15.5rem), calc(100% - 1.125rem - clamp(64px, 5.25rem, 8rem) - 1rem - min(8.125rem, 20%)))}
+#check .cword{line-height:1.4} /* the word's whole glyph box (Andika ascent+descent): Kit and the top edge never touch it */
