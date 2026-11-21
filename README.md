@@ -18,3 +18,12 @@ Dev publishing uses the existing `DEV_DEPLOY_KEY` secret, an SSH key that can wr
 For the production workflow to be the publisher, set **Settings → Pages → Build and deployment → Source** to **GitHub Actions** after `.github/workflows/deploy-prod.yml` is on `main`.
 
 Until that source is GitHub Actions, Pages remains a branch publisher and uploads `main` (`/`) on every push to `main`, whether or not the test gate passed. Set the source to GitHub Actions only once `deploy-prod.yml` is already on `main`; before that file is on `main`, GitHub Actions has nothing to publish. The `github-pages` environment already allows deployments from `main`.
+
+## Version numbers
+
+The visible app version (`VERSION` and `js/version.js`, shown in the Grown-ups footer) is the
+release date in America/Los_Angeles: `YYYY.MM.DD.N`. `N` starts at 1 and goes up for later
+releases on the same day. Run `node tools/bump-version.mjs` before a release; it also refreshes
+the service-worker cache because `js/version.js` is precached. Android `versionName` /
+`versionCode` stay with the packager.
+
