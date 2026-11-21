@@ -84,13 +84,14 @@ export function supportFor(responses, entry, { sessionId = null, now = Date.now(
   let level = base; const why = [];
   const bump = (to, reason) => { if (to > level) { level = to; why.push(reason); } };
   // 1. in-session: after 2 misses in a row at this pattern, one level more support until 2 correct in a row
-  const sess = byTime(responses.filter(r => r.sessionId === sessionId && r.pattern === pattern && r.support && r.firstAttempt));
+  // C: reads Kit modelled (S4) are neither misses nor hits here — a miss on a modelled word never drops support back
+  const sess = byTime(responses.filter(r => r.sessionId === sessionId && r.pattern === pattern && r.support && r.firstAttempt && !r.modelled));
   let miss = 0, hit = 0, up = false;
   for (const r of sess) { if (r.correct) { hit++; miss = 0; if (hit >= 2) up = false; } else { miss++; hit = 0; if (miss >= 2) up = true; } }
   if (up) bump(base + 1, '2 misses in a row');
   // 2. a missed word: its next appearance is one level more supported, until it is read correctly on a later day
   const mine = byTime(responses.filter(r => r.itemId === entry.w && r.support && r.firstAttempt));
-  const lastMiss = mine.filter(r => !r.correct).at(-1);
+  const lastMiss = mine.filter(r => !r.correct && !r.modelled).at(-1); // C: a miss on a modelled word is not 'missed last time'
   if (lastMiss && !mine.some(r => r.correct && r.timestamp > lastMiss.timestamp && dayKey(r.timestamp) !== dayKey(lastMiss.timestamp)))
     bump(lastMiss.support + 1, 'missed last time');
   // 3. after a long break: the first 3 items of the session get one level more support
@@ -99,5 +100,7 @@ export function supportFor(responses, entry, { sessionId = null, now = Date.now(
   // 4. a word with a just-introduced sound: at most S2 (silent dots) for its first 2 encounters
   const fresh = newGpcs(responses, sessionId), ids = entry.parse?.split(' ') ?? [];
   if (ids.some(g => fresh.has(g)) && mine.length < R.newSoundEncounters) bump(S.DOTS, 'new sound');
-  return { level: Math.min(S.MODEL, level), base, pattern, why };
+  // C: after a modelled miss the next presentation is guided (the hand demo at once), then independent
+  const last = mine.at(-1), guided = !!(last?.modelled && !last.correct);
+  return { level: Math.min(S.MODEL, level), base, pattern, why, guided };
 }

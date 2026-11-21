@@ -68,12 +68,16 @@ export const knownGpcs = (responses, now = Date.now()) =>
 // Tap-mode switch uses blend:L1 mastered.
 export const blendL1Mastered = (responses, now = Date.now()) => atLeast(skillState(responses, 'blend:L1', now), 'mastered');
 // Per-skill pacing: the spec's 90 / 60–89 / <60 rule over the last sessions of counted trials.
-export function pacingFor(responses, skill) {
+// opts.minStepBackReads (word levels, Education Researcher B): a step back needs at least that many counted
+// (independent, unmodelled) reads across the two sessions; with fewer the child stays on the level and keeps trying.
+export function pacingFor(responses, skill, { minStepBackReads = 0 } = {}) {
   const by = new Map();
   for (const r of responses.filter(r => r.skill === skill && counts(r)).sort((a, b) => a.timestamp - b.timestamp)) {
     const s = by.get(r.sessionId) ?? { correct: 0, total: 0 }; s.total++; if (r.correct) s.correct++; by.set(r.sessionId, s);
   }
-  return pacingFromSessions([...by.values()]);
+  const ss = [...by.values()], p = pacingFromSessions(ss);
+  if (p === 'stepBack' && ss.slice(-2).reduce((n, s) => n + s.total, 0) < minStepBackReads) return 'practice';
+  return p;
 }
 export const dueItems = (responses, now = Date.now()) =>
   skills(responses).map(s => skillState(responses, s, now)).filter(s => s.state === 'review-due').sort((a, b) => a.due - b.due);
