@@ -21,7 +21,7 @@ jobs:
   playthrough:
     name: playthrough
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 120
     steps:
       - name: Only develop may be released to main
         if: github.head_ref != 'develop'
@@ -30,9 +30,26 @@ jobs:
         run: |
           echo "::error title=playthrough::Pull requests into main must come from develop (head is '$HEAD_REF')."
           exit 1
-      - name: Placeholder (owner block)
-        run: |
-          echo "## playthrough" >> "$GITHUB_STEP_SUMMARY"
-          echo "Full 56-stop playthrough not ready yet; merges to main blocked by owner." >> "$GITHUB_STEP_SUMMARY"
-          echo "::error title=playthrough::Full 56-stop playthrough not ready yet; merges to main blocked by owner."
-          exit 1
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+      # A perfect child plays real sessions on a fresh profile until all 56 map stops pass (about 40 minutes).
+      - name: Full 56-stop playthrough (chromium, perfect child)
+        run: npm run test:playthrough
+        env:
+          CI: '1'
+          KP_PT_OUT: test-results/playthrough-report
+      - name: Summary
+        if: always()
+        run: node tests/playthrough/summarize.mjs test-results/playthrough-report/report.json >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Upload the playthrough report, screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playthrough-report
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
