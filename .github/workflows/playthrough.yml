@@ -1,0 +1,38 @@
+# Release gate: the full 56-stop map playthrough (sound m to the story "lunch on the bench").
+# Runs only on pull requests into main. Its job name `playthrough` is a required status check on main's branch
+# protection, and deploy-prod.yml refuses to publish a main commit whose PR did not pass it.
+# Release PRs come from develop. Any other head branch into main fails here (an admin can still bypass in an
+# emergency; production then deploys only through the emergency_override input of deploy-prod.yml).
+# Back-merges go from main into develop and never trigger this workflow.
+name: Playthrough
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playthrough-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  playthrough:
+    name: playthrough
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Only develop may be released to main
+        if: github.head_ref != 'develop'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "::error title=playthrough::Pull requests into main must come from develop (head is '$HEAD_REF')."
+          exit 1
+      - name: Placeholder (owner block)
+        run: |
+          echo "## playthrough" >> "$GITHUB_STEP_SUMMARY"
+          echo "Full 56-stop playthrough not ready yet; merges to main blocked by owner." >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=playthrough::Full 56-stop playthrough not ready yet; merges to main blocked by owner."
+          exit 1
