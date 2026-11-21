@@ -76,7 +76,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       }
       prevGroup = g;
     }
-    unclash(box, u, contentW, contentH); document.fonts?.ready?.then(() => { if (box.isConnected) unclash(box, u, contentW, contentH); });
+    document.fonts?.ready?.then(() => { if (box.isConnected) unclash(box, u, contentW, contentH); });
     const cur = pts[cut], from = animate ? pts[fromK] : cur;
     if (cur && !m.done) { // Kit sits next to the current stop (walks there when the path draws forward)
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
@@ -92,6 +92,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       if (cue) cue.classList.add(info.mode !== 'portrait' && cur.low ? 'ml' : kx(cur) < cur.x ? 'tr' : 'tl');
       if (animate) setTimeout(() => { kit.style.left = kx(cur) + 'px'; kit.style.top = ky(cur) + 'px'; }, 50);
     }
+    unclash(box, u, contentW, contentH);
     if (focusCurrent) {
       const sc = mapScroll(pts, info, m.done ? pts.length - 1 : m.index, insets);
       board.scrollLeft = sc.left; board.scrollTop = sc.top;
@@ -110,7 +111,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
     const loc = r => ({ l: (r.left - br.left) / sc, t: (r.top - br.top) / sc, r: (r.right - br.left) / sc, b: (r.bottom - br.top) / sc });
     const textBox = l => { const rg = document.createRange(); rg.selectNodeContents(l); return loc(rg.getBoundingClientRect()); };
     const hit = (a, b, pad) => a.l < b.r + pad && b.l < a.r + pad && a.t < b.b + pad && b.t < a.b + pad;
-    const blocks = [...[...box.querySelectorAll('.stop, .stop .cue')].map(e => loc(e.getBoundingClientRect())), ...[...box.querySelectorAll('.stop .st')].map(textBox)];
+    const blocks = [...[...box.querySelectorAll('.stop, .stop .cue, .mkit')].map(e => loc(e.getBoundingClientRect())), ...[...box.querySelectorAll('.stop .st')].map(textBox)];
     const labels = [...box.querySelectorAll('.mlabel')], placed = [];
     for (const l of labels) {
       const p = l._p, off = l._off, halfH = l._halfH; if (!p) continue;

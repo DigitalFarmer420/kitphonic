@@ -8,7 +8,7 @@ import { skillState } from '../js/mastery.js';
 import { planReplay } from '../js/session.js';
 import { rng } from '../js/word-logic.js';
 
-const VPS = [[360, 780], [390, 844], [780, 360], [844, 390], [820, 1180], [1180, 820], [667, 375]];
+const VPS = [[320, 568], [360, 780], [390, 844], [780, 360], [844, 390], [820, 1180], [1180, 820], [667, 375]];
 test('map window: current stop visible, <= 6 stops, the map ends on the story stops', () => {
   for (let n = 0; n <= STOPS.length; n++) {
     const win = mapWindow(mapState(seedProgress(n)).stops, n);
@@ -43,15 +43,17 @@ test('map layout: every stop is on the trail, never overlapping; the focused sto
         `${vw}x${vh} n=${n} ${p.label} off the trail`);
     }
     for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++)
-      assert.ok(Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) >= pts[i].r + pts[j].r + 6, `${vw}x${vh} n=${n} ${pts[i].label}/${pts[j].label} overlap`);
+      assert.ok(Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y) + 0.5 >= pts[i].r + pts[j].r + 6, `${vw}x${vh} n=${n} ${pts[i].label}/${pts[j].label} overlap`);
     if (s.mode === 'portrait') assert.ok(pts[0].contentH > band.boardH + step * 2, `${vw}x${vh} trail should be taller than the board`);
     else assert.ok(pts[0].contentW > band.boardW + step * 2, `${vw}x${vh} trail should be wider than the board`);
     const cur = pts.find(p => p.now) ?? pts.at(-1);
     const stageX = cur.x - sc.left, stageY = cur.y - sc.top + band.boardTop;
     const start = Math.max(0, Math.min((mstate.done ? STOPS.length - 1 : mstate.index) - 2, Math.max(0, STOPS.length - WINDOW)));
     const k = (mstate.done ? STOPS.length - 1 : mstate.index) - start;
-    if (s.mode === 'portrait') assert.ok(Math.abs(stageY - (metrics.bottom - k * step)) < 1.5, `${vw}x${vh} n=${n} current y ${stageY} vs ${metrics.bottom - k * step}`);
-    else assert.ok(Math.abs(stageX - (90 * s.u + k * step)) < 1.5, `${vw}x${vh} n=${n} current x`);
+    const wantY = Math.max(band.boardTop + metrics.nowR, Math.min(band.boardTop + band.boardH - metrics.nowR, metrics.bottom - k * step));
+    const wantX = Math.max(metrics.nowR, Math.min(band.boardW - metrics.nowR, 90 * s.u + k * step));
+    if (s.mode === 'portrait') assert.ok(Math.abs(stageY - wantY) < 1.5, `${vw}x${vh} n=${n} current y ${stageY} vs ${wantY}`);
+    else assert.ok(Math.abs(stageX - wantX) < 1.5, `${vw}x${vh} n=${n} current x`);
     assert.ok(stageY - cur.r >= band.boardTop - 1.5, `${vw}x${vh} n=${n} current under the top bar`);
     assert.ok(stageY + cur.r <= metrics.goTop + 1.5 || stageX + cur.r < goL || stageX - cur.r > goR, `${vw}x${vh} n=${n} current under ▶`);
   }

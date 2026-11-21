@@ -5,6 +5,7 @@
 // and floors stop diameters at 64px (the current stop at 72px) so the touch floor matches the CSS clamps.
 import { MIN_TOUCH } from './stage.js';
 export const STOP_R = 38, NOW_R = 52, WINDOW = 6, TEASERS = []; // the stories teaser became the real story stops
+export const ZIGZAG_P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], ZIGZAG_L = [1, 0, 1, 0, 1, 0]; // landscape zigzag uses the full height (room for Kit beside a stop)
 export const GO = { w: 200, h: 72, bottom: 22 };
 
 export function mapMetrics(stage) {
@@ -34,11 +35,18 @@ export function boardInsets(stage, measured) {
 }
 
 export function mapStep(stage, size = WINDOW) {
-  const { top, bottom, w, mode, u } = mapMetrics(stage);
+  const { top, bottom, w, mode, u, nowR, stopR } = mapMetrics(stage);
   const denom = Math.max(1, size - 1);
-  return mode === 'portrait'
-    ? { axis: 'y', step: (bottom - top) / denom }
-    : { axis: 'x', step: (w - 180 * u) / denom };
+  let step = mode === 'portrait' ? (bottom - top) / denom : (w - 180 * u) / denom;
+  // The trail repeats ZIGZAG_P, so the wrap (0.4 → 0.5) is tighter than any pair inside a 6-stop window.
+  // On a short board that pair would overlap; stretch the step just enough to keep a clear gap.
+  const minD = nowR + stopR + 8;
+  if (mode === 'portrait') {
+    const wrap = Math.min(...ZIGZAG_P.map((p, i) => Math.abs(p - ZIGZAG_P[(i + 1) % ZIGZAG_P.length])));
+    const need = Math.sqrt(Math.max(0, minD * minD - (wrap * w) ** 2));
+    if (step < need) step = need;
+  }
+  return { axis: mode === 'portrait' ? 'y' : 'x', step };
 }
 
 // All stops, with idx / now flags. Teasers (none today) still append at the end.
@@ -65,7 +73,7 @@ function windowStart(index, count, size = WINDOW) {
 export function mapLayout(win, stage, insets) {
   const m = mapMetrics(stage), { w, h, mode, u, top, bottom, nowR, stopR } = m;
   const band = boardInsets(stage, insets), { step } = mapStep(stage);
-  const n = win.length, P = [0.5, 0.27, 0.66, 0.3, 0.68, 0.4], L = [1, 0, 1, 0, 1, 0];
+  const n = win.length, P = ZIGZAG_P, L = ZIGZAG_L;
   const padTop = top - band.boardTop;
   // Only the path axis grows; the other axis matches the scroller so the trail cannot drift under the chrome.
   let contentW = band.boardW, contentH = band.boardH;
@@ -96,11 +104,15 @@ export function mapScroll(win, stage, index, insets) {
   const cur = Math.min(Math.max(0, index), n - 1), k = cur - windowStart(cur, n);
   const p = pts[cur];
   const maxLeft = Math.max(0, contentW - band.boardW), maxTop = Math.max(0, contentH - band.boardH);
+  // Keep the focused stop fully in the board (a stretched step on a short board can push the
+  // 6-window slot up under the top bar or down under ▶).
   if (axis === 'y') {
-    const target = (m.bottom - k * step) - band.boardTop;
+    let target = (m.bottom - k * step) - band.boardTop;
+    target = Math.max(m.nowR, Math.min(band.boardH - m.nowR, target));
     return { left: 0, top: Math.max(0, Math.min(maxTop, p.y - target)), contentW, contentH };
   }
-  const target = 90 * m.u + k * step;
+  let target = 90 * m.u + k * step;
+  target = Math.max(m.nowR, Math.min(band.boardW - m.nowR, target));
   return { left: Math.max(0, Math.min(maxLeft, p.x - target)), top: 0, contentW, contentH };
 }
 // Smooth path through the stop centres (quadratic through midpoints).
