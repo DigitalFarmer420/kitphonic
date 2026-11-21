@@ -15,6 +15,8 @@ export const OVERLAP_SCREENS = [
   { name: 'family', q: `${R}&activity=family&rime=at&familyMax=7&seed=1`, ready: () => !document.getElementById('family').hidden && document.querySelectorAll('.ftile').length > 0 },
   { name: 'intro', q: `${R}&activity=intro&gpc=s&seed=1`, ready: () => !document.getElementById('intro').hidden },
   { name: 'trace', q: `${R}&activity=trace&gpc=m&seed=1`, ready: () => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2 },
+  // a wide letter (Vinh, Nov 20: it may shrink on small landscape phones so Kit's prompt never covers it)
+  { name: 'trace-wide', q: `${R}&activity=trace&gpc=qu&seed=1`, ready: () => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2 },
   { name: 'map', q: `${R}&progress=5&seed=1`, ready: () => !document.getElementById('map').hidden && document.querySelectorAll('#m-stops > *').length > 0 },
   { name: 'grown-ups', q: `${R}&parent=1&progress=5`, ready: () => document.querySelectorAll('.ptile').length > 0 },
   { name: 'star', q: `${R}&activity=star&word=the&seed=1`, ready: () => !document.getElementById('star').hidden },
