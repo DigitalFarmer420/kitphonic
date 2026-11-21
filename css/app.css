@@ -135,6 +135,10 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 
 /* ---- learning map (home) — design/map-mockup ---- */
 #map{background:var(--cream)}
+#m-board{position:absolute;left:0;right:0;top:0;bottom:0;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:none;z-index:1;touch-action:pan-y}
+#m-board::-webkit-scrollbar{width:0;height:0}
+#m-world{position:relative}
+#m-world .mpath,#m-stops{position:absolute;left:0;top:0;width:100%;height:100%}
 .starchip{font-family:'Fredoka';font-size:1.5rem;background:#fff;border:0.125rem solid var(--line);border-radius:1.75rem;padding:0.625rem 1.25rem}
 .mpath{position:absolute;left:0;top:0;width:100%;height:100%;overflow:visible;pointer-events:none}
 .mpath .done{fill:none;stroke:var(--sage);stroke-width:18;stroke-linecap:round;stroke-linejoin:round}

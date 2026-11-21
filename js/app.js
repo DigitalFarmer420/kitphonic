@@ -13,7 +13,7 @@ import { createSettings } from './settings.js';
 import { createLettersScreen } from './letters-screen.js';
 import { letterTapMode } from './letter-logic.js';
 import { LETTERS } from './core.js';
-import { planSession, sessionOutcome } from './session.js';
+import { planSession, sessionOutcome, planReplay } from './session.js';
 import { mapState, progressMarkers } from './progress.js';
 import { seedProgress, memoryStorage } from './dev-seed.js';
 import { createMapScreen } from './map-screen.js';
@@ -63,7 +63,11 @@ function syncProgress() {
   return add;
 }
 syncProgress();
-const log = r => { const out = store.log({ ...r, sessionId }); syncProgress(); return out; };
+const log = r => {
+  // Replay is practice-only: nothing is written, so a miss cannot change mastery, stars, or the current stop.
+  if (session?.practice) return { timestamp: Date.now(), sessionId, ...r, scored: false, practice: true, firstAttempt: false };
+  const out = store.log({ ...r, sessionId }); syncProgress(); return out;
+};
 const known = () => (session ? knownGpcs(store.all()) : null); // dev direct mode: no taught-GPC filter on word cards
 
 let session = null; // { plan, i, started, stickers }
@@ -84,7 +88,7 @@ const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () =>
 
 // Map Home is the Kit intro (the front door). Activity Home buttons call goHome() and land on the map.
 const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
-  onGo: () => startSession(), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
+  onGo: () => startSession(), onReplay: stop => startReplay(stop), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
 function showMap(opts) { show('map'); mapScreen.render(opts); }
 const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(),
   onClose: () => showMap(), onReset: () => { store.clear(); seen.reset(); scanned = -Infinity; },
@@ -92,6 +96,7 @@ const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResp
 function openParent() { audio.stop(); show('parent'); parent.open(); }
 function goHome() { $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); syncProgress(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {
+  if (session?.practice) return finishReplay();
   $('review-tag').hidden = true; syncProgress(); const before = session?.mapBefore ?? null, after = mapState(store.all());
   session = null;
   if (sessionOutcome(before, after.index) === 'unlocked') { // the stop was passed: this is the only step-complete celebration
@@ -115,12 +120,24 @@ export function startSession() {
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index };
   runNext();
 }
+function startReplay(stop) {
+  if (!stop || stop.status !== 'passed') return;
+  sessionId = `p-${Date.now()}`;
+  const plan = planReplay(store.all(), stop, { rand });
+  if (!plan.items.length) return showMap();
+  session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index, practice: true };
+  runNext();
+}
+function finishReplay() {
+  $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop();
+  session = null; showMap();
+}
 function runNext() {
   if (!session) return;
   session.i++;
   const it = session.plan.items[session.i], overTime = performance.now() - session.started > 10 * 60e3; // hard 10-min cap
   $('review-tag').hidden = !(it && !overTime && it.why === 'review'); // rc7: spaced / slipped review is labelled, never a step back
-  if (!it || overTime) return allDone();
+  if (!it || overTime) return session?.practice ? finishReplay() : allDone();
   if (it.type === 'letters') {
     show('letters');
     letters.start({ activity: it.activity, pool: it.pool, targets: it.targets, rounds: it.rounds, mode: tapModeFor(it.activity), newSound: it.newSound, assist: it.assist, n: it.n,

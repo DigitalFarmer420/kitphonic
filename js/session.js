@@ -239,4 +239,37 @@ export function planSession(responses, { now = Date.now(), minutes = DEFAULT_MIN
   }
   return { items, cost: planCost(items), stop: cur, minutes: budget / 60 };
 }
+// Practice replay of one already-passed stop: only that stop's sound, words, or story.
+// Short and standalone (no review, no fill, no step-back). Callers must not write scored
+// mastery from these items — a miss during replay must never walk progress back.
+export function planReplay(responses, stop, { now = Date.now(), rand = Math.random } = {}) {
+  if (!stop) return { items: [], cost: 0, stop: null, practice: true };
+  const known = knownGpcs(responses, now);
+  const active = activeSounds(responses, now);
+  const pool = letterPool(active.length ? active : [GPCS[0].id]);
+  const items = [];
+  const passedLevels = mapState(responses, now).stops.filter(s => s.kind === 'words' && s.level && s.status === 'passed').map(s => s.level);
+  if (stop.kind === 'sound') {
+    const g = stop.gpc;
+    items.push({ type: 'lesson', activity: 'intro', gpc: g, why: 'practice' });
+    items.push({ type: 'letters', activity: 'soundTap', pool, newSound: g, why: 'practice' });
+    items.push({ type: 'letters', activity: 'hunt', pool, targets: [g, g, ...pool.filter(x => x !== g)].slice(0, 4), rounds: 3, why: 'practice' });
+  } else if (stop.kind === 'words' && stop.apply) {
+    const ws = shuffle(applyWords(stop.apply, known, Math.max(...passedLevels, 1)), rand).slice(0, 5);
+    if (ws.length >= MIN_WORDS) items.push({ type: 'words', level: null, apply: stop.apply, words: ws, why: 'practice' });
+  } else if (stop.kind === 'story') {
+    const met = new Set(responses.filter(r => r.skill?.startsWith('star:')).map(r => r.skill.slice(5)));
+    const story = allStories(known).find(x => x.id === stop.story);
+    // A passed story has already been read: treat its star words as known so the reread is the story, not a star intro.
+    for (const w of [...(story?.pages.flatMap(p => p.stars) ?? []), ...(story?.titleTokens.filter(t => t.kind === 'star').map(t => t.star.w) ?? [])]) met.add(w);
+    const s = servableStory(stop.story, known, met);
+    if (s) items.push({ type: 'story', story: s, reread: true, why: 'practice' });
+  } else if (stop.kind === 'words') {
+    const lv = stop.level, src = servableWords(lv, known);
+    const ws = src.length >= MIN_WORDS ? (src.length >= 5 ? shuffle(src, rand).slice(0, 5) : fillWordList(src, 5, rand)) : [];
+    if (ws.length && blendingUnlocked(responses, now)) items.push({ type: 'words', level: lv, words: ws, why: 'practice' });
+  }
+  return { items, cost: planCost(items), stop, practice: true };
+}
+
 export { STOPS };
