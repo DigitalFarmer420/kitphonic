@@ -83,9 +83,33 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   // Landscape keeps the sentence on one centred line: shrink the type (not the 72 px tap height) until it fits.
   // Sizes are design px times u (the board's rem scale), so the same steps hold on every window and text size.
   function fitLine() {
-    const st = $('sn-strip'), cs = chips(); cs.forEach(c => (c.style.fontSize = '')); if (stage.info.mode === 'portrait' || !cs.length) return;
-    const u = stage.info.u || 1, fits = () => st.scrollWidth <= st.clientWidth + 1 && cs[cs.length - 1].offsetTop === cs[0].offsetTop;
-    for (let fs = 44; fs >= 26 && !fits(); fs -= 2) cs.forEach(c => (c.style.fontSize = fs * u + 'px'));
+    const st = $('sn-strip'), cs = chips(); cs.forEach(c => (c.style.fontSize = '')); if (!cs.length) return;
+    const u = stage.info.u || 1, setFs = fs => cs.forEach(c => (c.style.fontSize = fs * u + 'px'));
+    if (stage.info.mode === 'portrait') return fitPortrait(st, u, setFs);
+    // 24 design px spare: the current star word grows its side margins (0.125rem -> 0.75rem) after this runs.
+    const fits = () => cs.every(c => c.offsetTop === cs[0].offsetTop) && cs.at(-1).getBoundingClientRect().right - cs[0].getBoundingClientRect().left <= st.clientWidth - 24 * u;
+    for (let fs = 44; fs >= 26 && !fits(); fs -= 2) setFs(fs);
+  }
+  // Portrait: the sentence (one or two lines) sits above the word tiles / star hint band. Nothing may overlap
+  // (Vinh, Nov 20): on a short board the words shrink first (same 72 px tap height), then the band starts under
+  // the sentence and its tiles get shorter (never under the 64 px touch floor) so they stay above the slider.
+  function fitPortrait(st, u, setFs) {
+    const band = $('sn-tiles'), host = $('sentence'), slider = $('sn-slider'), hr = () => host.getBoundingClientRect();
+    band.style.top = band.style.bottom = band.style.height = ''; band.style.removeProperty('--sn-tile-h'); slider.style.bottom = '';
+    const gap = 8 * u, stripBottom = () => st.offsetTop + st.offsetHeight, natTop = band.offsetTop, natH = band.offsetHeight;
+    // lowest point the band may reach: the top of what is under it (the slider while blending, Read on the star step), less a gap
+    const under = () => ['sn-track', 'sn-handle', 'sn-read'].map(id => $(id)).filter(e => e && !e.closest('[hidden]') && getComputedStyle(e).visibility !== 'hidden' && e.getClientRects().length);
+    const floorNow = () => { const us = under(); return (us.length ? Math.min(...us.map(e => e.getBoundingClientRect().top)) - hr().top : host.clientHeight) - gap; };
+    let floor = floorNow();
+    // blending on a short board: the slider takes Read's place (Read is hidden while blending), as it does in landscape
+    if (host.classList.contains('blending') && !slider.hidden && stripBottom() + gap + natH > floor) { slider.style.bottom = '1.125rem'; floor = floorNow(); }
+    const room = () => natTop - stripBottom() - gap;
+    for (let fs = 44; fs >= 26 && (room() < 0 || stripBottom() + gap + 64 > floor); fs -= 2) setFs(fs);
+    if (room() >= 0 && natTop + natH <= floor) return;
+    // the band moves up under the sentence and its tiles get shorter (never under the 64 px touch floor)
+    const h = Math.max(64, Math.min(natH, floor - stripBottom() - gap)), top = Math.max(stripBottom() + gap, Math.min(natTop, floor - h));
+    band.style.top = top + 'px'; band.style.bottom = 'auto'; band.style.height = h + 'px'; band.style.setProperty('--sn-tile-h', h + 'px');
+    for (const t of band.querySelectorAll('.tile')) t.style.fontSize = Math.min(parseFloat(t.style.fontSize) || 1e9, Math.round(h * .72)) + 'px';
   }
   const blending = on => $('sentence').classList.toggle('blending', on);
   function next() {
@@ -93,7 +117,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     if (!t) return allRead();
     if (t.kind === 'star') { // gold, tap to hear, no slider
       blending(false); $('sn-tiles').innerHTML = `<div class="stari">⭐ tap the star word</div>`; $('sn-slider').hidden = true; run.ms = null;
-      say('Star word! Tap it.', 'm-star-tap');
+      say('Star word! Tap it.', 'm-star-tap'); if (stage.info.mode === 'portrait') fitLine(); // the hint band is filled now: refit
     } else {
       const lv = run.tokSupport = Math.max(1, Math.min(4, support(t.entry) ?? 3)); run.levels.push(lv); if (lv === 4) run.modelled = true;
       // S1: no slider; the child reads the word in their head and taps on (never a timer: known issue 7)
@@ -111,6 +135,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     tr.querySelectorAll('.tdot').forEach(d => d.remove());
     markerPositions(run.ms).forEach(f => { const d = el('div', 'tdot'); d.style.left = (L.xFromFrac(f) - l) + 'px'; tr.append(d); }); // one stop per sound
     $('sn-slider').hidden = false; setKnob(0);
+    if (stage.info.mode === 'portrait') fitLine(); // the slider is up now: keep the tiles above it
   }
   const setKnob = (f, held) => { const x = run.layout.knobX(f); $('sn-handle').style.left = x + 'px'; $('sn-fill').style.width = Math.max(0, x - run.trackLeft) + 'px';
     applySliderAria($('sn-handle'), { fraction: f, stops: held?.stops ?? run.sweep?.positions, total: held?.total ?? run.ms?.length ?? 0 }); };
@@ -199,6 +224,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
     $('sn-card').className = ''; $('sn-card').innerHTML = '<span class="q">?</span>'; $('sn-read').disabled = true;
     $('sn-pebbles').replaceChildren(...(run.story ? run.story.pages.map((_, i) => el('div', 'peb' + (i < run.page ? ' on' : i === run.page ? ' now' : ''))) : []));
     $('sn-choices').hidden = true; $('sn-choices').replaceChildren(); $('sentence').classList.remove('choosing');
+    $('sn-slider').hidden = true; $('sn-tiles').replaceChildren(); // no empty slider while Kit introduces the sentence (its knob is unplaced)
       $('sn-strip').replaceChildren(...sentence.tokens.map((t, i) => {
         const c = el('button', 'wd L' + (t.kind === 'star' ? ' star' : ''), (t.kind === 'star' ? t.w : caseFor(t.w, cfg.tileCase)) + (t.punct ? `<span class="p">${t.punct}</span>` : ''));
         c.setAttribute('aria-label', t.w);
@@ -206,7 +232,7 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
           if (i === run.i && t.kind === 'star') { c.classList.add('done'); run.i++; setTimeout(next, 700); } };
         return c;
       }));
-    blending(false); fitLine();
+    blending(false); fitLine(); document.fonts?.ready?.then(() => { if (run) fitLine(); }); // Andika may land after the first fit
   }
   const releaseSlide = () => { if (slideOwner.id != null) slideOwner.end(slideOwner.id); dragging = null; if (run) run.dragId = null; };
   $('sn-handle').addEventListener('pointerdown', e => {

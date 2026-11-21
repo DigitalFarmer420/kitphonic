@@ -35,10 +35,17 @@ test('hello bubble wraps in an auto-height box and keeps 24px type', () => {
   assert.match(bubble, /text-wrap:balance/);
   assert.match(bubble, /text-align:center/);
   assert.equal(bubble.includes('nowrap'), false);
-  assert.equal(/(?:^|;)height:\d/.test(';' + bubble), false); // min-height:0 lets the greeting scroll; it is not a fixed height
+  assert.equal(/(?:^|;)height:\d/.test(';' + bubble), false); // never a fixed height
   assert.match(bubble, /margin-top:max\(1rem, calc\(14\.75rem - var\(--h\) \* \.34\)\)/);
-  assert.match(bubble, /max-height:calc\(var\(--h\) \* \.78 - 23\.5rem\)/);
-  assert.match(bubble, /overflow-y:auto/);
+  // No overlap (Vinh, Nov 20): the bubble never collapses or scrolls; Kit (with the paw) shrinks instead.
+  assert.equal(bubble.includes('max-height'), false);
+  assert.equal(/overflow-y:(auto|scroll)/.test(bubble), false);
+  assert.match(bubble, /flex:none/);
+  const [kit] = decls('#hello .kitwrap');
+  assert.match(kit, /flex:0 1 auto/);
+  assert.match(kit, /aspect-ratio:1/);
+  const [paw] = decls('#hello .paw');
+  assert.match(paw, /right:-?[\d.]+%;top:[\d.]+%;width:[\d.]+%;height:[\d.]+%/); // the paw scales with Kit
   assert.equal(bubble.includes('position:absolute'), false);
   const [hello] = decls('#hello');
   assert.match(hello, /display:flex/);
@@ -76,12 +83,12 @@ test('portrait and short hello bubbles do not cap lines or shrink type', () => {
   assert.equal(portrait.includes('font-size'), false);
   assert.equal(portrait.includes('text-align'), false);
   assert.equal(portrait.includes('nowrap'), false);
-  assert.match(portrait, /max-height:calc\(var\(--h\) \* \.69 - 23\.25rem\)/);
+  assert.equal(portrait.includes('max-height'), false);
   assert.match(short, /margin-top:0\.5rem/);
   assert.match(short, /font-size:1\.25rem/);
   assert.match(short, /max-width:calc\(var\(--w\) - 3rem\)/);
   assert.equal(short.includes('text-align'), false);
   assert.equal(short.includes('nowrap'), false);
-  assert.match(short, /max-height:calc\(var\(--h\) - 20\.875rem\)/);
+  assert.equal(short.includes('max-height'), false);
   assert.equal(/height:\d/.test(short), false);
 });

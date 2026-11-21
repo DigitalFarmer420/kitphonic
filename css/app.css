@@ -39,12 +39,12 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
    when the 34% cap makes Kit shorter than 13.75rem. Play's auto margin sits it on
    the bottom padding. A long or large-type greeting scrolls inside the bubble. */
 #hello{background:radial-gradient(circle at 50% 42%,#fff 0,var(--cream) 62%);display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding-top:calc(var(--h) * .1);padding-bottom:calc(var(--h) * .12)}
-#hello .kitwrap{position:relative;flex:none;width:min(13.75rem, 70%);height:min(13.75rem, calc(var(--h) * .34))}
+#hello .kitwrap{position:relative;flex:0 1 auto;min-height:4.5rem;height:min(13.75rem, calc(var(--h) * .34));width:auto;aspect-ratio:1}
 #hello .kitwrap>svg:first-child{width:100%;height:100%}
-#hello .paw{position:absolute;right:-2.125rem;top:6rem;width:4.75rem;height:4.75rem;transform-origin:20% 90%;animation:wave 1.4s ease-in-out infinite}
+#hello .paw{position:absolute;right:-15.4545%;top:43.6364%;width:34.5455%;height:34.5455%;transform-origin:20% 90%;animation:wave 1.4s ease-in-out infinite}
 @keyframes wave{0%,60%,100%{transform:rotate(0)}15%,45%{transform:rotate(-22deg)}30%{transform:rotate(14deg)}}
-#hello .bubble{position:relative;flex:0 1 auto;min-height:0;margin-top:max(1rem, calc(14.75rem - var(--h) * .34));font-size:1.5rem;width:max-content;white-space:normal;height:auto;text-align:center;text-wrap:balance;
-  max-height:calc(var(--h) * .78 - 23.5rem);overflow-y:auto} /* 23.5rem is the old 376px: room above the 8.25rem Play button; large text scrolls */
+#hello .bubble{position:relative;flex:none;margin-top:max(1rem, calc(14.75rem - var(--h) * .34));font-size:1.5rem;width:max-content;white-space:normal;height:auto;text-align:center;text-wrap:balance;
+  max-width:calc(100% - 2rem);overflow-y:visible} /* the whole greeting always shows: Kit shrinks (square, paw in % of Kit) before the bubble or Play would */
 #play{position:relative;flex:none;margin-top:auto;width:8.25rem;height:8.25rem;border-radius:50%;background:var(--sage);
   box-shadow:0 0.4375rem 0 var(--saged);display:flex;align-items:center;justify-content:center}
 #play svg{width:3.75rem;height:3.75rem}
@@ -278,8 +278,8 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* ---- portrait phones: 400 wide, height follows screen (700+). Slider in the thumb zone. ---- */
 .portrait .top{top:0.875rem;left:0.875rem;right:0.875rem}
 .portrait #hello{padding-top:calc(var(--h) * .13);padding-bottom:calc(var(--h) * .18)}
-.portrait #hello .bubble{margin-top:max(0.5rem, calc(14.25rem - var(--h) * .34));max-height:calc(var(--h) * .69 - 23.25rem)} /* 14.25rem keeps a 1.5x greeting clear; 23.25rem is the old 372px stop above Play */
-.portrait #hello .paw{right:-1.25rem}
+.portrait #hello .bubble{margin-top:max(0.5rem, calc(14.25rem - var(--h) * .34))}
+.portrait #hello .paw{right:-9.0909%}
 .portrait #word-mascot{left:0.875rem;top:6.125rem}
 .portrait #word-mascot .bubble{max-width:18.125rem;font-size:1.0625rem}
 .portrait #card{top:clamp(10.625rem, max(calc(10.625rem + (var(--h) - 44.4375rem) * .3), calc(var(--h) * .09 + 8rem)), 16rem);width:min(12.5rem, 70%);height:min(7.5rem, calc(var(--h) * .13));margin-left:0;left:50%;transform:translateX(-50%)}
@@ -312,12 +312,12 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 /* ---- short landscape phones: 400 tall, width follows screen. Left column = mascot, card, next. ---- */
 .short .top{top:0.625rem;left:1rem;right:1rem}
 .short #hello{padding-top:0.875rem;padding-bottom:1.375rem}
-.short #hello .kitwrap{width:9.375rem;height:9.375rem}
-.short #hello .paw{right:-1.75rem;top:3.875rem;width:3.5rem;height:3.5rem}
-.short #hello .bubble{margin-top:0.5rem;font-size:1.25rem;max-width:calc(var(--w) - 3rem);max-height:calc(var(--h) - 20.875rem)} /* 20.875rem is the old 334px: the bubble stops above Play */
+.short #hello .kitwrap{height:9.375rem}
+.short #hello .paw{right:-18.6667%;top:41.3333%;width:37.3333%;height:37.3333%}
+.short #hello .bubble{margin-top:0.5rem;font-size:1.25rem;max-width:calc(var(--w) - 3rem)}
 .short #word-mascot{left:1rem;top:5.625rem}
 .short #word-mascot svg{width:3.5rem;height:3.5rem}
-.short #word-mascot .bubble{max-width:9.75rem;max-height:3.4rem;overflow:auto;font-size:0.9375rem;padding:0.5rem 0.75rem}
+.short #word-mascot .bubble{max-width:9.75rem;font-size:0.9375rem;padding:0.5rem 0.75rem}
 .short #card{left:1.5rem;margin-left:0;top:10.375rem;width:11.25rem;height:7.25rem}
 .short #tiles{bottom:12.125rem;height:6.875rem}
 .short #markers{bottom:7rem}
@@ -328,7 +328,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #check .mascot svg{width:3rem;height:3rem}
 .short .choice{width:10rem;height:7.75rem;font-size:4.75rem}
 .short .choice svg{width:6.875rem;height:5.625rem}
-.short #l-mascot{left:1rem;top:5.5rem}
+.short #l-mascot{left:1rem;top:max(5.5rem, calc(0.875rem + 64px + 0.25rem))} /* clear of Home when the 64px floor wins */
 .short #l-mascot svg{width:3.5rem;height:3.5rem}
 .short #l-mascot .bubble{font-size:1rem;padding:0.5rem 0.75rem}
 .short .ltr .tile{left:-3.4375rem;top:-3.75rem;width:6.875rem;height:7.5rem;font-size:5rem}
@@ -359,7 +359,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .wd.lit{opacity:1;background:#FFE7A8;color:var(--ink)}
 #sn-tiles{position:absolute;left:0;right:0;bottom:14.125rem;height:6.875rem;pointer-events:none}
 .short #sentence:not(.blending) #sn-tiles,.tall #sentence:not(.blending) #sn-tiles{display:none}
-#sn-tiles .tile{height:6.875rem}
+#sn-tiles .tile{height:var(--sn-tile-h, 6.875rem)}
 #sn-tiles .tile.passed{background:#E7F1E4;border-color:var(--sage)}
 #sn-tiles .stari{position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:1.5rem;color:var(--muted);font-weight:700;width:18.75rem;text-align:center}
 #sn-read{position:absolute;left:50%;bottom:1.125rem;width:15rem;height:5.25rem;margin-left:-7.5rem;border-radius:1.75rem;background:var(--sage);box-shadow:0 0.375rem 0 var(--saged);color:#fff;font-size:2.25rem;display:flex;align-items:center;justify-content:center;gap:0.625rem}
@@ -593,7 +593,7 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .short #markers{height:clamp(64px, 4.5rem, 9rem);bottom:min(max(7rem, 88px), calc(100% - 50px - clamp(64px, 6.875rem, 8rem) - clamp(64px, 4.5rem, 9rem)))}
 .short #slider{bottom:max(0.625rem, 6px)}
 .short #fm-made{top:min(13.25rem, calc(100% - (var(--rows, 1) * 6rem + 5.75rem)));left:min(13.125rem, 36%);right:0.75rem}
-#hello .kitwrap{width:min(13.75rem, 70%);height:min(13.75rem, calc(var(--h) * .34))}
+#hello .kitwrap{height:min(13.75rem, calc(var(--h) * .34))}
 /* Grown-ups is an adult overlay in real screen px, not the child rem scale. position:fixed
    escapes the board (no transform on #stage) so 48px controls stay 48px on every window. */
 #parent{position:fixed;inset:0;z-index:40;zoom:1;width:auto;height:auto;box-sizing:border-box;font-size:clamp(15px, 1.5vw, 18px);
@@ -621,3 +621,23 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 .tall #trace .ibar{left:auto;right:auto;bottom:auto;top:50%;transform:translateY(-50%);flex-direction:column;width:9.375rem;gap:0.875rem}
 .tall #trace .tray,.tall #trace .wide{flex:none;width:9.375rem}
 .tall #lesson.tracing #ls-mascot .bubble{max-width:11rem}
+/* No overlap (Vinh, Nov 20). Portrait word family that does not fit its board (a short phone, or the large-text
+   phone composition): the body takes the existing compact sizes (same as .tight), so 7 tiles fit in two rows
+   and nothing runs off the board. family-screen.js adds .squeeze only when the column overflows. */
+.portrait #fm-card{flex-shrink:0}
+.portrait #family.squeeze:not([hidden]){gap:0.25rem}
+.portrait #family.squeeze #fm-card{height:64px;width:7rem}
+.portrait #family.squeeze #fm-word,.portrait #family.squeeze #fm-slot,.portrait #family.squeeze #fm-rime{height:64px}
+.portrait #family.squeeze #fm-slot,.portrait #family.squeeze #fm-rime{font-size:2.6rem}
+.portrait #family.squeeze #fm-made{min-height:0;flex:0 0 auto}
+.portrait #family.squeeze .ftile{width:64px;height:64px;font-size:1.8rem}
+.portrait #family.squeeze #fm-tray{gap:4px;row-gap:6px}
+.tight.portrait #fm-card .q,.portrait #family.squeeze #fm-card .q{font-size:min(3.75rem, 46px)}
+/* Landscape family: Kit's bubble stops short of the progress dots (--peb-n dots, 2rem each, from the right). */
+.short #fm-mascot .bubble{max-width:min(12rem, calc(var(--w) - 17.5rem - var(--peb-n, 7) * 2rem))}
+.tall #fm-mascot .bubble{max-width:min(20.625rem, calc(var(--w) - 17.5rem - var(--peb-n, 7) * 2rem))}
+
+#done-stop{line-height:1.4} /* the word's whole glyph box (Andika ascent+descent), so the bubble and stickers never touch it */
+/* Lesson intro, phone portrait: the picture always ends above Next (bar height + its shadow + a gap), at any text size. */
+.portrait #intro .ipic,.portrait .ipic{top:min(28.75rem, calc(100% - 15.5rem), calc(100% - 1.125rem - clamp(64px, 5.25rem, 8rem) - 1rem - min(8.125rem, 20%)))}
+#check .cword{line-height:1.4} /* the word's whole glyph box (Andika ascent+descent): Kit and the top edge never touch it */

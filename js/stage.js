@@ -76,6 +76,9 @@ function readEnvInsets(doc) {
 // so that 17 is normalized back to 16. The larger of the two wins. A normal
 // setting stays 16, which is today's root, and a larger setting scales every rem.
 export function readPreferredRootPx(doc) {
+  // dev / tests: ?textScale=1..3 stands in for the device text size (TESTING.md "URL params").
+  const forced = parseFloat(new URLSearchParams(doc.defaultView?.location?.search || '').get('textScale'));
+  if (Number.isFinite(forced) && forced > 0) return 16 * forced;
   const getStyle = doc.defaultView?.getComputedStyle?.bind(doc.defaultView);
   if (!getStyle || !doc.documentElement) return 16;
   const probe = doc.createElement('div');
@@ -133,7 +136,7 @@ export function createStage(el, onChange = () => {}) {
     });
     for (const m of ['portrait', 'short', 'tall']) el.classList.toggle(m, s.mode === m);
     el.classList.toggle('ptab', s.mode === 'portrait' && s.designW >= 600);
-    el.classList.toggle('tight', s.mode === 'portrait' && s.h / s.k < 520);
+    el.classList.toggle('tight', s.mode === 'portrait' && s.h < 520);
     el.classList.toggle('large-text', s.k > 1);
     el.classList.toggle('narrow', s.mode === 'portrait' && s.designW < PORTRAIT_W.phone); // large-text phone composition
     el.dataset.insetSource = insets.source;

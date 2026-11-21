@@ -1,6 +1,6 @@
 // Offline app shell (KP-QA-007). Module worker: register with { type: 'module' }.
 // The CACHE line is rewritten by tools/gen-sw-assets.mjs and changes when any precached file changes.
-export const CACHE = 'kitphonic-2b07b9fd67d216b5';
+export const CACHE = 'kitphonic-a36be8de83fcb7dc';
 export const CACHE_PREFIX = 'kitphonic-';
 
 // KP-QA-011: /kitphonic/ and /kitphonic-dev/ share one origin, so they share Cache Storage. Every

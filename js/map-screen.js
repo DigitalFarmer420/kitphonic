@@ -38,14 +38,16 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       b.onclick = () => tapStop(p); box.append(b);
       const g = groupOf(p);
       if (g && (g !== prevGroup || p.now)) { // parent-facing label (no reading needed by the child)
-        const l = el('div', 'mlabel', p.now ? `${g}<br>(now)` : g), off = p.r + 10 * u;
+        const half = Math.max(p.r, b.offsetWidth / 2), halfH = Math.max(p.r, b.offsetHeight / 2); // the drawn stop can exceed r (touch floor)
+        const l = el('div', 'mlabel', p.now ? `${g}<br>(now)` : g), off = half + 10 * u;
         if (p.side === 'right') { l.style.left = p.x + off + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
         else if (p.side === 'left') { l.style.left = (p.x - off - 120 * u) + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
-        else { l.style.left = (p.x - 60 * u) + 'px'; l.style.top = (p.y + p.r + 8 * u) + 'px'; }
-        box.append(l);
+        else { l.style.left = (p.x - 60 * u) + 'px'; l.style.top = (p.y + halfH + 8 * u) + 'px'; }
+        l._p = p; l._off = off; l._halfH = halfH; l._home = [parseFloat(l.style.left), parseFloat(l.style.top)]; box.append(l);
       }
       prevGroup = g;
     }
+    unclash(box, u); document.fonts?.ready?.then(() => { if (box.isConnected) unclash(box, u); }); // re-measure once Nunito is in
     const cur = pts[cut], from = animate ? pts[fromK] : cur;
     if (cur && !m.done) { // Kit sits next to the current stop (walks there when the path draws forward)
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
@@ -64,6 +66,28 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
     last = { m, pts };
     // first visit: the ghost hand taps ▶ (then again after 5 s idle until the first session starts)
     if (seen.count('go') === 0) hand.start(() => $('map').hidden ? null : [centerIn($('go'), $('map'), stage.scale), centerIn($('go'), $('map'), stage.scale)], { now: true }); else hand.stop();
+  }
+  // No overlap: a label whose words would touch a stop, its star/cue badge or another label tries the other
+  // sides of its stop (below, right, left, above) and keeps the first clear one (else its original place).
+  function unclash(box, u) {
+    const br = box.getBoundingClientRect(), sc = br.width / (box.offsetWidth || 1) || 1;
+    const loc = r => ({ l: (r.left - br.left) / sc, t: (r.top - br.top) / sc, r: (r.right - br.left) / sc, b: (r.bottom - br.top) / sc });
+    const textBox = l => { const rg = document.createRange(); rg.selectNodeContents(l); return loc(rg.getBoundingClientRect()); };
+    const hit = (a, b, pad) => a.l < b.r + pad && b.l < a.r + pad && a.t < b.b + pad && b.t < a.b + pad;
+    const blocks = [...[...box.querySelectorAll('.stop, .stop .cue')].map(e => loc(e.getBoundingClientRect())), ...[...box.querySelectorAll('.stop .st')].map(textBox)];
+    const labels = [...box.querySelectorAll('.mlabel')], placed = [], W = $('map').clientWidth, H = $('map').clientHeight; // #m-stops itself has no size
+    for (const l of labels) {
+      const p = l._p, off = l._off, halfH = l._halfH; if (!p) continue;
+      const base = [l._home, [p.x - 60 * u, p.y + halfH + 8 * u], [p.x + off, p.y - 10 * u],
+        [p.x - off - 120 * u, p.y - 10 * u], [p.x - 60 * u, p.y - halfH - 8 * u - l.offsetHeight]];
+      const spots = [0, -8, 8, -16, 16, -24, 24].flatMap(dy => base.map(([x, y]) => [`${x}px`, `${y + dy * u}px`])); // nudged up/down when crowded
+      const clear = () => { const t = textBox(l); return t.l >= 0 && t.t >= 0 && t.r <= W && t.b <= H &&
+        !blocks.some(b => hit(t, b, 2)) && !placed.some(o => hit(t, o, 2)); };
+      let ok = false;
+      for (const [x, y] of spots) { l.style.left = x; l.style.top = y; if (clear()) { ok = true; break; } }
+      if (!ok) { l.style.left = spots[0][0]; l.style.top = spots[0][1]; }
+      placed.push(textBox(l));
+    }
   }
   function tapStop(p) {
     if (p.now) { hand.stop(); seen.mark('go'); return onGo(); }

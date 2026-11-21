@@ -366,20 +366,25 @@ export function createLessonScreen({ audio, stage, settings, rand = Math.random,
   // (full-height) letter card, so a wide window gives the letter the height instead of cream side bands.
   function placeBar() {
     const bar = $('trace').querySelector('.ibar'), card = $('trace').querySelector('.tcard'); bar.style.left = '';
-    if (card) { card.style.maxWidth = ''; card.style.height = ''; card.style.bottom = ''; }
+    if (card) { card.style.maxWidth = ''; card.style.height = ''; card.style.bottom = ''; card.style.left = ''; }
     if (stage.info.mode === 'portrait') return;
-    // rc6: a wide letter (ss, qu, ng…) must not run under the undo / stars column, or a stroke's start dot sits under
-    // Undo (iPhone landscape): cap the centred card so its right edge + 20 px clears the column (150 px + 16 px margin).
-    // The cap is symmetric. On a wide (tall-mode) board it also keeps the card clear of Kit's prompt on the left:
-    // 18 px margin + 72 px Kit + 12 px gap + the 176 px (11rem) bubble + 16 px. Short keeps its rc6 cap so a
-    // phone in landscape keeps today's letter size.
-    const u = stage.info.u || 1, side = (stage.info.mode === 'tall' ? 18 + 72 + 12 + 176 + 16 : 150 + 16 + 20) * u;
+    // rc6: a wide letter (ss, qu, ng…) must not run under the undo / stars column (150 px + 16 px margin + 20 px), or a
+    // stroke's start dot sits under Undo. Nothing may overlap (Vinh, Nov 20): the card also stays right of Kit's prompt
+    // (Kit + gap + the bubble's max width + 16 px). The card is centred on the board when it fits between the two
+    // columns that way, otherwise it is shifted and, if needed, made smaller so it fits between them.
+    const u = stage.info.u || 1, W = stage.info.w, barCol = (150 + 16 + 20) * u;
+    const kit = $('ls-mascot'), kitSvg = kit?.querySelector('svg'), kitBubble = kit?.querySelector('.bubble');
+    const kitCol = kit ? kit.offsetLeft + (kitSvg?.getBoundingClientRect().width || 0) + 12 * u + (parseFloat(getComputedStyle(kitBubble).maxWidth) || 0) + 16 * u : barCol;
     if (card) {
-      const maxW = Math.max(200 * u, stage.info.w - 2 * side), [aw, ah] = String(card.style.aspectRatio).split('/').map(Number);
+      // today's symmetric cap (tall: Kit + prompt on both sides; short: the rc6 column) first, so sizes do not grow
+      const side = (stage.info.mode === 'tall' ? 18 + 72 + 12 + 176 + 16 : 150 + 16 + 20) * u;
+      const maxW = Math.min(Math.max(200 * u, W - 2 * side), Math.max(120 * u, W - kitCol - barCol)), [aw, ah] = String(card.style.aspectRatio).split('/').map(Number);
       card.style.maxWidth = maxW + 'px';
       // A capped wide letter keeps its aspect: the card gets shorter, not a tall box with bands (WebKit would
       // otherwise keep the inset height). Engines then agree.
       if (aw > 0 && ah > 0 && card.offsetHeight * aw / ah > maxW + 0.5) { card.style.bottom = 'auto'; card.style.height = (maxW * ah / aw) + 'px'; }
+      const cw = card.getBoundingClientRect().width;
+      card.style.left = Math.min(W - barCol - cw / 2, Math.max(kitCol + cw / 2, W / 2)) + 'px';
     }
     requestAnimationFrame(() => { const c = $('trace').querySelector('.tcard'); if (!c) return; const uu = stage.info.u || 1; bar.style.left = Math.min(stage.info.w - bar.offsetWidth - 16 * uu, c.offsetLeft + c.offsetWidth / 2 + 20 * uu) + 'px'; });
   }
