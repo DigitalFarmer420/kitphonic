@@ -1,9 +1,10 @@
-// CI-only Playwright projects for .github/workflows/pr-checks.yml (smoke, tracing, sweep, uiux, visual).
+// CI-only Playwright projects for .github/workflows/pr-checks.yml (smoke, tracing, sweep, overlap, uiux, visual).
 // The existing `npm run test:e2e` (playwright.config.js) is unchanged and still runs as the "e2e" job.
 // Run one group locally:  KP_CI_PORT=20611 npx playwright test -c tests/ci/playwright.ci.config.js --project 'smoke-*'
 // Static server only (tools/serve.mjs binds 127.0.0.1). Fresh context per test. Reports stay on the machine.
 import { defineConfig } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { OVERLAP_VIEWPORTS, OVERLAP_SCALES } from '../e2e/overlap-matrix.js';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const port = +process.env.KP_CI_PORT || 4310;
@@ -66,6 +67,11 @@ export default defineConfig({
     // KP-BUG-003 miss-then-replay sweep (every word-card word, plus picture-check controls)
     { name: 'sweep-android-chromium', testMatch: /ci\/kp-bug-003-sweep\.spec\.js$/, use: android },
     { name: 'sweep-iphone-webkit', testMatch: /ci\/kp-bug-003-sweep\.spec\.js$/, use: iphone },
+    // No overlap / no clipping (tests/e2e/no-overlap.spec.js): every flow screen at the phone, phone-landscape, laptop,
+    // iPad-landscape and squat-window sizes. Chromium at text 1x, 1.5x, 2x; WebKit at 1x and 2x (max the app honours).
+    ...OVERLAP_VIEWPORTS.flatMap(([w, h]) => [['chromium', OVERLAP_SCALES], ['webkit', [1, 2]]].map(([b, scales]) => ({
+      name: `overlap-${b}-${w}x${h}`, testMatch: /e2e\/no-overlap\.spec\.js$/, metadata: { scales },
+      use: { ...sized(b, w, h), serviceWorkers: 'block', reducedMotion: 'reduce' } }))),
     // Uiux layout checks (report-only job) and committed-baseline screenshots (visual job)
     ...['webkit', 'chromium'].flatMap((b) => UIUX_SIZES.map(([w, h]) => ({ name: `uiux-${b}-${w}x${h}`, testMatch: /ci\/uiux\.spec\.js$/, use: sized(b, w, h) }))),
     ...['webkit', 'chromium'].flatMap((b) => UIUX_SIZES.map(([w, h]) => ({ name: `visual-${b}-${w}x${h}`, testMatch: /ci\/visual\.spec\.js$/, use: sized(b, w, h) }))),

@@ -129,6 +129,7 @@ jobs:
   #   smoke   desktop (Chromium, WebKit), Android phone, iPhone (WebKit), iPad (WebKit, Mac UA, MacIntel, 5 touch points, DPR 2)
   #   tracing finger, Apple Pencil and mouse for m and a + trace.spec.js + ipad-trace.spec.js; 1 retry, retries reported
   #   sweep   KP-BUG-003 miss-then-replay sweep over every word-card word
+  #   overlap no overlap / no clipping on every flow screen x window size x text size (tests/e2e/no-overlap.spec.js)
   browser:
     name: ${{ matrix.group }}
     runs-on: ubuntu-latest
@@ -143,6 +144,10 @@ jobs:
             projects: --project=webkit-ipados-* --project=trace-*
           - group: sweep
             projects: --project=sweep-*
+          - group: overlap-chromium
+            projects: --project=overlap-chromium-*
+          - group: overlap-webkit
+            projects: --project=overlap-webkit-*
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-playwright

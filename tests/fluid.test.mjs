@@ -78,6 +78,23 @@ test('a normal text setting keeps the 16px root and a larger setting scales ever
   assert.ok(Math.abs(readPreferredRootPx(doc(16, 28)) - (28 / 17) * 16) < 0.01); // iOS larger text
 });
 
+test('?textScale stands in for the device text size, and the largest settings behave as 2x', () => {
+  const withQuery = (q) => ({ defaultView: { location: { search: q } } });
+  assert.equal(readPreferredRootPx(withQuery('?textScale=1.5')), 24);
+  assert.equal(readPreferredRootPx(withQuery('?skipHello=1&textScale=3')), 48);
+  assert.equal(textScale(readPreferredRootPx(withQuery('?textScale=3'))), TEXT_SCALE_MAX); // iOS AX5 / Android max clamp to 2x
+  assert.equal(TEXT_SCALE_MAX, 2);
+  assert.equal(readPreferredRootPx(withQuery('?textScale=0')), 16); // ignored: no document to probe falls back to 16
+  for (const [w, h] of [[390, 844], [320, 568], [1280, 720], [568, 320], [1180, 820], [1280, 480]]) {
+    assert.deepEqual(stageFor(w, h, textScale(48)), stageFor(w, h, TEXT_SCALE_MAX), `${w}x${h}`);
+  }
+});
+
+test('the tight phone layout follows the board, not the text size (large text is not "tight")', () => {
+  const stage = readFileSync(new URL('../js/stage.js', import.meta.url), 'utf8');
+  assert.match(stage, /classList\.toggle\('tight', s\.mode === 'portrait' && s\.h < 520\)/);
+});
+
 test('buttons >= 64 and knobs >= 80 at every sweep viewport, including insets and 4K', () => {
   for (const c of CASES) {
     const s = placed(c);

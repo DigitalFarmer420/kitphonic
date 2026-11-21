@@ -62,8 +62,15 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     setTimeout(() => { const r = run; run = null; hand.stop(); seen.mark('family'); r?.onComplete?.({}); }, 1200);
   }
   // Uiux rc1: balanced rows (7 -> 4 + 3, never a lone tile) centred under the slot + rime word, whatever the layout
+  // Portrait: when the column (card, word, made strip, tray) runs past the board, take the compact sizes (.squeeze).
   function layoutTray() {
-    const tray = $('fm-tray'), ts = tiles(); if (!run || !ts.length || $('family').hidden) return;
+    const fam = $('family'); if (!run || !tiles().length || fam.hidden) return;
+    fam.classList.remove('squeeze'); placeTray();
+    const tray = $('fm-tray');
+    if ($('stage').classList.contains('portrait') && (fam.scrollHeight > fam.clientHeight + 1 || tray.offsetTop + tray.offsetHeight > fam.clientHeight - 2)) { fam.classList.add('squeeze'); placeTray(); }
+  }
+  function placeTray() {
+    const tray = $('fm-tray'), ts = tiles();
     tray.style.left = tray.style.right = tray.style.width = '';
     const hw0 = host.clientWidth, land = !$('stage').classList.contains('portrait'); // landscape: one row across the whole width if it fits
     const avail = land ? hw0 - 16 : tray.clientWidth, tw = ts[0].offsetWidth, gap = parseFloat(getComputedStyle(tray).columnGap) || 14;
@@ -76,7 +83,7 @@ export function createFamilyScreen({ audio, stage, settings, rand = Math.random,
     const boxW = width + 8;
     tray.style.width = boxW + 'px'; tray.style.right = 'auto'; tray.style.left = Math.max(8, Math.min(hw - boxW - 8, cx - boxW / 2)) + 'px';
   }
-  const pebbles = () => $('fm-pebbles').replaceChildren(...run.fam.words.map((_, i) => el('div', 'peb' + (i < run.made.size ? ' on' : i === run.made.size ? ' now' : ''))));
+  const pebbles = () => { $('family').style.setProperty('--peb-n', String(run.fam.words.length)); return $('fm-pebbles').replaceChildren(...run.fam.words.map((_, i) => el('div', 'peb' + (i < run.made.size ? ' on' : i === run.made.size ? ' now' : '')))); };
   // drag: pointer moves a floating copy; dropping near the slot places it. A press without movement = tap-to-select.
   const toStage = e => { const b = host.getBoundingClientRect(), s = stage.scale; return [(e.clientX - b.left) / s, (e.clientY - b.top) / s]; };
   function down(e, t) {

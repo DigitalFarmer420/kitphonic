@@ -97,6 +97,7 @@ plan, screens and logged responses (exit 1 if it never reaches the end).
 | `progress=47` | map at the L6 digraph-words stop (56 stops: 38 sounds, L1–L7, 6 new-words stops, 5 stories) |
 | `level=6&word=ship` | digraph word: one joined sky "sh" tile, one slider stop per sound |
 | `activity=intro&gpc=sh` | digraph fusion intro: s + h slide together into one sky tile |
+| `textScale=1..3` | act as if the device text size is that multiple of the default (16px): 1.5 = 24px. The app honours up to 2× (`TEXT_SCALE_MAX`); larger values behave as 2× |
 | `reducedMotion=1` | act as if the device asks for reduced motion (grown-ups setting On/Off still wins) |
 | `minutes=5..10` | session length target (default 7) |
 | `direct=1` | word screen only (implied by `level=` / `word=`) |

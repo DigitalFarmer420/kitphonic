@@ -9,6 +9,7 @@ const touch = { hasTouch: true, isMobile: true, deviceScaleFactor: 1 };
 
 export default defineConfig({
   testDir: './tests/e2e',
+  testIgnore: /no-overlap\.spec\.js$/, // runs in the CI "overlap" group (tests/ci/playwright.ci.config.js)
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,

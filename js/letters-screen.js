@@ -24,7 +24,9 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
     const top = (m === 'short' ? 130 : m === 'portrait' ? 220 : 170) * u, bottom = m === 'short' ? s.h - 16 * u : s.h - (m === 'portrait' ? 130 : 120) * u;
     return { left: 20 * u, right: s.w - 20 * u, top, bottom }; };
   const floatBox = () => { const b = box(), u = U(); if (stage.info.mode === 'short') b.top = Math.max(b.top, 175 * u); return b; };
-  const cellW = n => { const s = stage.info, u = U(), per = s.designW < 700 ? 3 : 6; return Math.min(150 * u, (s.w - 40 * u) / Math.min(per, n)); };
+  // Six to a row on any landscape (short) board or a board 700+ design px wide; three on a narrower portrait one.
+  const perRow = () => { const s = stage.info; return s.mode === 'short' || (s.designW || s.w) >= 700 ? 6 : 3; };
+  const cellW = n => { const s = stage.info, u = U(), per = perRow(); return Math.min(150 * u, (s.w - 40 * u) / Math.min(per, n)); };
   const tileHalf = () => {
     const m = stage.info.mode, u = U(), pt = m === 'portrait' && stage.info.designW < 600;
     const [a, b] = m === 'short' || pt ? [55, 60] : [60, 68];
@@ -34,6 +36,9 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       const cap = Math.max(32, (room / 6 - 8) / 2);
       hw = Math.min(hw, cap); hh = Math.min(hh, hw * (b / a));
     }
+    // A row of tiles never touches: a tile is at most its grid cell less 8 design px (narrow large-text boards).
+    const cellCap = Math.max(32, (cellW(6) - 8 * u) / 2);
+    if (hw > cellCap) { hh = Math.max(32, hh * cellCap / hw); hw = cellCap; }
     return [hw, hh];
   };
   // --- design 1a: big ear (replays the sound only), 3 tiles below it, star tray, ghost hand ---
@@ -67,7 +72,7 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
   // Sound-tap rows must keep the dot under the last row on the board. cellH shrinks only when the design pitch would not.
   function gridSpec(n) {
     const s = stage.info, u = U(), b = box();
-    const per = (s.designW || s.w) < 700 ? 3 : 6;
+    const per = perRow();
     const rows = Math.ceil(n / Math.min(per, n));
     const below = 72 * u + Math.max(64, 72 * u) + 10;
     let cellH = (s.mode === 'short' ? 220 : s.mode === 'portrait' ? 232 : 210) * u;
@@ -130,6 +135,10 @@ export function createLettersScreen({ audio, cfg, rand, stage, settings, record 
       if (run.dots) { const d = el('button', 'ldot', WAVE); d.setAttribute('aria-label', `${it.l} sound`); d.onpointerdown = e => { e.stopPropagation(); tap(it, 'dot', n); }; n.append(d); }
       it.node = n; return n;
     }));
+    if (!run.def.drift) { // grid tiles never touch: cap a tile at its cell less 8 design px (narrow large-text boards)
+      const cap = cellW(items.length) - 8 * U();
+      for (const t of arena.querySelectorAll('.ltr > .tile')) if (t.offsetWidth > cap) { t.style.width = cap + 'px'; t.style.left = (-cap / 2) + 'px'; }
+    }
     move();
   }
   const move = () => { for (const it of run.items) { it.node.style.left = it.x + 'px'; it.node.style.top = it.y + 'px'; } };
