@@ -81,9 +81,11 @@ export function createSentenceScreen({ audio, stage, rand = Math.random, record 
   const chips = () => [...$('sn-strip').children];
   function paint() { chips().forEach((c, i) => { c.classList.toggle('cur', i === run.i); c.classList.toggle('done', i < run.i); }); }
   // Landscape keeps the sentence on one centred line: shrink the type (not the 72 px tap height) until it fits.
+  // Sizes are design px times u (the board's rem scale), so the same steps hold on every window and text size.
   function fitLine() {
-    const st = $('sn-strip'); chips().forEach(c => (c.style.fontSize = '')); if (stage.info.mode === 'portrait') return;
-    for (let fs = 44; fs >= 26 && st.scrollWidth > st.clientWidth + 1; fs -= 2) chips().forEach(c => (c.style.fontSize = fs + 'px'));
+    const st = $('sn-strip'), cs = chips(); cs.forEach(c => (c.style.fontSize = '')); if (stage.info.mode === 'portrait' || !cs.length) return;
+    const u = stage.info.u || 1, fits = () => st.scrollWidth <= st.clientWidth + 1 && cs[cs.length - 1].offsetTop === cs[0].offsetTop;
+    for (let fs = 44; fs >= 26 && !fits(); fs -= 2) cs.forEach(c => (c.style.fontSize = fs * u + 'px'));
   }
   const blending = on => $('sentence').classList.toggle('blending', on);
   function next() {

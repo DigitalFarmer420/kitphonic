@@ -51,7 +51,9 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
       // beside the stop (portrait: opposite its label; landscape: to its right, at the same height)
       // landscape: low-row stop -> Kit just above it; high-row stop -> beside it (right), raised away from the low row
-      const kx = p => info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36 * u) : p.low ? p.x : p.x + p.r + 36 * u;
+      // Kit (4rem) stays on the board when a narrow (large-text) composition puts the stop near an edge.
+      const onBoard = x => Math.max(34 * u, Math.min(info.w - 34 * u, x));
+      const kx = p => onBoard(info.mode === 'portrait' ? p.x + (p.side === 'right' ? -1 : 1) * (p.r + 36 * u) : p.low ? p.x : p.x + p.r + 36 * u);
       const ky = p => info.mode === 'portrait' ? p.y - p.r + 10 * u : p.low ? p.y - p.r - 38 * u : p.y - 20 * u;
       kit.style.left = kx(from) + 'px'; kit.style.top = ky(from) + 'px'; box.append(kit);
       // the current stop's cue picture moves to the side away from Kit (Kit left -> top-right; Kit above -> middle-left)
