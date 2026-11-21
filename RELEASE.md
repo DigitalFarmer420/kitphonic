@@ -26,8 +26,8 @@ On the packaged build, record API level and the active WebView package version t
 
 Every pull request into `main` must pass the `playthrough` check (`.github/workflows/playthrough.yml`). It is a
 required status check in main's branch protection. Release PRs come from `develop`; a PR into `main` from any
-other branch fails the check. Back-merges (main into develop) are not affected. Until the full 56-stop test lands,
-the check is a placeholder that always fails, so merges to main are blocked by the owner's decision.
+other branch fails the check. Back-merges (main into develop) are not affected. The job plays all 56 map stops on
+a fresh profile with a perfect child (`npm run test:playthrough`, TESTING.md) and takes about 40 minutes.
 
 `deploy-prod.yml` also checks it: a push to `main` deploys only if the merged release PR's head (or the commit
 itself) has a passing `playthrough` check, so a merge that bypassed the check does not ship by itself.

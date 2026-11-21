@@ -69,6 +69,22 @@ Visual baselines are made on the GitHub runner, not locally (emoji and font hint
 label the PR `visual:update`, then commit the files from the run's `visual-baselines-webkit` / `visual-baselines-chromium`
 artifacts into `tests/ci/__screenshots__/`.
 
+## Full playthrough (release gate)
+
+`npm run test:playthrough` plays a fresh device through all 56 map stops, sound m to the story "lunch on the bench",
+with real sessions through the real UI (taps, slider drags, traces); no `?progress=`, dev-seed or activity jumps.
+Each stop must pass and get its map marker, in map order. A stop not passed within `KP_PT_CAP` sessions (default 12)
+or a session that stalls fails with the stop id, sessions, trials, accuracy, screen state, a screenshot and the
+last console lines (`report.json` in `KP_PT_OUT`). About 40 minutes on chromium.
+
+- `KP_PT_BROWSER=webkit` — WebKit instead of Chromium
+- `KP_PT_WRONG=0.35 KP_PT_CAP=12` — a realistic child who picks wrong first about a third of the time
+- `KP_PT_BASE=https://digitalfarmer420.github.io/kitphonic/` — the live site, in a fresh browser profile
+- `node tests/playthrough/summarize.mjs <report.json>` — the per-group table
+
+It runs in CI only as the `playthrough` job (`.github/workflows/playthrough.yml`) on pull requests from develop into
+main, where it is a required check; see RELEASE.md, "Release gate".
+
 ## Flow
 Hello ▶ -> **map** (home) -> ▶ (or tap the glowing stop) -> planned 5–10 min session (due review, the current stop,
 practice, mixed review) -> level-up moment if a stop was passed (➜ locked 1.5 s; path draws forward) or all-done -> map.
