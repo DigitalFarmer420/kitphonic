@@ -132,13 +132,15 @@ test('the L4 "stop" stop prefers words that have a check, so a perfect child can
   }
 });
 
-test('hasWordCheck: pictured L4 words without a minimal pair still count if word cards exist (stop); flag has neither at this set', () => {
+test('hasWordCheck: pictured L4 words without a minimal pair still count if word cards exist (stop, flag)', () => {
   const known = new Set('m s a t p i n o d f c k u g e r h b l'.split(' '));
   const cfg = { checkPictureWords: true, wordCardCheck: true, choicesPerCheck: 3 };
   const stop = { w: 'stop', level: 4, parse: 's t o p', pic: '🛑' };
   const flag = { w: 'flag', level: 4, parse: 'f l a g', pic: '🚩' };
   assert.equal(needsCheck(stop, cfg, 4), false, 'stop has no pictured minimal pair');
+  assert.equal(needsCheck(flag, cfg, 4), false, 'flag has no pictured minimal pair');
   assert.ok(wordCards('stop', { known, n: 3, rand: () => 0.3 }));
+  assert.ok(wordCards('flag', { known, n: 3, rand: () => 0.3 }), 'flag now has printed word cards (flap / flat / flog)');
   assert.ok(hasWordCheck(stop, { known, cfg, level: 4 }));
-  assert.equal(hasWordCheck(flag, { known, cfg, level: 4 }), false);
+  assert.ok(hasWordCheck(flag, { known, cfg, level: 4 }));
 });
