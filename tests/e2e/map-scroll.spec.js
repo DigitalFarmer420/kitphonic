@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 
+// The path is the whole 56-stop course; this check is the open-and-scroll contract.
 const ready = () => !document.getElementById('map').hidden && document.querySelectorAll('#m-stops > .stop').length === 56;
 
 test('map scrolls through every stop and a passed stop replays without changing progress', async ({ page }) => {
