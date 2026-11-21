@@ -43,11 +43,11 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
         if (p.side === 'right') { l.style.left = p.x + off + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
         else if (p.side === 'left') { l.style.left = (p.x - off - 120 * u) + 'px'; l.style.top = (p.y - 10 * u) + 'px'; }
         else { l.style.left = (p.x - 60 * u) + 'px'; l.style.top = (p.y + halfH + 8 * u) + 'px'; }
-        l._p = p; l._off = off; l._halfH = halfH; box.append(l);
+        l._p = p; l._off = off; l._halfH = halfH; l._home = [parseFloat(l.style.left), parseFloat(l.style.top)]; box.append(l);
       }
       prevGroup = g;
     }
-    unclash(box, u);
+    unclash(box, u); document.fonts?.ready?.then(() => { if (box.isConnected) unclash(box, u); }); // re-measure once Nunito is in
     const cur = pts[cut], from = animate ? pts[fromK] : cur;
     if (cur && !m.done) { // Kit sits next to the current stop (walks there when the path draws forward)
       const kit = el('div', 'mkit', '<svg width="64" height="64"><use href="#kit"/></svg>');
@@ -78,7 +78,7 @@ export function createMapScreen({ audio, stage, settings, getMap, getResponses, 
     const labels = [...box.querySelectorAll('.mlabel')], placed = [], W = $('map').clientWidth, H = $('map').clientHeight; // #m-stops itself has no size
     for (const l of labels) {
       const p = l._p, off = l._off, halfH = l._halfH; if (!p) continue;
-      const base = [[parseFloat(l.style.left), parseFloat(l.style.top)], [p.x - 60 * u, p.y + halfH + 8 * u], [p.x + off, p.y - 10 * u],
+      const base = [l._home, [p.x - 60 * u, p.y + halfH + 8 * u], [p.x + off, p.y - 10 * u],
         [p.x - off - 120 * u, p.y - 10 * u], [p.x - 60 * u, p.y - halfH - 8 * u - l.offsetHeight]];
       const spots = [0, -8, 8, -16, 16, -24, 24].flatMap(dy => base.map(([x, y]) => [`${x}px`, `${y + dy * u}px`])); // nudged up/down when crowded
       const clear = () => { const t = textBox(l); return t.l >= 0 && t.t >= 0 && t.r <= W && t.b <= H &&

@@ -25,14 +25,25 @@ export const OVERLAP_SCALES = [1, 1.5, 2];
 // iPhone-style safe-area insets (top, right, bottom, left) for the notched phone size
 export const OVERLAP_INSETS = { '390x844': [47, 0, 34, 0] };
 
+// A stray navigation while the page settles (seen once on WebKit in CI) is retried once from the start.
 export async function openOverlapScreen(page, s, k, vp) {
+  try { return await openOnce(page, s, k, vp); } catch (e) {
+    if (!/Execution context was destroyed|navigat/i.test(String(e?.message))) throw e;
+    return openOnce(page, s, k, vp);
+  }
+}
+const insetsAdded = new WeakSet();
+async function openOnce(page, s, k, vp) {
   const ins = OVERLAP_INSETS[`${vp.width}x${vp.height}`];
-  if (ins) await page.addInitScript((ins) => {
+  if (ins && !insetsAdded.has(page)) {
+    insetsAdded.add(page);
+    await page.addInitScript((ins) => {
     const set = () => { const st = document.documentElement.style; ['top', 'right', 'bottom', 'left'].forEach((x, i) => st.setProperty(`--safe-area-inset-${x}`, ins[i] + 'px')); };
     if (document.documentElement) set();
     document.addEventListener('DOMContentLoaded', () => { set(); dispatchEvent(new Event('resize')); });
-  }, ins);
-  await page.goto(`/?${s.q}&textScale=${k}`, { waitUntil: 'domcontentloaded' });
+    }, ins);
+  }
+  await page.goto(`/?${s.q}&textScale=${k}`, { waitUntil: 'load' });
   await page.waitForFunction(s.ready, null, { timeout: 20_000 });
   if (s.show) {
     await page.evaluate((w) => window.kitphonic.screen.debugShow(w), s.show);
