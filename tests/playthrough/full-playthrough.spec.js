@@ -2,19 +2,21 @@ import { test, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 import { playSession, mulberry32 } from './child.js';
+import { startServer } from './server.js';
 
 // Full-map playthrough (release gate): a fresh device plays real sessions, through the real UI, until every one of
 // the 56 map stops (sound m ... the story "lunch on the bench") is passed, in map order. No dev shortcuts (no
 // ?progress=, dev-seed or activity jumps): each stop is earned by the app's own lesson logic and recorded as its
 // map marker. A stop that is not passed within KP_PT_CAP sessions, or a session that stalls, fails the test with
 // the stop id, sessions, trials, skill accuracy, screen state, a screenshot and the last console lines.
-//   KP_PT_BASE   app URL (default: the local server from the config), e.g. the production site
+//   KP_PT_BASE   app URL (default: an in-process server for this checkout, ./server.js), e.g. the production site
 //   KP_PT_WRONG  realistic child: chance of a wrong pick first (default 0 = perfect child)
 //   KP_PT_CAP    sessions allowed per stop (default 8)    KP_PT_OUT  report folder
 const WRONG = +(process.env.KP_PT_WRONG || 0), CAP = +(process.env.KP_PT_CAP || 8), SEED = +(process.env.KP_PT_SEED || 1);
 
-test('a fresh child passes all 56 map stops in order', async ({ page, baseURL, browserName }, testInfo) => {
-  const base = process.env.KP_PT_BASE || `${baseURL}/`;
+test('a fresh child passes all 56 map stops in order', async ({ page, browserName }, testInfo) => {
+  const local = process.env.KP_PT_BASE ? null : await startServer();
+  const base = process.env.KP_PT_BASE || local.url;
   const out = process.env.KP_PT_OUT || testInfo.outputPath('playthrough');
   fs.mkdirSync(out, { recursive: true });
   const rng = mulberry32(SEED), logs = [], report = { base, browser: browserName, wrong: WRONG, cap: CAP, started: new Date().toISOString(), stops: [], sessions: [], result: 'running' };
@@ -50,11 +52,15 @@ test('a fresh child passes all 56 map stops in order', async ({ page, baseURL, b
     const cur = last.current, k = perStop.get(cur.id) ?? { sessions: 0, t0: Date.now(), before: cur };
     if (k.sessions >= CAP) await fail(`stop ${last.index + 1}/56 ${cur.id} ("${cur.label}") not passed after ${CAP} sessions`, { stop: cur.id, index: last.index + 1, sessions: k.sessions, evidence: cur });
     k.sessions++; perStop.set(cur.id, k); n++;
-    await page.goto(url(), { waitUntil: 'load' });
-    await page.waitForFunction(() => !!window.kitphonic?.store, null, { timeout: 30_000 });
-    await page.locator('#go').waitFor({ state: 'visible', timeout: 20_000 });
-    await page.locator('#go').click();
-    const t = Date.now(), s = await playSession(page, { rng, wrong: WRONG });
+    const t = Date.now();
+    const s = await (async () => {
+      await page.goto(url(), { waitUntil: 'load' });
+      await page.waitForFunction(() => !!window.kitphonic?.store, null, { timeout: 30_000 });
+      await page.locator('#go').waitFor({ state: 'visible', timeout: 20_000 });
+      await page.locator('#go').click();
+      return playSession(page, { rng, wrong: WRONG });
+    })().catch((e) => ({ end: 'error', seen: [], stuckOn: e.message.split('\n')[0] }));
+    if (s.end === 'error') await fail(`session ${n} on stop ${last.index + 1}/56 ${cur.id} ("${cur.label}") errored: ${s.stuckOn}`, { stop: cur.id, index: last.index + 1, sessions: k.sessions, evidence: cur });
     const after = await mapInfo();
     report.sessions.push({ n, stop: cur.id, end: s.end, secs: Math.round((Date.now() - t) / 1000), screens: s.seen.join('>'), passedAfter: after.passed.length, current: after.current });
     if (s.end !== 'done' && s.end !== 'levelup') await fail(`session ${n} on stop ${last.index + 1}/56 ${cur.id} ("${cur.label}") ${s.end}: ${s.stuckOn}`, { stop: cur.id, index: last.index + 1, sessions: k.sessions, evidence: after.current, screens: s.seen });
@@ -69,6 +75,7 @@ test('a fresh child passes all 56 map stops in order', async ({ page, baseURL, b
   }
   await page.screenshot({ path: path.join(out, 'map-all-passed.png'), fullPage: true });
   Object.assign(report, { result: 'pass', sessionsTotal: n, finished: new Date().toISOString() }); save();
+  await local?.close();
   expect(last.passed.length).toBe(56);
   expect(report.stops.map((s) => s.id)).toEqual(first.stops.map((s) => s.id)); // passed strictly in map order
 });
