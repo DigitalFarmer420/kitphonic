@@ -8,8 +8,10 @@ import { createStore } from '../js/mastery.js';
 import { createSeen } from '../js/seen.js';
 import { createSettings } from '../js/settings.js';
 import { seedProgress } from '../js/dev-seed.js';
-import { STOPS, mapState, progressMarkers } from '../js/progress.js';
+import { STOPS, mapState, progressMarkers, slippedStops } from '../js/progress.js';
 import { lessonTiles } from '../js/parent-screen.js';
+import { tileState } from '../js/parent.js';
+import { DAY, RULES } from '../js/mastery.js';
 
 const now = Date.UTC(2026, 10, 21, 18);
 // localStorage stand-in: every key, as stored strings
@@ -91,7 +93,7 @@ test('every one of the 56 stops plans a preview lesson, locked ones included', (
 });
 
 test('lessons grid lists every stop in course order, any status', () => {
-  const tiles = lessonTiles(mapState(seedProgress(12, { now }), now));
+  const rs = seedProgress(12, { now }), tiles = lessonTiles(mapState(rs, now), rs, now);
   assert.equal(tiles.length, 56);
   assert.deepEqual(tiles.map(t => t.id), STOPS.map(s => s.id));
   assert.ok(tiles.some(t => t.status === 'upcoming') && tiles.some(t => t.status === 'passed') && tiles.filter(t => t.status === 'current').length === 1);
@@ -131,4 +133,42 @@ test('press and hold: moving, leaving or cancelling stops the hold', () => {
   const r = holdRig(); r.fire('pointerdown'); r.fire('pointermove', { clientX: 4 }); r.timers.tick(PREVIEW_HOLD_MS);
   assert.equal(r.calls.hold, 1, 'a small wobble still holds');
   const b = holdRig(); b.fire('pointerdown', { button: 2 }); b.timers.tick(2000); assert.equal(b.calls.hold, 0, 'right button ignored');
+});
+
+// Mid-course tile colours must follow skillState (and the slipped → review-due overlay).
+test('lesson tile states match skillState for a mid-course child (all five bands, current marked)', () => {
+  const now = Date.UTC(2026, 10, 21, 18);
+  const trial = (skill, itemId, { d = 0, i = 0, sessionId = 'a', correct = true, firstAttempt = true, extra = {} } = {}) =>
+    ({ skill, itemId, correct, firstAttempt, assisted: false, scored: true, timestamp: now - d * DAY - i * 2000, sessionId, ...extra });
+  const days = (skill, itemId, ds, n = RULES.masterMinTrials) => ds.flatMap((d, si) => Array.from({ length: n }, (_, i) => trial(skill, itemId, { d, i, sessionId: `m-${skill}-${si}` })));
+  // 12 stops passed so the current stop is sound:f (index 12). Mix the five colour bands:
+  // mastered (s, a, t, … via two recent days), review-due (m, aged), secure (p, one qualifying day),
+  // practicing (current f, a few trials), not yet (upcoming).
+  let rs = seedProgress(12, { now });
+  rs = rs.filter(r => r.skill !== 'sound:m' && r.skill !== 'sound:p' && r.skill !== 'sound:s');
+  rs.push(...days('sound:m', 'm', [3, 2]));           // mastered, review due
+  rs.push(...days('sound:s', 's', [1, 0]));           // mastered, not due
+  rs.push(...days('sound:p', 'p', [0], 5));           // secure only
+  rs.push(...[0, 1, 2].map(i => trial('sound:f', 'f', { i, sessionId: 'cur' }))); // practicing current
+  rs.push(...days('star:I', 'I', [1, 0]));
+  rs.push(...days('star:the', 'the', [0], 5));
+  rs.push(trial('star:is', 'is', { i: 0, sessionId: 'star-is' }));
+  rs.push(...progressMarkers(rs, { now }));
+  const map = mapState(rs, now);
+  const tiles = lessonTiles(map, rs, now);
+  const slipped = new Set(slippedStops(rs, now).map(s => s.skill));
+  const expected = skill => {
+    const state = tileState(rs, skill, now);
+    return slipped.has(skill) && state !== 'review-due' ? 'review-due' : state;
+  };
+  assert.equal(map.stops[12].id, 'sound:f');
+  assert.equal(tiles[12].status, 'current');
+  assert.equal(tiles.find(t => t.id === 'sound:s').state, 'mastered');
+  assert.equal(tiles.find(t => t.id === 'sound:m').state, 'review-due');
+  assert.equal(tiles.find(t => t.id === 'sound:p').state, 'secure');
+  assert.equal(tiles.find(t => t.id === 'sound:f').state, 'practicing');
+  assert.equal(tiles.find(t => t.id === 'sound:c').state, 'new');
+  for (const t of tiles) assert.equal(t.state, expected(map.stops[t.i].skill), t.id);
+  const states = new Set(tiles.map(t => t.state));
+  for (const s of ['practicing', 'secure', 'mastered', 'review-due', 'new']) assert.ok(states.has(s), s);
 });
