@@ -112,3 +112,16 @@ test('the Preview badge is the exit: one tap back to Grown-ups, nothing saved', 
   expect(await page.evaluate(snapshot)).toBe(ls0);
   expect(await page.evaluate(() => window.kitphonic.map().index)).toBe(6);
 });
+
+test('exiting mid-word: late screen timers write nothing and Grown-ups stays open', async ({ page }) => {
+  await seedChild(page, 4);
+  await openGrownUps(page);
+  const ls0 = await page.evaluate(snapshot);
+  await holdOn(page, page.locator('.plesson[data-i="26"]'), 1000); // "stop" words, locked
+  await page.waitForFunction(() => window.kitphonic.preview.active && window.kitphonic.screen?.state === 'slide', null, { timeout: 15_000 });
+  await step(page, 'word', () => 0.5, 0); // a full slide: the blend, then a check / reveal on a timer
+  await page.locator('#preview-badge').click();
+  await page.waitForTimeout(4000); // past the blend -> check -> reveal timers
+  expect(await visibleScreen(page)).toBe('parent');
+  expect(await page.evaluate(snapshot)).toBe(ls0);
+});

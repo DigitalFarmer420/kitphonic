@@ -67,7 +67,12 @@ function syncProgress() {
   return add;
 }
 syncProgress();
+// After a preview ends, a screen timer still in flight (a blend that finishes, a reveal, a demo count) must not land on
+// the real child: until the next session or preview starts, the activity screens' records and demo marks are dropped.
+let previewTail = false;
+const screenSeen = { count: k => seen.count(k), demo: k => seen.demo(k), mark: k => { if (!previewTail) seen.mark(k); }, reset: () => seen.reset() };
 const log = r => {
+  if (previewTail) return { timestamp: Date.now(), ...r, dropped: true };
   // Preview: the gate's overlay holds a synthetic child, so the support ladder works and nothing reaches the device.
   if (session?.preview) return store.log({ ...r, sessionId, preview: true });
   // Replay is practice-only: nothing is written, so a miss cannot change mastery, stars, or the current stop.
@@ -83,15 +88,15 @@ const supportLevel = entry => cfg.support ?? (cfg.speakBeforeCheck ? 4 : session
 const guidedWord = entry => cfg.support == null && !cfg.speakBeforeCheck && !!session && cfg.supportLadder && supportFor(store.all(), entry, { sessionId }).guided;
 const wordCorrection = entry => (cfg.support == null && !cfg.speakBeforeCheck && session && cfg.supportLadder) ? supportFor(store.all(), entry, { sessionId }) : {};
 const screen = createWordScreen({
-  known, audio, cfg, rand, stage, record: log, seen, reduced: () => settings.reducedMotion(), support: supportLevel, guided: guidedWord, correction: wordCorrection,
+  known, audio, cfg, rand, stage, record: log, seen: screenSeen, reduced: () => settings.reducedMotion(), support: supportLevel, guided: guidedWord, correction: wordCorrection,
   onDone: stickers => allDone(stickers),
   onHome: () => goHome(),
 });
-const letters = createLettersScreen({ audio, cfg, rand, stage, settings, seen, record: log, onHome: () => goHome() });
-const lesson = createLessonScreen({ audio, stage, settings, seen, rand, record: log, onHome: () => goHome() });
-const starScreen = createStarScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
-const familyScreen = createFamilyScreen({ audio, stage, settings, seen, rand, cfg, record: log, onHome: () => goHome() });
-const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), support: supportLevel });
+const letters = createLettersScreen({ audio, cfg, rand, stage, settings, seen: screenSeen, record: log, onHome: () => goHome() });
+const lesson = createLessonScreen({ audio, stage, settings, seen: screenSeen, rand, record: log, onHome: () => goHome() });
+const starScreen = createStarScreen({ audio, stage, seen: screenSeen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), known: () => known() });
+const familyScreen = createFamilyScreen({ audio, stage, settings, seen: screenSeen, rand, cfg, record: log, onHome: () => goHome() });
+const sentenceScreen = createSentenceScreen({ audio, stage, seen: screenSeen, reduced: () => settings.reducedMotion(), rand, cfg, record: log, onHome: () => goHome(), support: supportLevel });
 
 // Map Home is the Kit intro (the front door). Activity Home buttons call goHome() and land on the map.
 const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
@@ -104,6 +109,7 @@ const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResp
 function openParent() { audio.stop(); show('parent'); parent.open(); }
 function goHome() { if (session?.preview) return endPreview(); $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); syncProgress(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {
+  if (previewTail) return; // a late screen callback after a preview ended: Grown-ups stays open
   if (session?.practice) return finishReplay();
   $('review-tag').hidden = true; syncProgress(); const before = session?.mapBefore ?? null, after = mapState(store.all());
   session = null;
@@ -123,14 +129,14 @@ const tapModeFor = activity => letterTapMode(activity, { blendL1Mastered: blendL
 export function startSession() {
   if (cfg.activity) return startActivity(cfg.activity);
   if (cfg.direct) return startDirect();
-  sessionId = `s-${Date.now()}`;
+  sessionId = `s-${Date.now()}`; previewTail = false;
   const plan = planSession(store.all(), { minutes: cfg.minutesSet ? cfg.minutes : settings.get('sessionMinutes'), rand, familyMax: cfg.familyMax, familySecureMax: cfg.familySecureMax });
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index };
   runNext();
 }
 function startReplay(stop) {
   if (!stop || stop.status !== 'passed') return;
-  sessionId = `p-${Date.now()}`;
+  sessionId = `p-${Date.now()}`; previewTail = false;
   const plan = planReplay(store.all(), stop, { rand });
   if (!plan.items.length) return showMap();
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: mapState(store.all()).index, practice: true };
@@ -149,7 +155,7 @@ function startPreview(index) {
   audio.stop(); scannedBeforePreview = scanned;
   const plan = preview.start(index, { minutes: settings.get('sessionMinutes') });
   if (!plan?.items.length) { endPreview(); return; }
-  sessionId = `v-${Date.now()}`;
+  sessionId = `v-${Date.now()}`; previewTail = false;
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: null, practice: true, preview: true };
   showPreviewTag(true);
   runNext();
@@ -185,7 +191,7 @@ $('preview-badge').onclick = () => { if (session?.preview || previewGate.active)
 function endPreview({ reopen = true } = {}) {
   showPreviewTag(false); $('review-tag').hidden = true;
   audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop();
-  session = null; preview.end(); settings.reload?.();
+  session = null; previewTail = true; preview.end(); settings.reload?.();
   if (scannedBeforePreview != null) scanned = scannedBeforePreview; scannedBeforePreview = null;
   if (reopen) openParent();
 }
@@ -214,6 +220,7 @@ function runNext() {
   } else runNext();
 }
 function startActivity(activity) { // dev: one letter game (or ?activity=intro|trace&gpc=s)
+  previewTail = false;
   sessionId ??= `s-${Date.now()}`;
   if (activity === 'star') { show('star'); return starScreen.start({ word: cfg.word ?? 'the', onComplete: () => allDone([]) }); }
   if (activity === 'family') { show('family'); const fs = servableFamilies(undefined, cfg.familyMax); return familyScreen.start({ family: fs.find(f => f.rime === cfg.rime) ?? fs[0], // capped at FAMILY_MAX like a real session
@@ -225,7 +232,7 @@ function startActivity(activity) { // dev: one letter game (or ?activity=intro|t
   letters.start({ activity, pool: cfg.pool ?? LETTERS.slice(0, 6), rounds: 4, mode: tapModeFor(activity), onComplete: () => allDone([]) });
 }
 function startDirect() { // dev: word screen at ?level (and ?word first)
-  const lv = cfg.startLevel; sessionId = `s-${Date.now()}`;
+  const lv = cfg.startLevel; sessionId = `s-${Date.now()}`; previewTail = false;
   let list = sessionWords(lv, { rand });
   if (cfg.word) { const e = Object.values(WORDS).flat().find(x => x.w === cfg.word); if (e) list = [e, ...list.filter(x => x.w !== e.w)].slice(0, list.length); }
   show('word'); screen.start(list, lv);
