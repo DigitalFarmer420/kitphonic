@@ -203,30 +203,30 @@ for (const [lv, list] of Object.entries(WORDS)) for (const e of list) {
 }
 
 // Printed word-card distractors only (not lesson words, so they do not need word/reveal audio).
-// Used when a servable word has no pictured minimal pair and no one-letter neighbour already in WORDS
-// whose GPCs are taught at that stop. Each entry is a real decodable word from the same or an earlier
-// pattern. wordCards() includes these when every GPC is known, so the child never sees an untaught letter.
+// Used when a servable word has no pictured minimal pair and no familiar neighbour already in WORDS
+// whose GPCs are taught at that stop. Each entry is a familiar, age-appropriate real word (ages 4–7)
+// from the same or an earlier pattern — never a rare, archaic, odd, or unfortunate word, and never a
+// pseudoword. wordCards() includes these when every GPC is known, so the child never sees an untaught
+// letter, and may fall back to a two-letter contrast when no familiar one-letter neighbour exists.
 export const CARD_WORDS = [
   // CVC / VC (for gum, jam, yes, off, and later neighbours)
-  W('gun', 'g u n'), W('gut', 'g u t'), W('hum', 'h u m'), W('sum', 's u m'),
-  W('ham', 'h a m'), W('ram', 'r a m'), W('jab', 'j a b'), W('yam', 'y a m'),
-  W('yet', 'y e t'), W('yen', 'y e n'), W('yep', 'y e p'),
-  W('oft', 'o f t'), W('asp', 'a s p'), W('elk', 'e l k'), W('elm', 'e l m'),
-  W('ifs', 'i f s'), W('ins', 'i n s'),
+  W('gut', 'g u t'), W('hum', 'h u m'), W('sum', 's u m'),
+  W('ham', 'h a m'), W('ram', 'r a m'), W('yam', 'y a m'),
+  W('yet', 'y e t'), W('yep', 'y e p'),
+  W('ark', 'a r k'), W('old', 'o l d'), W('odd', 'o d d'), W('ink', 'i n k'),
+  W('elk', 'e l k'), W('elm', 'e l m'),
   // CCVC starting blends (L4 "stop" and later apply stops)
   W('plot', 'p l o t'), W('slot', 's l o t'),
   W('span', 's p a n'), W('spun', 's p u n'), W('skin', 's k i n'),
-  W('flap', 'f l a p'), W('flat', 'f l a t'), W('flog', 'f l o g'),
-  W('dram', 'd r a m'), W('drub', 'd r u b'),
+  W('flap', 'f l a p'), W('flat', 'f l a t'),
   W('cram', 'c r a m'), W('grab', 'g r a b'), W('crib', 'c r i b'),
   W('plum', 'p l u m'), W('plus', 'p l u s'), W('slug', 's l u g'),
   W('clam', 'c l a m'), W('clip', 'c l i p'), W('slap', 's l a p'), W('clan', 'c l a n'),
   W('grim', 'g r i m'), W('grid', 'g r i d'), W('grip', 'g r i p'),
   W('trap', 't r a p'), W('trim', 't r i m'), W('trot', 't r o t'), W('drip', 'd r i p'),
   W('crop', 'c r o p'), W('prop', 'p r o p'),
-  W('clad', 'c l a d'), W('glum', 'g l u m'),
-  W('flan', 'f l a n'), W('plat', 'p l a t'),
-  W('swam', 's w a m'), W('swum', 's w u m'), W('slim', 's l i m'), W('skim', 's k i m'), W('swig', 's w i g'),
+  W('glum', 'g l u m'),
+  W('swam', 's w a m'), W('slim', 's l i m'), W('skim', 's k i m'),
   W('twig', 't w i g'),
   // CVCC / VCC final blends (L5 "sand")
   W('bond', 'b o n d'), W('fond', 'f o n d'),
@@ -236,18 +236,17 @@ export const CARD_WORDS = [
   W('silk', 's i l k'), W('mill', 'm i ll'), W('mink', 'm i n k'),
   W('dusk', 'd u s k'), W('disk', 'd i s k'),
   W('held', 'h e l d'), W('helm', 'h e l m'), W('kelp', 'k e l p'),
-  W('runt', 'r u n t'), W('bunt', 'b u n t'),
   W('dump', 'd u m p'), W('lump', 'l u m p'), W('pump', 'p u m p'), W('hump', 'h u m p'),
   // set 6 doubles (ck ff ll ss) and L7 stem+s
   W('dock', 'd o ck'), W('luck', 'l u ck'), W('tuck', 't u ck'), W('deck', 'd e ck'),
   W('click', 'c l i ck'), W('clack', 'c l a ck'), W('block', 'b l o ck'), W('flock', 'f l o ck'),
   W('press', 'p r e ss'),
   W('track', 't r a ck'), W('trick', 't r i ck'), W('stuck', 's t u ck'),
-  W('hall', 'h a ll'), W('bill', 'b i ll'), W('fill', 'f i ll'), W('pill', 'p i ll'), W('sill', 's i ll'), W('kill', 'k i ll'), W('till', 't i ll'),
+  W('hall', 'h a ll'), W('bill', 'b i ll'), W('fill', 'f i ll'), W('pill', 'p i ll'), W('sill', 's i ll'), W('till', 't i ll'),
   W('pack', 'p a ck'), W('sack', 's a ck'), W('lack', 'l a ck'), W('hack', 'h a ck'), W('tack', 't a ck'), W('buck', 'b u ck'),
   W('peck', 'p e ck'), W('nick', 'n i ck'),
   W('miss', 'm i ss'), W('hiss', 'h i ss'), W('mass', 'm a ss'), W('moss', 'm o ss'), W('less', 'l e ss'),
-  W('huff', 'h u ff'), W('muff', 'm u ff'), W('cuff', 'c u ff'), W('ruff', 'r u ff'),
+  W('huff', 'h u ff'), W('cuff', 'c u ff'),
   W('small', 's m a ll'), W('spell', 's p e ll'),
   W('fuzz', 'f u zz'),
   W('caps', 'c a p s'), W('cops', 'c o p s'), W('cuts', 'c u t s'), W('cubs', 'c u b s_z'), W('pups', 'p u p s'),
@@ -256,13 +255,12 @@ export const CARD_WORDS = [
   W('lets', 'l e t s'), W('lags', 'l a g s_z'), W('logs', 'l o g s_z'), W('pegs', 'p e g s_z'),
   W('kits', 'k i t s'),
   // set 8 digraphs (sh ch th) — printed cards only
-  W('sled', 's l e d'), W('shod', 'sh o d'), W('shad', 'sh a d'),
-  W('shot', 'sh o t'), W('shun', 'sh u n'),
-  W('shack', 'sh a ck'), W('stock', 's t o ck'), W('shuck', 'sh u ck'), W('smock', 's m o ck'),
+  W('sled', 's l e d'),
+  W('shot', 'sh o t'),
+  W('shack', 'sh a ck'), W('stock', 's t o ck'), W('smock', 's m o ck'),
   W('such', 's u ch'), W('muck', 'm u ck'), W('mush', 'm u sh'),
-  W('hunch', 'h u n ch'), W('bunch', 'b u n ch'), W('punch', 'p u n ch'), W('lurch', 'l u r ch'),
+  W('hunch', 'h u n ch'), W('bunch', 'b u n ch'), W('punch', 'p u n ch'),
   W('chess', 'ch e ss'),
-  W('tench', 't e n ch'),
   W('math', 'm a th'),
 ];
 for (const e of CARD_WORDS) {

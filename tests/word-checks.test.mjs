@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { STOPS, servableWords, applyWords, knownForServing, mapState, progressMarkers } from '../js/progress.js';
 import { seedProgress } from '../js/dev-seed.js';
 import { WORDS, CARD_WORDS } from '../js/content.js';
-import { hasWordCheck, needsCheck, wordCards } from '../js/word-logic.js';
+import { hasWordCheck, needsCheck, wordCards, rng } from '../js/word-logic.js';
 import { validateWord, formatErrors, patternOf, parseIds } from '../js/validate.js';
 import { GPC, GPCS } from '../js/sequence.js';
 import { CONFIG } from '../js/config.js';
@@ -114,6 +114,102 @@ test('word cards never print an untaught GPC when known is set', () => {
       const src = [...Object.values(WORDS).flat(), ...CARD_WORDS].find(x => x.w === c.w);
       assert.ok(src, `${e.w} card ${c.w} is missing a parse`);
       assert.ok(src.parse.split(' ').every(g => known.has(g)), `${e.w} -> ${c.w} uses an untaught GPC`);
+    }
+  }
+});
+
+// Rare, archaic, odd grammatical, or unfortunate words that must not appear on a printed card
+// for a 4–7 year old (Education Researcher, 2026-11-21).
+const UNFAMILIAR_OR_ODD = [
+  'dram', 'drub', 'oft', 'ifs', 'ins', 'tench', 'shad', 'shod',
+  'gun', 'flog', 'clad', 'plat', 'asp', 'yen', 'kill', 'shun', 'lurch', 'ruff', 'shuck',
+  'flan', 'swig', 'swum', 'jab', 'muff', 'runt', 'bunt',
+];
+
+function isMirrorOnly(a, b) {
+  if (a.length !== b.length) return false;
+  const diffs = [...a].map((c, i) => (c !== b[i] ? c + b[i] : null)).filter(Boolean);
+  return diffs.length === 1 && (diffs[0] === 'bd' || diffs[0] === 'db' || diffs[0] === 'pq' || diffs[0] === 'qp');
+}
+
+function letterDiffs(a, b) {
+  return a.length !== b.length ? Infinity : [...a].filter((c, i) => c !== b[i]).length;
+}
+
+test('CARD_WORDS stay familiar: no rare, archaic, odd, or unfortunate foils', () => {
+  const words = new Set(CARD_WORDS.map(e => e.w));
+  const hits = UNFAMILIAR_OR_ODD.filter(w => words.has(w));
+  assert.equal(hits.length, 0, `unfamiliar or unfortunate CARD_WORDS: ${hits.join(', ')}`);
+});
+
+test('word cards never use b/d or p/q as the only difference', () => {
+  for (const e of Object.values(WORDS).flat()) {
+    for (const seed of [1, 2, 3, 5, 8, 13, 21]) {
+      const cards = wordCards(e.w, { n: 3, rand: rng(seed) });
+      if (!cards) continue;
+      for (const c of cards) {
+        if (c.w === e.w) continue;
+        assert.ok(!isMirrorOnly(e.w, c.w), `${e.w} must not pair with ${c.w} (b/d or p/q only)`);
+      }
+    }
+  }
+  for (const [w, banned] of [['big', 'dig'], ['dig', 'big'], ['bump', 'dump'], ['duck', 'buck']]) {
+    for (let i = 0; i < 20; i++) {
+      const cards = wordCards(w, { n: 3, rand: rng(i + 1) });
+      assert.ok(cards, `${w} should still have word cards`);
+      assert.ok(!cards.some(c => c.w === banned), `${w} must not pair with ${banned}`);
+    }
+  }
+});
+
+test('word cards fall back to a familiar two-letter contrast when no one-letter neighbour is suitable', () => {
+  const cases = [
+    { id: 'words:L4', word: 'drum', expect: ['drop', 'drip'] },
+    { id: 'words:set6', word: 'off', expect: ['old', 'odd', 'elf'] },
+    { id: 'words:L7', word: 'its', expect: ['ink', 'his', 'has', 'bus'] },
+    { id: 'words:L4', word: 'frog', expect: ['flag', 'drop'] },
+    { id: 'words:L4', word: 'glad', expect: ['flag', 'clap', 'plan'] },
+  ];
+  for (const { id, word, expect } of cases) {
+    const n = STOPS.findIndex(s => s.id === id);
+    assert.ok(n >= 0, id);
+    const at = servableAtCurrentWordStop(n);
+    assert.equal(at.cur.id, id);
+    const cards = wordCards(word, { n: 3, rand: () => 0.3, known: at.known });
+    assert.ok(cards, `${word} should have word cards at ${id}`);
+    const foils = cards.filter(c => c.w !== word).map(c => c.w);
+    assert.ok(foils.length >= 1, `${word} has no foils`);
+    for (const f of foils) {
+      const d = letterDiffs(word, f);
+      assert.ok(d === 1 || d === 2, `${word} vs ${f} differs by ${d} letters`);
+      assert.equal(f.length, word.length, `${word} vs ${f} length`);
+    }
+    const seen = new Set();
+    for (let i = 1; i <= 30; i++) {
+      const c = wordCards(word, { n: 3, rand: rng(i), known: at.known });
+      for (const f of c.filter(x => x.w !== word)) seen.add(f.w);
+    }
+    assert.ok(expect.some(w => seen.has(w)), `${word} at ${id} never showed a familiar foil among ${expect.join(', ')} (got ${[...seen].join(', ')})`);
+  }
+});
+
+test('word cards never print an untaught GPC at any word stop', () => {
+  for (let n = 0; n < STOPS.length; n++) {
+    const at = servableAtCurrentWordStop(n);
+    if (!at) continue;
+    for (const e of at.ws) {
+      const cards = wordCards(e.w, { known: at.known, n: 3, rand: () => 0.4 });
+      if (!cards) continue;
+      for (const c of cards) {
+        if (c.w === e.w) continue;
+        const src = [...Object.values(WORDS).flat(), ...CARD_WORDS].find(x => x.w === c.w);
+        assert.ok(src, `${at.cur.id} ${e.w} card ${c.w} is not in WORDS or CARD_WORDS`);
+        assert.ok(src.parse.split(' ').every(g => at.known.has(g)), `${at.cur.id} ${e.w} -> ${c.w} uses an untaught GPC (${src.parse})`);
+        assert.equal(c.w.length, e.w.length, `${at.cur.id} ${e.w} -> ${c.w} changes length`);
+        const d = letterDiffs(e.w, c.w);
+        assert.ok(d === 1 || d === 2, `${at.cur.id} ${e.w} -> ${c.w} differs by ${d}`);
+        assert.ok(!isMirrorOnly(e.w, c.w), `${at.cur.id} ${e.w} -> ${c.w} is a mirror-letter pair`);
+      }
     }
   }
 });
