@@ -133,19 +133,52 @@ export function hasWordCheck(entry, { known = null, cfg = {}, level = entry.leve
   return !!wordCards(entry.w, { n: cfg.choicesPerCheck ?? 3, rand, known });
 }
 // Printed word-card check for words without a picture check (L1 VC words, sat, top…): the child picks the word they
-// just read from minimal-pair printed words (one letter different). Pool is WORDS plus CARD_WORDS (printed
-// distractors that are not lesson words). opts.known: only words with taught GPCs.
-// Each card is tagged with the position it differs in (first letter = onset, last = final, a vowel letter = vowel),
-// so word-card misses feed the error patterns too; focus puts cards differing at that position first.
-export const cardContrast = (word, other) => { const i = [...word].findIndex((c, k) => c !== other[k]);
-  return i < 0 ? null : i === 0 ? 'onset' : i === word.length - 1 ? 'final' : /[aeiou]/.test(word[i]) && /[aeiou]/.test(other[i]) ? 'vowel' : null; };
+// just read from familiar printed neighbours. Pool is WORDS plus CARD_WORDS (printed distractors that are not
+// lesson words). Prefer a one-letter, one-position contrast; if none exists, fall back to a familiar same-length
+// word that differs by two letters (same shape class first). Never use b/d or p/q as the only difference — those
+// mirror letters are reserved for targeted practice. opts.known: only words with taught GPCs.
+// Each one-letter card is tagged with the position it differs in (first letter = onset, last = final, a vowel
+// letter = vowel), so word-card misses feed the error patterns too; focus puts cards differing at that position first.
+export const cardContrast = (word, other) => {
+  if (!word || !other || word.length !== other.length) return null;
+  const diffs = [...word].map((c, k) => (c !== other[k] ? k : -1)).filter(i => i >= 0);
+  if (diffs.length !== 1) return null;
+  const i = diffs[0];
+  return i === 0 ? 'onset' : i === word.length - 1 ? 'final' : /[aeiou]/.test(word[i]) && /[aeiou]/.test(other[i]) ? 'vowel' : null;
+};
+const MIRROR_ONLY = new Set(['bd', 'db', 'pq', 'qp']);
+const letterDiffs = (a, b) => (a.length !== b.length ? Infinity : [...a].filter((c, i) => c !== b[i]).length);
+const isMirrorOnly = (a, b) => {
+  if (a.length !== b.length) return false;
+  const diffs = [...a].map((c, i) => (c !== b[i] ? c + b[i] : null)).filter(Boolean);
+  return diffs.length === 1 && MIRROR_ONLY.has(diffs[0]);
+};
+const shapeClass = pattern => pattern === 'CCVC' ? 'onset-blend' : (pattern === 'CVCC' || pattern === 'VCC') ? 'final-blend' : 'simple';
 export function wordCards(word, { n = 3, rand = Math.random, known = null, focus = null } = {}) {
   const all = [...new Map([...Object.values(WORDS).flat(), ...CARD_WORDS].map(e => [e.w, e])).values()];
+  const target = all.find(e => e.w === word);
+  if (!target) return null;
   const ok = e => !known || e.parse.split(' ').every(g => known.has(g));
-  const diff1 = w => w.length === word.length && [...w].filter((c, i) => c !== word[i]).length === 1;
-  const pool = shuffle(all.filter(e => e.w !== word && diff1(e.w) && ok(e)), rand).map(e => ({ w: e.w, card: true, contrast: cardContrast(word, e.w) }));
-  if (focus) pool.sort((a, b) => (b.contrast === focus) - (a.contrast === focus));
-  const others = pool.slice(0, n - 1);
+  const usable = all.filter(e => e.w !== word && ok(e) && !isMirrorOnly(word, e.w));
+  const toCard = e => ({ w: e.w, card: true, contrast: cardContrast(word, e.w) });
+  const one = shuffle(usable.filter(e => letterDiffs(word, e.w) === 1), rand).map(toCard);
+  if (focus) one.sort((a, b) => (b.contrast === focus) - (a.contrast === focus));
+  const others = one.slice(0, n - 1);
+  if (others.length < n - 1) {
+    const wantPat = target.pattern, wantShape = shapeClass(target.pattern);
+    const byEntry = Object.fromEntries(usable.map(e => [e.w, e]));
+    const rank = c => {
+      const e = byEntry[c.w];
+      if (e?.pattern === wantPat) return 0;
+      if (shapeClass(e?.pattern) === wantShape) return 1;
+      return 2;
+    };
+    const two = shuffle(usable.filter(e => letterDiffs(word, e.w) === 2), rand).map(toCard).sort((a, b) => rank(a) - rank(b));
+    for (const c of two) {
+      if (others.length >= n - 1) break;
+      others.push(c);
+    }
+  }
   if (!others.length) return null;
   const res = shuffle([{ w: word, card: true }, ...others], rand); res.cards = true; res.contrast = others[0].contrast; return res;
 }

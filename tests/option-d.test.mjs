@@ -140,7 +140,7 @@ test('hasWordCheck: pictured L4 words without a minimal pair still count if word
   assert.equal(needsCheck(stop, cfg, 4), false, 'stop has no pictured minimal pair');
   assert.equal(needsCheck(flag, cfg, 4), false, 'flag has no pictured minimal pair');
   assert.ok(wordCards('stop', { known, n: 3, rand: () => 0.3 }));
-  assert.ok(wordCards('flag', { known, n: 3, rand: () => 0.3 }), 'flag now has printed word cards (flap / flat / flog)');
+  assert.ok(wordCards('flag', { known, n: 3, rand: () => 0.3 }), 'flag has printed word cards (flap / flat)');
   assert.ok(hasWordCheck(stop, { known, cfg, level: 4 }));
   assert.ok(hasWordCheck(flag, { known, cfg, level: 4 }));
 });
