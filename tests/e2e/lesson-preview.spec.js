@@ -50,7 +50,7 @@ test('press and hold a locked lesson in Grown-ups: plays through, nothing saved,
   // press and hold opens it
   await holdOn(page, target, 1000);
   await page.waitForFunction(() => window.kitphonic.preview.active && document.getElementById('parent').hidden, null, { timeout: 10_000 });
-  await expect(page.locator('#preview-tag')).toBeVisible();
+  await expect(page.locator('#preview-badge')).toBeVisible();
   const mid = await page.evaluate(() => ({ stop: window.kitphonic.preview.stop?.id, previewIndex: window.kitphonic.map().index }));
   expect(mid.stop).toBe('sound:g');
   expect(mid.previewIndex).toBe(19); // the preview child is at the chosen stop
@@ -67,7 +67,7 @@ test('press and hold a locked lesson in Grown-ups: plays through, nothing saved,
     await step(page, scr, rng, 0.35);
   }
   expect(seen).toEqual(expect.arrayContaining(['lesson', 'letters']));
-  await expect(page.locator('#preview-tag')).toBeHidden();
+  await expect(page.locator('#preview-badge')).toBeHidden();
   expect(await page.evaluate(() => window.kitphonic.preview.active)).toBe(false);
   expect(await page.evaluate(snapshot)).toBe(ls0);
 
@@ -93,4 +93,22 @@ test('Home during a preview returns to Grown-ups with nothing saved', async ({ p
   await page.waitForFunction(() => !document.getElementById('parent').hidden && !window.kitphonic.preview.active, null, { timeout: 10_000 });
   expect(await page.evaluate(snapshot)).toBe(ls0);
   expect(await page.evaluate(() => window.kitphonic.map().index)).toBe(4);
+});
+
+test('the Preview badge is the exit: one tap back to Grown-ups, nothing saved', async ({ page }) => {
+  await seedChild(page, 6);
+  await openGrownUps(page);
+  const ls0 = await page.evaluate(snapshot);
+  await holdOn(page, page.locator('.plesson[data-i="40"]'), 1000); // sound "w", locked
+  await page.waitForFunction(() => window.kitphonic.preview.active && document.getElementById('parent').hidden, null, { timeout: 10_000 });
+  const badge = page.locator('#preview-badge');
+  await expect(badge).toBeVisible();
+  await expect(badge).toHaveAccessibleName('Exit preview');
+  await expect(badge).toContainText('Preview');
+  await page.waitForTimeout(600);
+  await badge.click();
+  await page.waitForFunction(() => !document.getElementById('parent').hidden && !window.kitphonic.preview.active, null, { timeout: 10_000 });
+  await expect(badge).toBeHidden();
+  expect(await page.evaluate(snapshot)).toBe(ls0);
+  expect(await page.evaluate(() => window.kitphonic.map().index)).toBe(6);
 });

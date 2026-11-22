@@ -19,7 +19,7 @@ const KIND = { sound: 'sound', words: 'words', story: 'story' };
 // Lessons grid: every map stop in course order, locked ones too. Press and hold opens a read-only preview.
 export function lessonTiles(map) {
   return map.stops.map((st, i) => ({ i, id: st.id, label: st.label, kind: st.kind, status: st.status,
-    cap: st.kind === 'sound' ? (st.group?.split(' as in ')[1] ?? KIND.sound) : KIND[st.kind] ?? st.kind,
+    cap: st.kind === 'sound' ? (st.group ? `as in ${st.group.split(' as in ')[1]}` : KIND.sound) : KIND[st.kind] ?? st.kind,
     learning: describe(st).learning }));
 }
 export function createParentScreen({ settings, getResponses, getMap = () => null, audio, onClose, onReset, onSkip = () => {}, onPreview = () => {}, tip, holdMs = PREVIEW_HOLD_MS }) {

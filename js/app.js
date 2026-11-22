@@ -29,7 +29,7 @@ import { createHelloGate } from './hello-gate.js';
 import { createHelloVisit } from './hello-visit.js';
 import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
 import { registerServiceWorker } from './sw-register.js';
-import { createPreviewGate, createPreview } from './preview.js';
+import { createPreviewGate, createPreview, placeBadge } from './preview.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -151,11 +151,37 @@ function startPreview(index) {
   if (!plan?.items.length) { endPreview(); return; }
   sessionId = `v-${Date.now()}`;
   session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: null, practice: true, preview: true };
-  $('preview-tag').hidden = false;
+  showPreviewTag(true);
   runNext();
 }
+// The Preview badge (mockup-preview-badge.html): top-right of #stage under the top bar; the whole pill exits.
+let badgeTimer = 0, badgeBand = false;
+// A board too full for the badge anywhere (a small phone) gets a band under it instead: the screen reflows into the
+// smaller board and the badge sits in the band, so it still never covers anything.
+const BADGE_BAND = 48;
+function badgeFallback(on) {
+  const b = $('preview-badge'); if (badgeBand === on) return; badgeBand = on;
+  if (on) {
+    const bottom = stage.reserveBottom(BADGE_BAND); document.body.append(b);
+    Object.assign(b.style, { position: 'fixed', top: 'auto', left: 'auto', bottom: (bottom + Math.max(0, (BADGE_BAND - b.offsetHeight) / 2)) + 'px', right: '1rem' });
+    b.dataset.spot = 'band';
+  } else {
+    stage.reserveBottom(0); $('stage').prepend(b);
+    for (const k of ['position', 'top', 'left', 'bottom', 'right']) b.style[k] = ''; delete b.dataset.spot;
+  }
+}
+const placePreviewBadge = () => {
+  if (badgeBand) return; // stays in its band for the rest of this preview (no jumping)
+  if (placeBadge($('preview-badge'), [...document.querySelectorAll('#stage > .screen')].find(x => !x.hidden)) == null) badgeFallback(true);
+};
+function showPreviewTag(on) {
+  clearInterval(badgeTimer); if (!on) badgeFallback(false);
+  $('preview-badge').hidden = !on;
+  if (on) { placePreviewBadge(); badgeTimer = setInterval(placePreviewBadge, 250); } // screens change as the lesson runs
+}
+$('preview-badge').onclick = () => { if (session?.preview || previewGate.active) endPreview(); };
 function endPreview({ reopen = true } = {}) {
-  $('preview-tag').hidden = true; $('review-tag').hidden = true;
+  showPreviewTag(false); $('review-tag').hidden = true;
   audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop();
   session = null; preview.end(); settings.reload?.();
   if (scannedBeforePreview != null) scanned = scannedBeforePreview; scannedBeforePreview = null;
@@ -216,7 +242,7 @@ const armHello = () => {
   $('play').classList.remove('pressed');
   $('hello-bubble').textContent = helloLine;
 };
-afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); };
+afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); if (session?.preview) placePreviewBadge(); };
 $('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
 $('play').onclick = () => {

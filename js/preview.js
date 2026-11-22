@@ -91,3 +91,30 @@ export function pressHold(el, { ms = PREVIEW_HOLD_MS, slop = 10, onHold, onTap =
   el.addEventListener('click', e => { if (fired) { e.preventDefault?.(); fired = false; } });
   return { cancel };
 }
+
+// Preview badge placement (mockup-preview-badge.html). The approved spot is top-right under the top-bar buttons.
+// On a board where that spot would cover something (a phone bubble, a landscape picture), the badge slides to the
+// nearest clear spot, like the map's label unclash: down the right edge first, then down the left edge. It keeps a
+// clear spot while it stays clear, so it does not jump around during a lesson. Runs only while previewing.
+const CONTENT = 'button, [role="slider"], .bubble, .mascot > svg, .kitwrap > svg, .tcard, .icard, .ipic, #card, #sn-card, #fm-card, .tray, .peb, .tile, .wd, .ftile, .pc, .choice, canvas, img';
+const SIDES4 = ['top', 'right', 'bottom', 'left'];
+export function placeBadge(badge, screen, { step = 8 } = {}) {
+  if (!badge || badge.hidden || !screen) return null;
+  const hit = (a, b) => a.left < b.right + 2 && b.left < a.right + 2 && a.top < b.bottom + 2 && b.top < a.bottom + 2;
+  const shown = e => { if (e.closest('[hidden]')) return false; const r = e.getBoundingClientRect(); return r.width >= 1 && r.height >= 1 && getComputedStyle(e).visibility !== 'hidden'; };
+  const boxes = [...screen.querySelectorAll(CONTENT)].filter(shown).map(e => e.getBoundingClientRect());
+  const st = badge.parentElement.getBoundingClientRect();
+  const clear = () => { const r = badge.getBoundingClientRect(); return r.left >= st.left && r.top >= st.top && r.right <= st.right && r.bottom <= st.bottom && !boxes.some(b => hit(r, b)); };
+  if (badge.dataset.spot && clear()) return badge.dataset.spot; // still clear: stay put
+  const set = sp => { for (const k of SIDES4) badge.style[k] = sp[k] ?? ''; };
+  set({}); // the CSS (design) spot
+  if (clear()) return (badge.dataset.spot = 'design');
+  const cs = getComputedStyle(badge), top0 = parseFloat(cs.top) || 0, right0 = cs.right, h = badge.offsetHeight;
+  for (const side of ['right', 'left']) {
+    for (let y = top0; y + h <= st.height; y += step) {
+      set(side === 'right' ? { top: y + 'px', right: right0 } : { top: y + 'px', right: 'auto', left: right0 });
+      if (clear()) return (badge.dataset.spot = `${side}:${Math.round(y)}`);
+    }
+  }
+  set({}); delete badge.dataset.spot; return null; // nowhere clear: the design spot (the overlap check reports it)
+}

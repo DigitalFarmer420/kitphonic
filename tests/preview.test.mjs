@@ -95,7 +95,7 @@ test('lessons grid lists every stop in course order, any status', () => {
   assert.equal(tiles.length, 56);
   assert.deepEqual(tiles.map(t => t.id), STOPS.map(s => s.id));
   assert.ok(tiles.some(t => t.status === 'upcoming') && tiles.some(t => t.status === 'passed') && tiles.filter(t => t.status === 'current').length === 1);
-  assert.ok(tiles.every(t => t.cap && t.learning && t.cap.length <= 8));
+  assert.ok(tiles.every(t => t.cap && t.learning && t.cap.length <= 10));
 });
 
 // --- press and hold ---
