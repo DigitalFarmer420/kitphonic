@@ -37,7 +37,33 @@ the rules on admins). Production then does not deploy on its own.
 
 **Emergency deploy.** A repository admin runs *Actions → Deploy production → Run workflow* on `main` with
 `emergency_override` checked. The run notes the override and who ran it in its summary; the test gate still runs.
-Anyone without admin permission who sets the input is refused.
+Anyone without admin permission who sets the input is refused. The deploy still stamps a version (see below): a
+new commit gets the next production `N`, and a re-run of a commit that already has a `vYYYY.MM.DD.N` tag reuses it.
+
+## Version numbers
+
+The visible version is `YYYY.MM.DD.N` (the date in America/Los_Angeles), shown in the Grown-ups footer. Dev also
+keeps its DEV badge.
+
+**Stamped at deploy, not committed.** `deploy-dev.yml` (push to `develop`, or a manual run of that workflow) and
+`deploy-prod.yml` (push to `main`, including a manual run with `emergency_override`) run `tools/stamp-version.mjs`
+and write the version into the published tree only (`VERSION`, `js/version.js`, and the service-worker cache,
+because `js/version.js` is precached). The branch is left unchanged.
+
+**Counters.** Dev and production count separately, from tags the workflow pushes on this repository:
+`dev-YYYY.MM.DD.N` and `vYYYY.MM.DD.N`. `N` is one higher than the highest tag for that environment on that date,
+or `1` if there is none. Older `v1.0.0-rc*` tags do not count. The committed `VERSION` is a floor when it is also
+today's date, so today's already shipped release number is not reused.
+
+**Re-runs.** If this commit already has a tag for that environment, the same version is reused and no new tag is
+created. A new commit allocates the next `N`. The deploy workflows use a concurrency group (`deploy-dev`,
+`deploy-prod`, `cancel-in-progress: false`) so only one deploy per environment runs at a time; a colliding tag
+push is retried after a refetch.
+
+**Permissions.** The deploy jobs request `contents: write` so `GITHUB_TOKEN` can create those tags. The
+repository's default workflow token is read-only. There were no tag protection rules when this was added, and
+main's branch protection does not block tag creation. If tag pushes start failing, check for a new tag rule or a
+tighter token policy — do not work around a block by using a personal deploy key to write tags.
 
 ## Previous rc9 readiness
 

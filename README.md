@@ -22,8 +22,16 @@ Until that source is GitHub Actions, Pages remains a branch publisher and upload
 ## Version numbers
 
 The visible app version (`VERSION` and `js/version.js`, shown in the Grown-ups footer) is the
-release date in America/Los_Angeles: `YYYY.MM.DD.N`. `N` starts at 1 and goes up for later
-releases on the same day. Run `node tools/bump-version.mjs` before a release; it also refreshes
-the service-worker cache because `js/version.js` is precached. Android `versionName` /
-`versionCode` stay with the packager.
+deploy date in America/Los_Angeles: `YYYY.MM.DD.N`. `N` starts at 1 and goes up for each later
+deploy of that environment on the same day. Dev and production each have their own counter.
+Dev also keeps its existing DEV badge.
+
+The number is stamped at deploy time by [`.github/workflows/deploy-dev.yml`](.github/workflows/deploy-dev.yml) and
+[`.github/workflows/deploy-prod.yml`](.github/workflows/deploy-prod.yml), using [`tools/stamp-version.mjs`](tools/stamp-version.mjs).
+It is written only into the published copy (along with the service-worker cache name, because `js/version.js` is precached).
+The committed files stay at the last release or a placeholder and are not pushed back to the branch.
+
+The next `N` comes from git tags the workflow creates on this repository: `dev-YYYY.MM.DD.N` on a develop deploy, and `vYYYY.MM.DD.N` on a production deploy. Legacy tags such as `v1.0.0-rc10` are ignored. If that commit already has a tag for that environment, the deploy reuses it, so a re-run does not skip a number. A new commit gets the next `N`. An emergency production deploy (`workflow_dispatch` with `emergency_override`) uses the same stamping. The committed `VERSION` is also a floor when it falls on the same date, so a number already shown as the last release is not reused.
+
+You do not need to run `node tools/bump-version.mjs` before a release. It remains available for a local stamp. Android `versionName` / `versionCode` stay with the packager.
 
