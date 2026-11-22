@@ -29,6 +29,7 @@ import { createHelloGate } from './hello-gate.js';
 import { createHelloVisit } from './hello-visit.js';
 import { createSessionLog, observeAudioContexts, sessionLogEnabled, watchStorage } from './session-log.js';
 import { registerServiceWorker } from './sw-register.js';
+import { createPreviewGate, createPreview } from './preview.js';
 
 const cfg = configFromUrl(location.search);
 const $ = id => document.getElementById(id);
@@ -39,7 +40,10 @@ const stage = createStage($('stage'), () => { const k = window.kitphonic; k?.scr
 
 const rand = rng(cfg.seed ?? Date.now());
 // ?reducedMotion=1 forces the device preference on (testing); the grown-ups setting still decides when it is On/Off.
-const settings = createSettings(sessionLog ? watchStorage(window.localStorage, sessionLog) : window.localStorage, undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
+// Grown-ups lesson preview: every storage the app writes goes through this gate. During a preview all writes land in
+// an in-memory overlay that is dropped on exit, so a preview cannot change progress, demos or settings on the device.
+const previewGate = createPreviewGate();
+const settings = createSettings(previewGate.wrap(sessionLog ? watchStorage(window.localStorage, sessionLog) : window.localStorage), undefined, cfg.reducedMotion ? () => ({ matches: true }) : globalThis.matchMedia?.bind(globalThis));
 const audio = await createAudio({ base: 'audio/', speechRate: () => settings.audioRate() });
 // Reduced motion app-wide: a stage class stops CSS animation/transitions; screens also skip drift, path drawing,
 // confetti, the ghost hand and demos via settings.reducedMotion().
@@ -48,7 +52,7 @@ applyMotion(); settings.onChange(k => (k === 'reducedMotion' || k === '*') && ap
 globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').addEventListener?.('change', applyMotion);
 // Local only (spec §3.9). Dev ?progress=N uses a seeded in-memory log so real progress is never touched.
 const storageBacking = cfg.progress != null ? memoryStorage({ 'kitphonic.v1.responses': JSON.stringify(seedProgress(cfg.progress, { due: cfg.due })) }) : window.localStorage;
-const storage = sessionLog ? watchStorage(storageBacking, sessionLog) : storageBacking;
+const storage = previewGate.wrap(sessionLog ? watchStorage(storageBacking, sessionLog) : storageBacking);
 const store = createStore(storage);
 const seen = createSeen(storage); // ghost-hand demos: first meetings per activity (in-memory in dev ?progress mode)
 let sessionId = null;
@@ -64,6 +68,8 @@ function syncProgress() {
 }
 syncProgress();
 const log = r => {
+  // Preview: the gate's overlay holds a synthetic child, so the support ladder works and nothing reaches the device.
+  if (session?.preview) return store.log({ ...r, sessionId, preview: true });
   // Replay is practice-only: nothing is written, so a miss cannot change mastery, stars, or the current stop.
   if (session?.practice) return { timestamp: Date.now(), sessionId, ...r, scored: false, practice: true, firstAttempt: false };
   const out = store.log({ ...r, sessionId }); syncProgress(); return out;
@@ -91,11 +97,12 @@ const sentenceScreen = createSentenceScreen({ audio, stage, seen, reduced: () =>
 const mapScreen = createMapScreen({ audio, stage, settings, seen, getMap: () => mapState(store.all()), getResponses: () => store.all(),
   onGo: () => startSession(), onReplay: stop => startReplay(stop), onHome: () => { audio.stop(); show('hello'); }, onParent: () => openParent() });
 function showMap(opts) { show('map'); mapScreen.render(opts); }
-const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(),
+const parent = createParentScreen({ settings, audio, tip: cfg.silentTip, getResponses: () => store.all(), getMap: () => mapState(store.all()),
+  onPreview: i => startPreview(i),
   onClose: () => showMap(), onReset: () => { store.clear(); seen.reset(); scanned = -Infinity; },
   onSkip: () => { const c = mapState(store.all()).current; if (c) store.log({ skill: `stop:${c.id}`, itemId: c.id, marker: true, parent: true, correct: true, firstAttempt: true, scored: false }); } });
 function openParent() { audio.stop(); show('parent'); parent.open(); }
-function goHome() { $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); syncProgress(); session = null; showMap(); }
+function goHome() { if (session?.preview) return endPreview(); $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop(); syncProgress(); session = null; showMap(); }
 function allDone(stickers = session?.stickers ?? []) {
   if (session?.practice) return finishReplay();
   $('review-tag').hidden = true; syncProgress(); const before = session?.mapBefore ?? null, after = mapState(store.all());
@@ -130,14 +137,35 @@ function startReplay(stop) {
   runNext();
 }
 function finishReplay() {
+  if (session?.preview) return endPreview();
   $('review-tag').hidden = true; audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop();
   session = null; showMap();
+}
+// Grown-ups preview: any stop, locked ones too, played as a synthetic child at that stop. Read-only (js/preview.js).
+const preview = createPreview({ gate: previewGate, getResponses: () => store.all(), rand });
+let scannedBeforePreview = null;
+function startPreview(index) {
+  if (previewGate.active) endPreview({ reopen: false });
+  audio.stop(); scannedBeforePreview = scanned;
+  const plan = preview.start(index, { minutes: settings.get('sessionMinutes') });
+  if (!plan?.items.length) { endPreview(); return; }
+  sessionId = `v-${Date.now()}`;
+  session = { plan, i: -1, started: performance.now(), stickers: [], mapBefore: null, practice: true, preview: true };
+  $('preview-tag').hidden = false;
+  runNext();
+}
+function endPreview({ reopen = true } = {}) {
+  $('preview-tag').hidden = true; $('review-tag').hidden = true;
+  audio.stop(); letters.stop(); lesson.stop(); familyScreen.stop();
+  session = null; preview.end(); settings.reload?.();
+  if (scannedBeforePreview != null) scanned = scannedBeforePreview; scannedBeforePreview = null;
+  if (reopen) openParent();
 }
 function runNext() {
   if (!session) return;
   session.i++;
   const it = session.plan.items[session.i], overTime = performance.now() - session.started > 10 * 60e3; // hard 10-min cap
-  $('review-tag').hidden = !(it && !overTime && it.why === 'review'); // rc7: spaced / slipped review is labelled, never a step back
+  $('review-tag').hidden = !(it && !overTime && it.why === 'review' && !session.preview); // rc7: spaced / slipped review is labelled, never a step back
   if (!it || overTime) return session?.practice ? finishReplay() : allDone();
   if (it.type === 'letters') {
     show('letters');
@@ -211,7 +239,7 @@ $('done-home').onclick = () => { // take a break. The recorded session-end line 
   audio.stop(); audio.play('m-all-done').then(() => { if ($('done').dataset.kind === 'break') showMap(); });
 };
 
-window.kitphonic = { cfg, audio, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, helloGate, sessionLog, get session() { return session; },
+window.kitphonic = { cfg, audio, preview, startPreview, endPreview, previewGate, screen, letters, lesson, starScreen, sentenceScreen, familyScreen, parent, openParent, settings, mapScreen, showMap, startSession, startActivity, store, helloGate, sessionLog, get session() { return session; },
   map: () => mapState(store.all()), skillState: skill => skillState(store.all(), skill) }; // debugging / automated checks
 if (cfg.parent) openParent(); // dev: ?parent=1 skips the gate
 else if (cfg.levelup) { const m = mapState(store.all()); if (m.index > 0) { show('levelup'); mapScreen.levelUp(m.stops[m.index - 1], { onBack: () => showMap({ drawFrom: m.index - 1 }) }); } else showMap(); } // dev

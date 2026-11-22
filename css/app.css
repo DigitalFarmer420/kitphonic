@@ -525,6 +525,19 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #review-tag{position:absolute;top:0.25rem;left:50%;transform:translateX(-50%);z-index:20;pointer-events:none;padding:0.125rem 0.75rem;border-radius:0.75rem;
   background:rgba(255,255,255,.9);border:0.125rem solid var(--sky);color:var(--skyd);font:800 0.8125rem/1rem Nunito,system-ui,sans-serif;white-space:nowrap}
 #review-tag[hidden]{display:none}
+/* Grown-ups lesson preview (js/preview.js): same small label as the review tag; Home returns to Grown-ups */
+#preview-tag{position:absolute;top:0.25rem;left:50%;transform:translateX(-50%);z-index:20;pointer-events:none;padding:0.125rem 0.75rem;border-radius:0.75rem;
+  background:rgba(255,255,255,.9);border:0.125rem solid #c98a1e;color:#8a5a10;font:800 0.8125rem/1rem Nunito,system-ui,sans-serif;white-space:nowrap;letter-spacing:.02em}
+#preview-tag[hidden]{display:none}
+/* Lessons grid: every map stop, 64px targets; press and hold to preview */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;margin-top:10px}
+.plesson{min-width:64px;min-height:64px;border-radius:14px;border:2px solid transparent;background:#f4ede2;color:#5d4e42;font:inherit;padding:4px 2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;line-height:1;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:pan-y;overflow:hidden}
+.plesson>span{font-size:22px;font-weight:700;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plesson>small{font:600 11px 'Nunito',sans-serif;opacity:.85;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plesson.passed{background:#dcefd9;color:#2f4a2c}.plesson.current{background:#fdf0c4;border-color:#f2b84b}
+.plesson.holding{box-shadow:0 0 0 3px #8fbf8c inset;background:#fff}
+#pl-hint{min-height:1.4em}
 
 /* ---- fluid floors and reflow -------------------------------------------------
    rem above tracks the board (1rem = 16×u). These clamps are real CSS pixels so a
