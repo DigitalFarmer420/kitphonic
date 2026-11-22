@@ -37,10 +37,9 @@ export function createParentScreen({ settings, getResponses, getMap = () => null
   }
   const tile = t => `<span class="ptile L ${t.state}${t.ex ? ' ex' : ''}" title="${esc(t.text)}${t.ex ? ' as in ' + esc(t.ex) : ''}: ${STATE_LABEL[t.state]}">${esc(t.text)}${t.ex ? `<small>${esc(t.ex)}</small>` : ''}</span>`;
   const lesson = t => {
-    const cur = t.status === 'current' ? ' current' : '';
     const stateName = STATE_LABEL[t.state] ?? t.state;
     const where = t.status === 'current' ? ' Current stop.' : '';
-    return `<button class="plesson ${t.state}${cur}" data-i="${t.i}" aria-label="${esc(t.label)}: ${esc(t.learning)}. ${esc(stateName)}.${where} Press and hold to preview."><span class="${isEmoji(t.label) ? 'emoji' : 'L'}">${esc(t.label)}</span><small>${esc(t.cap)}</small></button>`;
+    return `<button class="plesson ${t.state} ${t.status}" data-i="${t.i}" aria-label="${esc(t.label)}: ${esc(t.learning)}. ${esc(stateName)}.${where} Press and hold to preview."><span class="${isEmoji(t.label) ? 'emoji' : 'L'}">${esc(t.label)}</span><small>${esc(t.cap)}</small></button>`;
   };
   function lessonsCard(s) {
     const m = getMap(); if (!m) return '';
