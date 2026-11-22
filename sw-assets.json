@@ -1,5 +1,5 @@
 {
-  "cache": "kitphonic-97a2e11bd3452f98",
+  "cache": "kitphonic-fce0535e6d58e11e",
   "shell": [
     "index.html",
     "css/app.css",
@@ -32,6 +32,7 @@
     "js/parent-screen.js",
     "js/parent.js",
     "js/patterns.js",
+    "js/preview.js",
     "js/progress.js",
     "js/safe-insets.js",
     "js/seen.js",

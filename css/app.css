@@ -186,6 +186,8 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 
 /* ---- letter intro + tracing (design/letters-board 1b, 1c) ---- */
 #ls-mascot{left:1.125rem;top:6rem}
+/* small boards: the Home button keeps its 64px floor, so Kit stays under it (only moves when 4.5rem < 64px) */
+.portrait #ls-mascot{top:max(6rem, calc(0.875rem + 64px + 0.375rem))}
 #ls-mascot .bubble{max-width:38.75rem}
 #intro,#trace{position:absolute;inset:0}
 #intro[hidden],#trace[hidden]{display:none}
@@ -525,6 +527,78 @@ button{font:inherit;color:inherit;border:0;background:none;padding:0;cursor:poin
 #review-tag{position:absolute;top:0.25rem;left:50%;transform:translateX(-50%);z-index:20;pointer-events:none;padding:0.125rem 0.75rem;border-radius:0.75rem;
   background:rgba(255,255,255,.9);border:0.125rem solid var(--sky);color:var(--skyd);font:800 0.8125rem/1rem Nunito,system-ui,sans-serif;white-space:nowrap}
 #review-tag[hidden]{display:none}
+/* Preview-mode badge. Mount on #stage while a grown-ups preview is open.
+   The whole control is the exit target: tap to leave preview and return to
+   Grown-ups. A preview never writes child progress, including on exit. */
+
+#preview-badge,
+.preview-badge {
+  position: absolute;
+  /* Top-right, just under the 64px top-bar buttons, so it never covers
+     Home, Help / Say-it-again, the pebble path, or Kit (Kit sits on the left). */
+  top: calc(0.875rem + clamp(64px, 4.5rem, 9rem) + 0.75rem);
+  right: 1.125rem;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-sizing: border-box;
+  height: 2.75rem;          /* 44px at a 16px root — app minimum tap target */
+  min-width: 2.75rem;
+  padding: 0 0.35rem 0 0.95rem;
+  border: 0.125rem solid var(--sky, #86BFE3);
+  border-radius: 999px;
+  background: #EAF4FB;      /* same soft-sky fill as digraph tiles */
+  color: var(--skyd, #4E97C9);
+  box-shadow: 0 0.1875rem 0 rgba(78, 151, 201, 0.22);
+  font-family: Nunito, system-ui, sans-serif; /* chrome font, not Andika */
+  font-weight: 800;
+  font-size: 0.9375rem;     /* 15px */
+  letter-spacing: 0.06em;
+  line-height: 1;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+#preview-badge:focus-visible,
+.preview-badge:focus-visible {
+  outline: 4px solid var(--skyd, #4E97C9);
+  outline-offset: 3px;
+}
+.preview-badge-label { padding-bottom: 0.05rem; }
+.preview-badge-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--skyd, #4E97C9);
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/* Match existing top-bar insets on portrait and short landscape. */
+.portrait #preview-badge,
+.portrait .preview-badge { right: 0.875rem; }
+.short #preview-badge,
+.short .preview-badge {
+  top: calc(0.625rem + clamp(64px, 4.5rem, 9rem) + 0.5rem);
+  right: 1rem;
+}
+.tall #preview-badge,
+.tall .preview-badge { right: 1.125rem; }
+#preview-badge[hidden]{display:none}
+/* Lessons grid: every map stop, 64px targets; press and hold to preview */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px;margin-top:10px}
+.plesson{min-width:64px;min-height:64px;border-radius:14px;border:2px solid transparent;background:#f4ede2;color:#5d4e42;font:inherit;padding:4px 2px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:pan-y}
+.plesson>span{font-size:22px;font-weight:700;line-height:1.6;white-space:nowrap}
+.plesson>small{font:600 11px/1.5 'Nunito',sans-serif;opacity:.85;white-space:nowrap}
+.plesson.passed{background:#dcefd9;color:#2f4a2c}.plesson.current{background:#fdf0c4;border-color:#f2b84b}
+.plesson.holding{box-shadow:0 0 0 3px #8fbf8c inset;background:#fff}
+#pl-hint{min-height:1.4em}
 
 /* ---- fluid floors and reflow -------------------------------------------------
    rem above tracks the board (1rem = 16×u). These clamps are real CSS pixels so a

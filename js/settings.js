@@ -20,6 +20,8 @@ export function createSettings(storage, key = 'kitphonic.v1.settings', media = g
     audioRate: () => AUDIO_RATES[s.audioSpeed] ?? 1,
     sessionMs: () => ([5, 7, 10].includes(s.sessionMinutes) ? s.sessionMinutes : 7) * 60e3,
     reset() { s = { ...DEFAULT_SETTINGS }; storage?.removeItem(key); listeners.forEach(f => f('*')); },
+    // Re-read from storage (after a Grown-ups preview overlay is dropped): in-memory values match the device again.
+    reload() { const before = JSON.stringify(s); s = { ...DEFAULT_SETTINGS }; try { Object.assign(s, JSON.parse(storage?.getItem(key) || '{}')); } catch {} if (JSON.stringify(s) !== before) listeners.forEach(f => f('*')); },
   };
   return api;
 }

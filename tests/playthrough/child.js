@@ -3,7 +3,7 @@
 // shortcuts: every response is logged by the app's own lesson logic.
 //   wrong: chance of a wrong pick before the right one on a scored letter round / word check (realistic child).
 
-const visibleScreen = (page) => page.evaluate(() => [...document.querySelectorAll('.screen')].find((s) => !s.hidden)?.id ?? null);
+export const visibleScreen = (page) => page.evaluate(() => [...document.querySelectorAll('.screen')].find((s) => !s.hidden)?.id ?? null);
 
 async function drag(page, x0, y0, x1, y1, steps = 40, ms = 45) {
   await page.mouse.move(x0, y0); await page.mouse.down();
@@ -13,7 +13,7 @@ async function drag(page, x0, y0, x1, y1, steps = 40, ms = 45) {
 const visible = (page, sel) => page.locator(sel).first().isVisible().catch(() => false);
 
 // One step on the current screen. Returns the screen id it acted on.
-async function step(page, scr, rng, wrong) {
+export async function step(page, scr, rng, wrong) {
   const w = (ms) => page.waitForTimeout(ms);
   if (scr === 'letters') {
     const st = await page.evaluate(() => { const r = window.kitphonic.letters.run; return r && { scored: !!r.def.scored, target: r.target, busy: !!r.busy }; });

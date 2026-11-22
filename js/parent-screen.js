@@ -1,6 +1,8 @@
 // Grown-ups area, behind the map's press-and-hold gear gate. Progress summary + settings (saved on this device).
 import { parentSummary, STATE_LABEL } from './parent.js';
 import { VERSION } from './version.js';
+import { describe } from './parent.js';
+import { pressHold, PREVIEW_HOLD_MS } from './preview.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -12,13 +14,34 @@ export const SETTING_UI = [
   { key: 'floatMode', label: 'Floating letters say', opts: [['sound', 'Sound /m/'], ['name', 'Name “em”']], hint: 'Sounds first is best for early readers.' },
 ];
 
-export function createParentScreen({ settings, getResponses, audio, onClose, onReset, onSkip = () => {}, tip }) {
+const isEmoji = t => /\p{Extended_Pictographic}/u.test(t);
+const KIND = { sound: 'sound', words: 'words', story: 'story' };
+// Lessons grid: every map stop in course order, locked ones too. Press and hold opens a read-only preview.
+export function lessonTiles(map) {
+  return map.stops.map((st, i) => ({ i, id: st.id, label: st.label, kind: st.kind, status: st.status,
+    cap: st.kind === 'sound' ? (st.group ? `as in ${st.group.split(' as in ')[1]}` : KIND.sound) : KIND[st.kind] ?? st.kind,
+    learning: describe(st).learning }));
+}
+export function createParentScreen({ settings, getResponses, getMap = () => null, audio, onClose, onReset, onSkip = () => {}, onPreview = () => {}, tip, holdMs = PREVIEW_HOLD_MS }) {
+  let hintTimer = 0;
   function seg({ key, label, opts, hint }) {
     const cur = settings.get(key);
     return `<div class="prow"><div class="plabel">${label}</div><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, t]) =>
       `<button role="radio" aria-checked="${v === cur}" class="${v === cur ? 'on' : ''}" data-k="${key}" data-v="${v}">${t}</button>`).join('')}</div>${hint ? `<div class="phint">${hint}</div>` : ''}</div>`;
   }
   const tile = t => `<span class="ptile L ${t.state}${t.ex ? ' ex' : ''}" title="${esc(t.text)}${t.ex ? ' as in ' + esc(t.ex) : ''}: ${STATE_LABEL[t.state]}">${esc(t.text)}${t.ex ? `<small>${esc(t.ex)}</small>` : ''}</span>`;
+  const lesson = t => `<button class="plesson ${t.status}" data-i="${t.i}" aria-label="${esc(t.label)}: ${esc(t.learning)}. Press and hold to preview."><span class="${isEmoji(t.label) ? 'emoji' : 'L'}">${esc(t.label)}</span><small>${esc(t.cap)}</small></button>`;
+  function lessonsCard() {
+    const m = getMap(); if (!m) return '';
+    return `<div class="pcard plessons"><h2>Lessons</h2><div class="phint">Press and hold any lesson to try it. Nothing is saved.</div>
+      <div class="pgrid">${lessonTiles(m).map(lesson).join('')}</div><div class="phint" id="pl-hint" aria-live="polite"></div></div>`;
+  }
+  function bindLessons() {
+    $('pa-body').querySelectorAll('.plesson').forEach(b => pressHold(b, { ms: holdMs,
+      onStart: () => b.classList.add('holding'), onCancel: () => b.classList.remove('holding'),
+      onTap: () => { const h = $('pl-hint'); if (!h) return; h.textContent = 'Press and hold to preview'; clearTimeout(hintTimer); hintTimer = setTimeout(() => { if (h.isConnected) h.textContent = ''; }, 2500); },
+      onHold: () => { b.classList.remove('holding'); audio.stop(); onPreview(+b.dataset.i); } }));
+  }
   function render() {
     const s = parentSummary(getResponses()), c = s.current;
     $('pa-body').innerHTML = `
@@ -40,6 +63,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
           ${s.troubleSpots.length ? `<div class="pnote pwatch"><b>Watch for:</b> ${s.troubleSpots.map(esc).join('; ')}.</div>` : ''}
           <div class="pmuted pmode">Letters say their ${s.letterMode === 'names' ? '<b>names</b> (dots say their sounds)' : '<b>sounds</b> (names come once two-letter words are secure)'}.</div>
         </div>
+        ${lessonsCard()}
       </div>
       <div class="pcol">
         <div class="pcard"><h2>Settings</h2>${SETTING_UI.map(seg).join('')}
@@ -51,6 +75,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
       </div>`;
     $('pa-body').querySelectorAll('.seg button[data-k]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, v = typeof settings.get(k) === 'number' ? +b.dataset.v : b.dataset.v; settings.set(k, v); render(); });
+    bindLessons();
     $('pa-test').onclick = () => audio.play('sfx-chime');
     if (c) $('pa-skip').onclick = () => { // rc7: a grown-up can move Kit on one step (e.g. progress lost on an older version)
       $('pa-skip-wrap').innerHTML = `<div class="pconfirm"><p>Mark “${esc(c.label)}” as done and move Kit on to the next step? Kit still reviews it later.</p>
