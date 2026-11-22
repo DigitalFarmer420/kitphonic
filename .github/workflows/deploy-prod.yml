@@ -1,6 +1,9 @@
 # Publishes the tested commit on `main` to production GitHub Pages:
 #   https://digitalfarmer420.github.io/kitphonic/
 # The dev site is never touched. This workflow does not sign or upload an APK.
+# The visible YYYY.MM.DD.N version is stamped into the published copy only (tools/stamp-version.mjs)
+# and recorded as a vYYYY.MM.DD.N tag on this repository. It is not committed back to main.
+# A manual run with emergency_override uses the same stamping.
 #
 # GitHub Pages has to use Source "GitHub Actions" for this job to be the
 # publisher. While Source is "Deploy from a branch", the built-in publisher
@@ -101,7 +104,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && needs.gate.result == 'success' && needs.playthrough.result == 'success' && needs.pages-source.result == 'success'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write # create vYYYY.MM.DD.N tags on this repo (default token is read-only)
       pages: write
       id-token: write
     environment:
@@ -110,6 +113,12 @@ jobs:
     steps:
       - name: Checkout the tested commit
         uses: actions/checkout@v4
+      - name: Stamp the visible version
+        id: version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node tools/stamp-version.mjs deploy --env prod --repo . --root . --sha "$GITHUB_SHA"
       - name: Configure Pages
         uses: actions/configure-pages@v6
       - name: Upload site
@@ -124,5 +133,5 @@ jobs:
         run: |
           {
             echo "## Production"
-            echo "Published \`$GITHUB_SHA\` to ${{ steps.deployment.outputs.page_url }}"
+            echo "Published \`$GITHUB_SHA\` as \`${{ steps.version.outputs.version }}\` to ${{ steps.deployment.outputs.page_url }}"
           } >> "$GITHUB_STEP_SUMMARY"
