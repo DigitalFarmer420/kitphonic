@@ -155,7 +155,7 @@ function startPreview(index) {
   runNext();
 }
 // The Preview badge (mockup-preview-badge.html): top-right of #stage under the top bar; the whole pill exits.
-let badgeTimer = 0, badgeBand = false;
+let badgeTimer = 0, badgeBand = false, badgeShownAt = 0;
 // A board too full for the badge anywhere (a small phone) gets a band under it instead: the screen reflows into the
 // smaller board and the badge sits in the band, so it still never covers anything.
 const BADGE_BAND = 48;
@@ -172,10 +172,12 @@ function badgeFallback(on) {
 }
 const placePreviewBadge = () => {
   if (badgeBand) return; // stays in its band for the rest of this preview (no jumping)
-  if (placeBadge($('preview-badge'), [...document.querySelectorAll('#stage > .screen')].find(x => !x.hidden)) == null) badgeFallback(true);
+  const spot = placeBadge($('preview-badge'), [...document.querySelectorAll('#stage > .screen')].find(x => !x.hidden));
+  // nowhere clear: take the band, unless the screen is still building (just shown; its bubble not yet filled)
+  if (spot == null && performance.now() - badgeShownAt > 400) badgeFallback(true);
 };
 function showPreviewTag(on) {
-  clearInterval(badgeTimer); if (!on) badgeFallback(false);
+  clearInterval(badgeTimer); badgeShownAt = performance.now(); if (!on) badgeFallback(false);
   $('preview-badge').hidden = !on;
   if (on) { placePreviewBadge(); badgeTimer = setInterval(placePreviewBadge, 250); } // screens change as the lesson runs
 }
@@ -242,7 +244,7 @@ const armHello = () => {
   $('play').classList.remove('pressed');
   $('hello-bubble').textContent = helloLine;
 };
-afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); if (session?.preview) placePreviewBadge(); };
+afterShow = id => { if (id === 'hello') armHello(); sessionLog?.screen(id); if (session?.preview) { badgeShownAt = performance.now(); placePreviewBadge(); } };
 $('play').addEventListener('pointerdown', () => { $('play').classList.add('pressed'); $('hello').classList.add('go'); $('hello-bubble').textContent = "Hi! I'm Kit. Let's read together!"; });
 for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) $('play').addEventListener(ev, () => $('play').classList.remove('pressed'));
 $('play').onclick = () => {

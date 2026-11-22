@@ -28,7 +28,8 @@ export const OVERLAP_SCREENS = [
     ['preview-check', 6, () => window.kitphonic?.screen?.state === 'slide']].map(([name, i, ok]) => ({
     name, q: `${R}&parent=1&progress=12&seed=1`, ready: () => document.querySelectorAll('.plesson').length === 56,
     act: async (page) => { await page.evaluate((n) => window.kitphonic.startPreview(n), i); await page.waitForFunction(ok, null, { timeout: 10_000 });
-      await page.waitForFunction(() => !document.getElementById('preview-badge').hidden); } })),
+      const placed = () => { const b = document.getElementById('preview-badge'); return !b.hidden && !!b.dataset.spot; }; // a clear spot or the band
+      await page.waitForFunction(placed, null, { timeout: 5_000 }); await page.waitForTimeout(800); await page.waitForFunction(placed, null, { timeout: 5_000 }); } })),
   { name: 'star', q: `${R}&activity=star&word=the&seed=1`, ready: () => !document.getElementById('star').hidden },
   { name: 'done', q: `${R}&progress=4&practiceEnd=1&seed=1`, ready: () => !document.getElementById('done').hidden },
 ];

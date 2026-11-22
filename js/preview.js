@@ -105,10 +105,11 @@ export function placeBadge(badge, screen, { step = 8 } = {}) {
   const boxes = [...screen.querySelectorAll(CONTENT)].filter(shown).map(e => e.getBoundingClientRect());
   const st = badge.parentElement.getBoundingClientRect();
   const clear = () => { const r = badge.getBoundingClientRect(); return r.left >= st.left && r.top >= st.top && r.right <= st.right && r.bottom <= st.bottom && !boxes.some(b => hit(r, b)); };
-  if (badge.dataset.spot && clear()) return badge.dataset.spot; // still clear: stay put
   const set = sp => { for (const k of SIDES4) badge.style[k] = sp[k] ?? ''; };
-  set({}); // the CSS (design) spot
+  const was = badge.dataset.spot, keep = { top: badge.style.top, right: badge.style.right, left: badge.style.left };
+  set({}); // the CSS (design) spot always wins when it is clear
   if (clear()) return (badge.dataset.spot = 'design');
+  if (was && was !== 'design') { set(keep); if (clear()) return was; } // else stay put while clear (no jumping)
   const cs = getComputedStyle(badge), top0 = parseFloat(cs.top) || 0, right0 = cs.right, h = badge.offsetHeight;
   for (const side of ['right', 'left']) {
     for (let y = top0; y + h <= st.height; y += step) {
