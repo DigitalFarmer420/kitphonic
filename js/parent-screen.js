@@ -1,10 +1,11 @@
-// Grown-ups area, behind the map's press-and-hold gear gate. Progress summary + settings (saved on this device).
-import { parentSummary, STATE_LABEL } from './parent.js';
+// Grown-ups area, behind the map's press-and-hold gear gate. Lessons grid (mastery colours) + settings (saved on this device).
+import { parentSummary, STATE_LABEL, tileState, describe } from './parent.js';
 import { VERSION } from './version.js';
+import { pressHold, PREVIEW_HOLD_MS } from './preview.js';
+import { slippedStops } from './progress.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const _nice = skill => { const [k, v] = skill.split(':'); return k === 'sound' ? `“${GPC[v]?.g ?? v}” sound` : k === 'star' ? `star word “${v}”` : k === 'blend' ? `reading words (${v})` : skill; };
 export const SETTING_UI = [
   { key: 'sessionMinutes', label: 'Session length', opts: [[5, '5 min'], [7, '7 min'], [10, '10 min']] },
   { key: 'audioSpeed', label: 'Kit’s talking speed', opts: [['slow', 'Slower'], ['normal', 'Normal'], ['fast', 'Faster']] },
@@ -12,34 +13,56 @@ export const SETTING_UI = [
   { key: 'floatMode', label: 'Floating letters say', opts: [['sound', 'Sound /m/'], ['name', 'Name “em”']], hint: 'Sounds first is best for early readers.' },
 ];
 
-export function createParentScreen({ settings, getResponses, audio, onClose, onReset, onSkip = () => {}, tip }) {
+const isEmoji = t => /\p{Extended_Pictographic}/u.test(t);
+const KIND = { sound: 'sound', words: 'words', story: 'story' };
+const displayState = (responses, skill, now, slipped) => {
+  const state = tileState(responses, skill, now);
+  return slipped.has(skill) && state !== 'review-due' ? 'review-due' : state;
+};
+// Lessons grid: every map stop in course order, locked ones too. Tile colour is the skill's mastery state;
+// the current stop is also marked. Press and hold opens a read-only preview.
+export function lessonTiles(map, responses = [], now = Date.now()) {
+  const slipped = new Set(slippedStops(responses, now).map(s => s.skill));
+  return map.stops.map((st, i) => ({ i, id: st.id, label: st.label, kind: st.kind, status: st.status,
+    state: displayState(responses, st.skill, now, slipped),
+    cap: st.kind === 'sound' ? (st.group ? `as in ${st.group.split(' as in ')[1]}` : KIND.sound) : KIND[st.kind] ?? st.kind,
+    learning: describe(st).learning }));
+}
+export function createParentScreen({ settings, getResponses, getMap = () => null, audio, onClose, onReset, onSkip = () => {}, onPreview = () => {}, tip, holdMs = PREVIEW_HOLD_MS, now = () => Date.now() }) {
+  let hintTimer = 0;
   function seg({ key, label, opts, hint }) {
     const cur = settings.get(key);
     return `<div class="prow"><div class="plabel">${label}</div><div class="seg" role="radiogroup" aria-label="${esc(label)}">${opts.map(([v, t]) =>
       `<button role="radio" aria-checked="${v === cur}" class="${v === cur ? 'on' : ''}" data-k="${key}" data-v="${v}">${t}</button>`).join('')}</div>${hint ? `<div class="phint">${hint}</div>` : ''}</div>`;
   }
   const tile = t => `<span class="ptile L ${t.state}${t.ex ? ' ex' : ''}" title="${esc(t.text)}${t.ex ? ' as in ' + esc(t.ex) : ''}: ${STATE_LABEL[t.state]}">${esc(t.text)}${t.ex ? `<small>${esc(t.ex)}</small>` : ''}</span>`;
+  const lesson = t => {
+    const stateName = STATE_LABEL[t.state] ?? t.state;
+    const where = t.status === 'current' ? ' Current stop.' : '';
+    return `<button class="plesson ${t.state} ${t.status}" data-i="${t.i}" aria-label="${esc(t.label)}: ${esc(t.learning)}. ${esc(stateName)}.${where} Press and hold to preview."><span class="${isEmoji(t.label) ? 'emoji' : 'L'}">${esc(t.label)}</span><small>${esc(t.cap)}</small></button>`;
+  };
+  function lessonsCard(s) {
+    const m = getMap(); if (!m) return '';
+    return `<div class="pcard plessons"><h2>Lessons</h2><div class="phint">Press and hold any lesson to try it. Nothing is saved.</div>
+      <div class="pgrid">${lessonTiles(m, getResponses(), now()).map(lesson).join('')}</div><div class="phint" id="pl-hint" aria-live="polite"></div>
+      <h3>Star words</h3><div class="pgrid pstars">${s.starTiles.map(tile).join('')}</div>
+      <div class="plegend"><span><i class="practicing"></i>Practicing</span><span><i class="secure"></i>Secure</span><span><i class="mastered"></i>Mastered</span><span><i class="review-due"></i>Review due</span><span><i class="new"></i>Not yet</span></div>
+      ${s.tryAtHome ? `<div class="pnote"><b>Try at home:</b> ${esc(s.tryAtHome.text)}</div>` : ''}
+      ${s.troubleSpots.length ? `<div class="pnote pwatch"><b>Watch for:</b> ${s.troubleSpots.map(esc).join('; ')}.</div>` : ''}
+      <div class="pmuted pmode">Letters say their ${s.letterMode === 'names' ? '<b>names</b> (dots say their sounds)' : '<b>sounds</b> (names come once two-letter words are secure)'}.</div>
+    </div>`;
+  }
+  function bindLessons() {
+    $('pa-body').querySelectorAll('.plesson').forEach(b => pressHold(b, { ms: holdMs,
+      onStart: () => b.classList.add('holding'), onCancel: () => b.classList.remove('holding'),
+      onTap: () => { const h = $('pl-hint'); if (!h) return; h.textContent = 'Press and hold to preview'; clearTimeout(hintTimer); hintTimer = setTimeout(() => { if (h.isConnected) h.textContent = ''; }, 2500); },
+      onHold: () => { b.classList.remove('holding'); audio.stop(); onPreview(+b.dataset.i); } }));
+  }
   function render() {
-    const s = parentSummary(getResponses()), c = s.current;
+    const s = parentSummary(getResponses(), now()), c = s.current;
     $('pa-body').innerHTML = `
       <div class="pcol">
-        <div class="pcard psum">
-          <div class="pstop L">${esc(c?.label ?? '⭐')}</div>
-          <div><div class="pbig">Stop ${s.stop.index} of ${s.stop.of}${c ? ` · ${esc(c.learning)}` : ' · all done!'}</div>
-          <div class="pmuted">${s.next ? `Next: ${esc(s.next.next)}` : 'Next: more sounds are coming'}</div></div>
-        </div>
-        <div class="pstats">
-          <div class="pstat"><b>${s.sessionsThisWeek}</b><span>sessions this week</span></div>
-          <div class="pstat"><b>${s.minutesThisWeek}</b><span>minutes</span></div>
-          <div class="pstat"><b>${s.wordsRead}</b><span>words read alone${s.wordsWithKit ? ` · +${s.wordsWithKit} with Kit` : ''}</span></div>
-        </div>
-        <div class="pcard"><h2>Sounds</h2><div class="ptiles">${s.soundTiles.map(tile).join('')}</div>
-          <h3>Star words</h3><div class="ptiles">${s.starTiles.map(tile).join('')}</div>
-          <div class="plegend"><span><i class="practicing"></i>Practicing</span><span><i class="secure"></i>Secure</span><span><i class="mastered"></i>Mastered</span><span><i class="review-due"></i>Review due</span><span><i class="new"></i>Not yet</span></div>
-          ${s.tryAtHome ? `<div class="pnote"><b>Try at home:</b> ${esc(s.tryAtHome.text)}</div>` : ''}
-          ${s.troubleSpots.length ? `<div class="pnote pwatch"><b>Watch for:</b> ${s.troubleSpots.map(esc).join('; ')}.</div>` : ''}
-          <div class="pmuted pmode">Letters say their ${s.letterMode === 'names' ? '<b>names</b> (dots say their sounds)' : '<b>sounds</b> (names come once two-letter words are secure)'}.</div>
-        </div>
+        ${lessonsCard(s)}
       </div>
       <div class="pcol">
         <div class="pcard"><h2>Settings</h2>${SETTING_UI.map(seg).join('')}
@@ -51,6 +74,7 @@ export function createParentScreen({ settings, getResponses, audio, onClose, onR
       </div>`;
     $('pa-body').querySelectorAll('.seg button[data-k]').forEach(b => b.onclick = () => {
       const k = b.dataset.k, v = typeof settings.get(k) === 'number' ? +b.dataset.v : b.dataset.v; settings.set(k, v); render(); });
+    bindLessons();
     $('pa-test').onclick = () => audio.play('sfx-chime');
     if (c) $('pa-skip').onclick = () => { // rc7: a grown-up can move Kit on one step (e.g. progress lost on an older version)
       $('pa-skip-wrap').innerHTML = `<div class="pconfirm"><p>Mark “${esc(c.label)}” as done and move Kit on to the next step? Kit still reviews it later.</p>

@@ -22,6 +22,49 @@ The stage reads `--safe-area-inset-*` when Capacitor 8.6.0 SystemBars sets them,
 
 On the packaged build, record API level and the active WebView package version together. Measure portrait and landscape, rotate back, gesture and three-button navigation, and a cutout if the image has one, at cold start and after resume. Compare WindowInsets (status, navigation, cutout, IME) with the WebView's on-screen bounds and with `innerWidth` / `innerHeight`, `visualViewport`, and both `--safe-area-inset-*` and `env(safe-area-inset-*)`. Pass when the bars stay visible and the hello Play button, top home/replay controls, blend slider, map Go button, and tracing card sit inside the safe bounds, with no second gap equal to the bar size. Below WebView 140 the CSS variables should be `0px` and the WebView bounds should already sit inside the bars. At 140 and above the variables should match the bars and cutout, and the WebView may be full-bleed. There is no child text field; if an IME is shown, `--safe-area-inset-bottom` should be `0px` while the WebView height shrinks, and the stage should not shrink again. Do not uninstall an owner install or bypass its signature.
 
+## Release gate: full playthrough (required on main)
+
+Every pull request into `main` must pass the `playthrough` check (`.github/workflows/playthrough.yml`). It is a
+required status check in main's branch protection. Release PRs come from `develop`; a PR into `main` from any
+other branch fails the check. Back-merges (main into develop) are not affected. The job plays all 56 map stops on
+a fresh profile with a perfect child (`npm run test:playthrough`, TESTING.md) and takes about 40 minutes.
+
+`deploy-prod.yml` also checks it: a push to `main` deploys only if the merged release PR's head (or the commit
+itself) has a passing `playthrough` check, so a merge that bypassed the check does not ship by itself.
+
+**Emergency merge.** Repository admins can still merge with the check failing (main's protection does not enforce
+the rules on admins). Production then does not deploy on its own.
+
+**Emergency deploy.** A repository admin runs *Actions → Deploy production → Run workflow* on `main` with
+`emergency_override` checked. The run notes the override and who ran it in its summary; the test gate still runs.
+Anyone without admin permission who sets the input is refused. The deploy still stamps a version (see below): a
+new commit gets the next production `N`, and a re-run of a commit that already has a `vYYYY.MM.DD.N` tag reuses it.
+
+## Version numbers
+
+The visible version is `YYYY.MM.DD.N` (the date in America/Los_Angeles), shown in the Grown-ups footer. Dev also
+keeps its DEV badge.
+
+**Stamped at deploy, not committed.** `deploy-dev.yml` (push to `develop`, or a manual run of that workflow) and
+`deploy-prod.yml` (push to `main`, including a manual run with `emergency_override`) run `tools/stamp-version.mjs`
+and write the version into the published tree only (`VERSION`, `js/version.js`, and the service-worker cache,
+because `js/version.js` is precached). The branch is left unchanged.
+
+**Counters.** Dev and production count separately, from tags the workflow pushes on this repository:
+`dev-YYYY.MM.DD.N` and `vYYYY.MM.DD.N`. `N` is one higher than the highest tag for that environment on that date,
+or `1` if there is none. Older `v1.0.0-rc*` tags do not count. The committed `VERSION` is a floor when it is also
+today's date, so today's already shipped release number is not reused.
+
+**Re-runs.** If this commit already has a tag for that environment, the same version is reused and no new tag is
+created. A new commit allocates the next `N`. The deploy workflows use a concurrency group (`deploy-dev`,
+`deploy-prod`, `cancel-in-progress: false`) so only one deploy per environment runs at a time; a colliding tag
+push is retried after a refetch.
+
+**Permissions.** The deploy jobs request `contents: write` so `GITHUB_TOKEN` can create those tags. The
+repository's default workflow token is read-only. There were no tag protection rules when this was added, and
+main's branch protection does not block tag creation. If tag pushes start failing, check for a new tag rule or a
+tighter token policy — do not work around a block by using a personal deploy key to write tags.
+
 ## Previous rc9 readiness
 
 Version: `1.0.0-rc9` (`VERSION`, `js/version.js`, shown in the grown-ups footer). Local-only static web app (vanilla ES

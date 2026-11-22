@@ -1,6 +1,9 @@
 // Set the visible app version in VERSION and js/version.js.
 // The number is the date in America/Los_Angeles, YYYY.MM.DD.N, where N starts at 1
 // and goes up for later releases on the same day.
+// Deploy workflows stamp a new number at publish time with tools/stamp-version.mjs
+// and do not commit it. This helper is for local use and for writeVersion() shared
+// with the stamp script.
 // Usage: node tools/bump-version.mjs
 // js/version.js is precached, so this also refreshes sw-assets.json and the sw.js CACHE line.
 import { readFileSync, writeFileSync } from 'node:fs';

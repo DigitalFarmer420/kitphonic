@@ -29,7 +29,7 @@ export function parentSummary(responses, now = Date.now()) {
     // design/parent-mockup: summary card + tiles
     current: cur ? describe(cur) : null, next: map.stops[map.index + 1] ? describe(map.stops[map.index + 1]) : null,
     soundTiles: map.stops.filter(x => x.kind === 'sound').map(x => ({ id: x.gpc, text: GPC[x.gpc].grapheme, ex: x.group?.split(' as in ')[1], state: slipped.has(`sound:${x.gpc}`) ? 'review-due' : tileState(responses, `sound:${x.gpc}`, now) })), // ex: 'is' / 'thin' / 'that' tells same-looking tiles apart
-    starTiles: STAR_WORDS.slice(0, Math.max(3, stars.length)).map(x => ({ id: x.w, text: x.w, state: tileState(responses, `star:${x.w}`, now) })),
+    starTiles: STAR_WORDS.map(x => ({ id: x.w, text: x.w, state: tileState(responses, `star:${x.w}`, now) })),
     tryAtHome: tryAtHome(sounds, cur),
     // spec §3.4.1: the parent view shows which tap mode the child is in; §3.8.4: trouble spots
     letterMode: blendL1Mastered(responses, now) ? 'names' : 'sounds',
@@ -38,7 +38,7 @@ export function parentSummary(responses, now = Date.now()) {
   };
 }
 
-const tileState = (responses, skill, now) => { const st = skillState(responses, skill, now); return st.trials || st.state !== 'new' ? st.state : 'new'; };
+export const tileState = (responses, skill, now) => { const st = skillState(responses, skill, now); return st.trials || st.state !== 'new' ? st.state : 'new'; };
 const wordsLike = level => (WORDS[level] ?? []).slice(0, 2).map(e => `“${e.w}”`).join(', ');
 export function describe(stop) {
   if (stop.kind === 'story') return { kind: 'story', label: stop.label, learning: `reading the story “${stop.title}”`, next: `the story “${stop.title}”` };

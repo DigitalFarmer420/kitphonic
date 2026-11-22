@@ -2,6 +2,8 @@
 #   https://digitalfarmer420.github.io/kitphonic-dev/
 # Production (branch main, https://digitalfarmer420.github.io/kitphonic/) is never touched.
 # Auth: secret DEV_DEPLOY_KEY = SSH deploy key with write access to kitphonic-dev ONLY.
+# The visible YYYY.MM.DD.N version is stamped into the published copy only (tools/stamp-version.mjs)
+# and recorded as a dev-YYYY.MM.DD.N tag on this repository. It is not committed back to develop.
 name: Deploy dev preview
 on:
   push:
@@ -27,11 +29,23 @@ jobs:
     needs: gate
     if: github.ref == 'refs/heads/develop' && needs.gate.result == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create dev-YYYY.MM.DD.N tags on this repo (default token is read-only)
     steps:
       - name: Checkout the tested commit
         uses: actions/checkout@v4
         with:
           path: src
+      # Allocate the version tag with GITHUB_TOKEN before the kitphonic-dev SSH
+      # key is installed, and stamp the checkout so rsync copies the published files.
+      # The stamp is not committed back to develop.
+      - name: Stamp the visible version
+        id: version
+        working-directory: src
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node tools/stamp-version.mjs deploy --env dev --repo . --root . --sha "$GITHUB_SHA"
       - name: Clone kitphonic-dev with deploy key
         env:
           DEV_DEPLOY_KEY: ${{ secrets.DEV_DEPLOY_KEY }}
@@ -60,10 +74,10 @@ jobs:
           git add -A
           if git diff --cached --quiet; then
             echo "No changes"
-            echo "Dev site already matches \`$GITHUB_SHA\`." >> "$GITHUB_STEP_SUMMARY"
+            echo "Dev site already matches \`$GITHUB_SHA\` (version \`${{ steps.version.outputs.version }}\`)." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           git commit -q -m "Deploy kitphonic develop@${GITHUB_SHA::7}"
           git push origin HEAD:main
           echo "Deployed $(git rev-parse HEAD) from develop@${GITHUB_SHA}"
-          echo "Published \`$GITHUB_SHA\` to https://digitalfarmer420.github.io/kitphonic-dev/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Published \`$GITHUB_SHA\` as \`${{ steps.version.outputs.version }}\` to https://digitalfarmer420.github.io/kitphonic-dev/" >> "$GITHUB_STEP_SUMMARY"

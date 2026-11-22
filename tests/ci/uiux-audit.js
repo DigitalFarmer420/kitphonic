@@ -55,9 +55,18 @@ export function audit({ safe }) {
     const side = Math.min(r.width, r.height);
     if (side + 0.5 < min) out.push({ check: `tap-size-${kind}`, element: name(el), value: `${px(r.width)}x${px(r.height)} < ${min}` });
   }
-  // overlapping hit areas (two controls whose boxes intersect)
+  // overlapping hit areas (two controls whose boxes intersect). A control inside a scroller
+  // is clipped to that scroller when compared with something outside it (a stop scrolled
+  // off the map board cannot sit under ▶). Two controls in the same scroller use their
+  // full boxes, so a real overlap further down the trail is still reported.
+  const hitBox = (el, other) => {
+    const r = el.getBoundingClientRect(), sc = inScroller(el), osc = inScroller(other);
+    if (!sc || sc === osc) return r;
+    const s = sc.getBoundingClientRect();
+    return { left: Math.max(r.left, s.left), top: Math.max(r.top, s.top), right: Math.min(r.right, s.right), bottom: Math.min(r.bottom, s.bottom) };
+  };
   for (let i = 0; i < ctrls.length; i++) for (let j = i + 1; j < ctrls.length; j++) {
-    const a = ctrls[i].getBoundingClientRect(), b = ctrls[j].getBoundingClientRect();
+    const a = hitBox(ctrls[i], ctrls[j]), b = hitBox(ctrls[j], ctrls[i]);
     const w = Math.min(a.right, b.right) - Math.max(a.left, b.left), h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
     if (w > 1 && h > 1) out.push({ check: 'hit-overlap', element: `${name(ctrls[i])} / ${name(ctrls[j])}`, value: `${px(w)}x${px(h)} px overlap` });
   }

@@ -38,7 +38,9 @@ export function overlapAudit({ safe = { top: 0, right: 0, bottom: 0, left: 0 }, 
   const CTRL = 'button, [role="button"], [role="slider"], [data-dropslot], #tiles > *, #l-arena > *, #m-stops > .stop, #st-cards > *, #sn-tiles > *, #fm-tiles > *, .ftile';
   const FIG = '.bubble, .mascot > svg, .kitwrap > svg:first-child, .mkit, #done-kit, .tcard, .icard, .ipic, #card, #sn-card, #fm-card, .tray, .ear, .peb, .pcol, .ptile';
   const ownText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
-  const all = [...root.querySelectorAll('*')].filter((el) => !el.closest(SKIP) && (el.matches(CTRL) || el.matches(FIG) || ownText(el)) && shown(el));
+  // The Grown-ups preview badge sits on #stage above the screen: it must not cover anything on it either.
+  const extra = root.id === 'parent' ? [] : [document.getElementById('preview-badge')].filter(Boolean);
+  const all = [...root.querySelectorAll('*'), ...extra].filter((el) => !el.closest(SKIP) && (el.matches(CTRL) || el.matches(FIG) || ownText(el)) && shown(el));
   // Box to compare: an inline text element is its text, a block is its border box.
   // A bare label (own text, no fill, no border, not a control) is its text: its empty box is not drawn.
   const bare = (el) => { const cs = getComputedStyle(el); return !el.matches(CTRL) && !el.matches(FIG) && (cs.backgroundColor === 'rgba(0, 0, 0, 0)' || cs.backgroundColor === 'transparent') && cs.backgroundImage === 'none' && !(parseFloat(cs.borderTopWidth) > 0) && !(parseFloat(cs.borderBottomWidth) > 0); };

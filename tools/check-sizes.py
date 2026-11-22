@@ -85,16 +85,18 @@ MEASURE = r"""() => {
   const name = e => e.id ? '#' + e.id : (e.className.baseVal ?? e.className).split(' ')[0] + (e.getAttribute('aria-label') ? `[${e.getAttribute('aria-label')}]` : '');
   const targets = [...root.querySelectorAll('button, #handle, #sn-handle, .stop, .ear, .marker .dot, .marker .bar, .ltr .tile, .ltr .ldot, .choice')]
     .filter(vis).filter(e => !(e.classList.contains('marker'))) // a marker button's visible shape is its .dot/.bar
-    .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body'), adult: !!e.closest('#parent'), ...box(e) }));
+    .map(e => ({ name: name(e), knob: e.id === 'handle' || e.id === 'sn-handle', play: e.id === 'play', scroll: !!e.closest('#pa-body, #m-board'), adult: !!e.closest('#parent'), ...box(e) }));
   const key = overlay ? [] : [...scr.querySelectorAll('.starbig, .wcard2, #sn-card, #sn-strip .wd, .top .path .peb, #fm-card, #fm-slot, #fm-rime, .fchip, .ftile, #sn-tiles .tile, #sn-handle, #sn-read, #sn-choices .pc, .icard, .ipic, .tcard, .ibar > *, .ear, #l-tray, .mkit, .stop, .mlabel, #go, .lv-chip, #lv-next, .lv-badge, .starchip, #card, .tile:not(.ltr .tile), .marker .dot, .marker .bar, #handle, .mascot .bubble, .top .btn, #next, .next, .ltr .tile, .ltr .ldot, #done-kit, #done-bubble, #done-stop, #stickers, #done-again, #done-home')]
-    .filter(vis).map(e => ({ name: name(e), ...box(e) }));
+    .filter(vis).map(e => ({ name: name(e), scroller: (s => s ? box(s) : null)(e.closest('#pa-body, #m-board')), ...box(e) }));
   const ltr = [...root.querySelectorAll('.ltr .tile, .choice, #st-cards .wcard2')].filter(vis).map(e => Math.round(e.getBoundingClientRect().top));
   const st = document.getElementById('stage').getBoundingClientRect();
   const h = document.getElementById('handle');
   // Uiux r7: a stop's cue picture never covers another stop, a label, Kit or a star
   const R = e => e.getBoundingClientRect(), hit = (a, b) => a.left + 2 < b.right && b.left + 2 < a.right && a.top + 2 < b.bottom && b.top + 2 < a.bottom;
+  const visBox = e => { const r = R(e), sc = e.closest('#pa-body, #m-board'); if (!sc) return r;
+    const s = R(sc); return { left: Math.max(r.left, s.left), top: Math.max(r.top, s.top), right: Math.min(r.right, s.right), bottom: Math.min(r.bottom, s.bottom) }; };
   const cueHits = [...scr.querySelectorAll('.stop .cue')].filter(vis).flatMap(c => [...scr.querySelectorAll('.stop, .mlabel, .mkit, .stop .st')]
-    .filter(o => vis(o) && o !== c.parentElement && !o.contains(c) && hit(R(c), R(o))).map(o => `cue ${c.textContent} / ${name(o)}`));
+    .filter(o => vis(o) && o !== c.parentElement && !o.contains(c) && hit(visBox(c), visBox(o))).map(o => `cue ${c.textContent} / ${name(o)}`));
   // Uiux r8: no visible button is blank (it shows text, an icon or a picture)
   const empty = [...root.querySelectorAll('button, .marker .bar, .marker .dot')].filter(vis).filter(e => !e.textContent.trim() && !e.matches('[data-dropslot]') && !e.querySelector('svg, img, .emoji')).map(name);
   // Uiux rc1: grown-ups sound grid tiles never shrink below 32 px (the card scrolls instead)
@@ -164,12 +166,21 @@ def check(m, vp, scene):
     if pic and not boxInside(pic.get('pic'), pic.get('card')): errs.append('reveal picture box outside #card')
     errs += [f'empty button {n}' for n in m.get('empty', [])]
     errs += [f"{t['name']} {t['w']:.0f}x{t['h']:.0f} < 48" for t in m.get('ptiles', []) if min(t['w'], t['h']) < 47.5]
+    def vis_box(t):
+        s = t.get('scroller')
+        if not s: return t
+        x, y = max(t['x'], s['x']), max(t['y'], s['y'])
+        r, btm = min(t['x'] + t['w'], s['x'] + s['w']), min(t['y'] + t['h'], s['y'] + s['h'])
+        return {**t, 'x': x, 'y': y, 'w': r - x, 'h': btm - y}
     k = m['key']
     for i in range(len(k)):
         for j in range(i + 1, len(k)):
             a, b = k[i], k[j]
             if a['name'] == b['name'] == 'tile' and False: continue
-            if overlaps(a, b): errs.append(f"overlap {a['name']} / {b['name']}")
+            same = a.get('scroller') and a.get('scroller') == b.get('scroller')
+            aa, bb = (a, b) if same else (vis_box(a), vis_box(b))
+            if aa['w'] <= 2 or aa['h'] <= 2 or bb['w'] <= 2 or bb['h'] <= 2: continue
+            if overlaps(aa, bb): errs.append(f"overlap {a['name']} / {b['name']}")
     if m['ltr'] and 'float' not in scene:  # balanced grid: rows differ by <= 1, never a lone tile (Uiux r2)
         rows = {}
         for y in m['ltr']: rows[y] = rows.get(y, 0) + 1

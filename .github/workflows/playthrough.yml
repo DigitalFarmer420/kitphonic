@@ -1,0 +1,55 @@
+# Release gate: the full 56-stop map playthrough (sound m to the story "lunch on the bench").
+# Runs only on pull requests into main. Its job name `playthrough` is a required status check on main's branch
+# protection, and deploy-prod.yml refuses to publish a main commit whose PR did not pass it.
+# Release PRs come from develop. Any other head branch into main fails here (an admin can still bypass in an
+# emergency; production then deploys only through the emergency_override input of deploy-prod.yml).
+# Back-merges go from main into develop and never trigger this workflow.
+name: Playthrough
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: playthrough-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  playthrough:
+    name: playthrough
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Only develop may be released to main
+        if: github.head_ref != 'develop'
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          echo "::error title=playthrough::Pull requests into main must come from develop (head is '$HEAD_REF')."
+          exit 1
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-playwright
+        with:
+          browsers: chromium
+      # A perfect child plays real sessions on a fresh profile until all 56 map stops pass (about 40 minutes).
+      - name: Full 56-stop playthrough (chromium, perfect child)
+        run: npm run test:playthrough
+        env:
+          CI: '1'
+          KP_PT_OUT: test-results/playthrough-report
+      - name: Summary
+        if: always()
+        run: node tests/playthrough/summarize.mjs test-results/playthrough-report/report.json >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Upload the playthrough report, screenshots and traces
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playthrough-report
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14

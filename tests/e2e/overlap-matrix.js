@@ -20,6 +20,16 @@ export const OVERLAP_SCREENS = [
   { name: 'trace-wide', q: `${R}&activity=trace&gpc=qu&seed=1`, ready: () => (window.kitphonic?.lesson?.run?.debugPoints?.() ?? []).length > 2 },
   { name: 'map', q: `${R}&progress=5&seed=1`, ready: () => !document.getElementById('map').hidden && document.querySelectorAll('#m-stops > *').length > 0 },
   { name: 'grown-ups', q: `${R}&parent=1&progress=5`, ready: () => document.querySelectorAll('.ptile').length > 0 },
+  // Grown-ups lessons grid (scrolled into view) and a read-only preview of locked stops (sound intro, words); the
+  // preview badge must not cover anything on them
+  { name: 'grown-ups-lessons', q: `${R}&parent=1&progress=12`, ready: () => document.querySelectorAll('.plesson').length === 56,
+    act: async (page) => { await page.locator('.plessons').scrollIntoViewIfNeeded(); } },
+  ...[['preview-intro', 19, () => !document.getElementById('intro').hidden], ['preview-word', 26, () => window.kitphonic?.screen?.state === 'slide'],
+    ['preview-check', 6, () => window.kitphonic?.screen?.state === 'slide']].map(([name, i, ok]) => ({
+    name, q: `${R}&parent=1&progress=12&seed=1`, ready: () => document.querySelectorAll('.plesson').length === 56,
+    act: async (page) => { await page.evaluate((n) => window.kitphonic.startPreview(n), i); await page.waitForFunction(ok, null, { timeout: 10_000 });
+      const placed = () => { const b = document.getElementById('preview-badge'); return !b.hidden && !!b.dataset.spot; }; // a clear spot or the band
+      await page.waitForFunction(placed, null, { timeout: 5_000 }); await page.waitForTimeout(800); await page.waitForFunction(placed, null, { timeout: 5_000 }); } })),
   { name: 'star', q: `${R}&activity=star&word=the&seed=1`, ready: () => !document.getElementById('star').hidden },
   { name: 'done', q: `${R}&progress=4&practiceEnd=1&seed=1`, ready: () => !document.getElementById('done').hidden },
 ];

@@ -107,7 +107,7 @@ function visualBox(win) {
 }
 
 export function createStage(el, onChange = () => {}) {
-  let cur = null, fitting = false;
+  let cur = null, fitting = false, reserveBottom = 0; // a band under the board (Grown-ups preview badge fallback)
   const doc = el.ownerDocument;
   const win = doc.defaultView;
   const fit = () => {
@@ -123,7 +123,7 @@ export function createStage(el, onChange = () => {}) {
     });
     const { vw, vh, offL, offT } = visualBox(win);
     const k = textScale(readPreferredRootPx(doc));
-    const s = stageBox(vw, vh, insets, (w, h) => stageFor(w, h, k));
+    const s = stageBox(vw, vh, reserveBottom ? { ...insets, bottom: insets.bottom + reserveBottom } : insets, (w, h) => stageFor(w, h, k));
     const changed = !cur || cur.mode !== s.mode || cur.h !== s.h || cur.w !== s.w || cur.u !== s.u;
     cur = s;
     const fs = rootFontPx(s.u) + 'px';
@@ -157,6 +157,10 @@ export function createStage(el, onChange = () => {}) {
     get info() { return cur; },
     get scale() { return 1; },
     fit,
+    // Reserve a band of px under the board (0 = none): the screens reflow into the smaller board, so whatever sits
+    // in the band never covers a control. Returns the band's bottom edge offset (the safe-area bottom) in px.
+    reserveBottom(px) { reserveBottom = Math.max(0, px || 0); fit(); return Math.max(0, (cur?.insets?.bottom ?? 0) - reserveBottom); },
+    get reserved() { return reserveBottom; },
     toStage(e) { const r = el.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; },
   };
 }
