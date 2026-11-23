@@ -225,6 +225,15 @@ def build():
 
     for name, size in (("icons/favicon-32.png", 32), ("icons/favicon-48.png", 48), ("icons/apple-touch-180.png", 180)):
         put(name, contain(master, size, size, bg))
+    # Web app manifest icons (manifest.webmanifest). "any" is the full master contained like the
+    # favicons; "maskable" uses the adaptive safe circle, which sits inside the W3C 80% safe zone.
+    for name, size in (("icons/icon-192.png", 192), ("icons/icon-512.png", 512)):
+        put(name, contain(master, size, size, bg))
+    for name, size in (("icons/icon-maskable-192.png", 192), ("icons/icon-maskable-512.png", 512)):
+        mask = foreground(master, size, bg, bbox)
+        if not yellow_inside_safe_circle(mask, bg):
+            raise SystemExit(f"{name} yellow marks fall outside the maskable safe zone")
+        put(name, mask)
     report = {"favicon32_yellow_sides": list(yellow_sides(Image.open(ROOT / "icons/favicon-32.png").convert("RGBA"), bg)),
               "favicon48_yellow_sides": list(yellow_sides(Image.open(ROOT / "icons/favicon-48.png").convert("RGBA"), bg))}
     for label, sides in report.items():

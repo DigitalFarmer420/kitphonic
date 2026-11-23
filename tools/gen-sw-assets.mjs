@@ -23,14 +23,18 @@ export function cacheLine(source) {
 
 export function buildPlan(root) {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
-  const icons = [...new Set([...html.matchAll(/"(icons\/[^"]+)"/g)].map(m => m[1]))].sort();
+  const webManifest = /<link rel="manifest" href="manifest\.webmanifest">/.test(html) ? ['manifest.webmanifest'] : [];
+  const manifestIcons = webManifest.length
+    ? JSON.parse(readFileSync(join(root, 'manifest.webmanifest'), 'utf8')).icons.map(icon => icon.src)
+    : [];
+  const icons = [...new Set([...[...html.matchAll(/"(icons\/[^"]+)"/g)].map(m => m[1]), ...manifestIcons])].sort();
   if (!icons.length) throw new Error('index.html does not reference icons/');
   const js = readdirSync(join(root, 'js')).filter(name => name.endsWith('.js')).sort().map(name => `js/${name}`);
   const fonts = readdirSync(join(root, 'fonts')).filter(name => name.endsWith('.css') || name.endsWith('.woff2')).sort().map(name => `fonts/${name}`);
   const manifest = JSON.parse(readFileSync(join(root, 'audio/manifest.json'), 'utf8'));
   const audio = [...new Set(manifest.clips.filter(clip => clip.take).map(clip => `audio/${clip.take}`))].sort();
   const shell = [...new Set([
-    'index.html', 'css/app.css', ...fonts, ...js, ...icons, 'audio/manifest.json', 'sw-assets.json',
+    'index.html', ...webManifest, 'css/app.css', ...fonts, ...js, ...icons, 'audio/manifest.json', 'sw-assets.json',
   ])];
   const hashed = [...shell.filter(path => path !== 'sw-assets.json'), ...audio].sort();
   for (const rel of hashed) {
