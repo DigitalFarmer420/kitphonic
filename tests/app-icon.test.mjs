@@ -14,14 +14,15 @@ test('approved speaking-book master is unchanged', () => {
   assert.equal(readFileSync(new URL('icons/symbol-1024.png', root)).length, 439220);
 });
 
-test('favicon links replace the empty icon and do not add a service worker', () => {
+test('favicon links replace the empty icon and the page does not register a worker inline', () => {
   const html = read('index.html');
   assert.match(html, /href="icons\/favicon-32.png"/);
   assert.match(html, /href="icons\/favicon-48.png"/);
   assert.match(html, /href="icons\/apple-touch-180.png"/);
   assert.equal(html.includes('data:,'), false);
   assert.equal(html.includes('serviceWorker'), false);
-  assert.equal(html.includes('manifest.webmanifest'), false);
+  // The web app manifest is linked so Android Chrome can install the site (tests/pwa-manifest.test.mjs).
+  assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
   assert.match(html, /id="kit"/);
 });
 
