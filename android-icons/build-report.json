@@ -33,6 +33,22 @@
       "bytes": 31200,
       "sha256": "aa7abcd774194ebabc064043e696a44a122a8ab328123178372331d4cbf9cd1a"
     },
+    "icons/icon-192.png": {
+      "bytes": 35243,
+      "sha256": "9a6725d482b75380257999448b88b6f0aecf1197e59d008977384eb7767f7d05"
+    },
+    "icons/icon-512.png": {
+      "bytes": 192895,
+      "sha256": "237cd45947a57af8314f94371238d5be3f13724a346c57ac885bcce0183ac5c8"
+    },
+    "icons/icon-maskable-192.png": {
+      "bytes": 21350,
+      "sha256": "d4286f68c7969e0525d81ed91c816e47ec779d9ac8ff42c9e22dc781788eec45"
+    },
+    "icons/icon-maskable-512.png": {
+      "bytes": 122086,
+      "sha256": "2a81d54d052cc89ee2400b1d339bf84903003b5cff587aba6288cce77c9798b6"
+    },
     "android-icons/res/mipmap-mdpi/ic_launcher.png": {
       "bytes": 2913,
       "sha256": "2db6df3c2db80c69a1c805dc334d0c24dcacff317dc86ea362fdc2cd35f0f91c"

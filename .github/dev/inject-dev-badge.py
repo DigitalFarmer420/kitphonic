@@ -1,9 +1,28 @@
 #!/usr/bin/env python3
-"""Inject a visible DEV badge and a noindex meta into index.html.
+"""Inject a visible DEV badge and a noindex meta into index.html, and name the web app
+manifest next to it "Kitphonic DEV" so the dev install sits beside prod on a phone with its own
+label. The manifest id/start_url/scope are relative ("./"), so each deployment already installs
+as a separate app under its own path.
 Used ONLY when deploying develop to kitphonic-dev; production (main) never runs this.
 No analytics, no network requests, no third-party scripts: inline CSS + one div only."""
-import sys, pathlib
+import json, sys, pathlib
 p = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "index.html")
+
+
+def name_dev_manifest(index_path):
+    m = index_path.parent / "manifest.webmanifest"
+    if not m.exists():
+        return
+    data = json.loads(m.read_text(encoding="utf-8"))
+    if data.get("name", "").endswith(" DEV"):
+        return
+    data["name"] = data.get("name", "Kitphonic") + " DEV"
+    data["short_name"] = data.get("short_name", "Kitphonic") + " DEV"
+    m.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    print("DEV name set in", m)
+
+
+name_dev_manifest(p)
 html = p.read_text(encoding="utf-8")
 if 'id="dev-badge"' in html:
     sys.exit(0)
